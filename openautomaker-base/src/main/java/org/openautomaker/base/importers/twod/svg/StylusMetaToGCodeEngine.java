@@ -16,85 +16,88 @@ import org.openautomaker.base.printerControl.comms.commands.GCodeMacros;
 import org.openautomaker.base.printerControl.comms.commands.MacroLoadException;
 import org.openautomaker.environment.PrinterType;
 
+import com.google.inject.assistedinject.Assisted;
+
+import jakarta.inject.Inject;
+
 /**
  *
  * @author ianhudson
  */
-public class StylusMetaToGCodeEngine
-{
+public class StylusMetaToGCodeEngine {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private final String outputFilename;
-    private final List<StylusMetaPart> metaparts;
+	private final String outputFilename;
+	private final List<StylusMetaPart> metaparts;
 
-    public StylusMetaToGCodeEngine(String outputURIString, List<StylusMetaPart> metaparts)
-    {
-        this.outputFilename = outputURIString;
-        this.metaparts = metaparts;
-    }
+	//Dependencies
+	private final GCodeMacros gCodeMacros;
 
-    public List<GCodeEventNode> generateGCode()
-    {
-        List<GCodeEventNode> gcodeNodes = new ArrayList<>();
-        
-        PrintWriter out = null;
-        try
-        {
-            out = new PrintWriter(new BufferedWriter(new FileWriter(outputFilename)));
+	@Inject
+	protected StylusMetaToGCodeEngine(
+			GCodeMacros gCodeMacros,
+			@Assisted String outputURIString,
+			@Assisted List<StylusMetaPart> metaparts) {
 
-            //Add a macro header
-            try
-            {
-                List<String> startMacro = GCodeMacros.getMacroContents("stylus_cut_start",
-                        Optional.<PrinterType>empty(), null, false, false, false);
-                for (String macroLine : startMacro)
-                {
-                    out.println(macroLine);
-                }
-            } catch (MacroLoadException ex)
-            {
+		this.gCodeMacros = gCodeMacros;
+
+		this.outputFilename = outputURIString;
+		this.metaparts = metaparts;
+	}
+
+	public List<GCodeEventNode> generateGCode() {
+		List<GCodeEventNode> gcodeNodes = new ArrayList<>();
+
+		PrintWriter out = null;
+		try {
+			out = new PrintWriter(new BufferedWriter(new FileWriter(outputFilename)));
+
+			//Add a macro header
+			try {
+				List<String> startMacro = gCodeMacros.getMacroContents("stylus_cut_start",
+						Optional.<PrinterType>empty(), null, false, false, false);
+				for (String macroLine : startMacro) {
+					out.println(macroLine);
+				}
+			}
+			catch (MacroLoadException ex) {
 				LOGGER.error("Unable to load stylus cut start macro.", ex);
-            }
+			}
 
-            String renderResult = null;
+			String renderResult = null;
 
-            for (StylusMetaPart part : metaparts)
-            {
-                renderResult = part.renderToGCode();
-                if (renderResult != null)
-                {
-                    out.println(renderResult);
-                    gcodeNodes.addAll(part.renderToGCodeNode());
-                    renderResult = null;
-                }
-            }
+			for (StylusMetaPart part : metaparts) {
+				renderResult = part.renderToGCode();
+				if (renderResult != null) {
+					out.println(renderResult);
+					gcodeNodes.addAll(part.renderToGCodeNode());
+					renderResult = null;
+				}
+			}
 
-            //Add a macro footer
-            try
-            {
-                List<String> startMacro = GCodeMacros.getMacroContents("stylus_cut_finish",
-                        Optional.<PrinterType>empty(), null, false, false, false);
-                for (String macroLine : startMacro)
-                {
-                    out.println(macroLine);
-                }
-            } catch (MacroLoadException ex)
-            {
+			//Add a macro footer
+			try {
+				List<String> startMacro = gCodeMacros.getMacroContents("stylus_cut_finish",
+						Optional.<PrinterType>empty(), null, false, false, false);
+				for (String macroLine : startMacro) {
+					out.println(macroLine);
+				}
+			}
+			catch (MacroLoadException ex) {
 				LOGGER.error("Unable to load stylus cut start macro.", ex);
-            }
-        } catch (IOException ex)
-        {
+			}
+		}
+		catch (IOException ex) {
 			LOGGER.error("Unable to output SVG GCode to " + outputFilename);
-        } finally
-        {
-            if (out != null)
-            {
-                out.flush();
-                out.close();
-            }
-        }
-        
-        return gcodeNodes;
-    }
+		}
+		finally {
+			if (out != null) {
+				out.flush();
+				out.close();
+			}
+		}
+
+		return gcodeNodes;
+	}
 }

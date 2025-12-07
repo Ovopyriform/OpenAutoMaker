@@ -3,9 +3,10 @@ package celtech.coreUI.controllers.panels.userpreferences;
 import java.util.Locale;
 
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.preference.LocalePreference;
+import org.openautomaker.environment.preference.l10n.LocalePreference;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.scene.control.ComboBox;
@@ -21,9 +22,9 @@ import javafx.util.Callback;
  */
 public class LanguagePreferenceController implements PreferencesInnerPanelController.Preference {
 
-	private final ComboBox<Locale> fControl;
+	private final ComboBox<Locale> control;
 
-	private final LocalePreference fAppLocale;
+
 
 	/**
 	 * Control how locals are displayed
@@ -33,35 +34,40 @@ public class LanguagePreferenceController implements PreferencesInnerPanelContro
 		protected void updateItem(Locale item, boolean empty) {
 			super.updateItem(item, empty);
 			if (!empty)
-				setText(item.getDisplayName(fAppLocale.get()));
+				setText(item.getDisplayName(localePreference.getValue()));
 		}
 	}
 
-	public LanguagePreferenceController() {
+	private final I18N i18n;
+	private final LocalePreference localePreference;
 
-		fAppLocale = new LocalePreference();
+	@Inject
+	public LanguagePreferenceController(I18N i18n, LocalePreference localePreference) {
 
-		fControl = new ComboBox<>();
-		fControl.getStyleClass().add("cmbCleanCombo");
-		fControl.setMinWidth(200);
-		fControl.autosize();
+		this.i18n = i18n;
+		this.localePreference = localePreference;
 
-		fControl.setItems(FXCollections.observableList(fAppLocale.values()));
+		control = new ComboBox<>();
+		control.getStyleClass().add("cmbCleanCombo");
+		control.setMinWidth(200);
+		control.autosize();
+
+		control.setItems(FXCollections.observableList(localePreference.values()));
 
 		// Set up display
 		Callback<ListView<Locale>, ListCell<Locale>> cellFactory = (listView) -> new LocaleListCell();
-		fControl.setButtonCell(cellFactory.call(null));
-		fControl.setCellFactory(cellFactory);
+		control.setButtonCell(cellFactory.call(null));
+		control.setCellFactory(cellFactory);
 
-		SelectionModel<Locale> selectionModel = fControl.getSelectionModel();
+		SelectionModel<Locale> selectionModel = control.getSelectionModel();
 
 		// Set initial value
-		selectionModel.select(fAppLocale.get());
+		selectionModel.select(localePreference.getValue());
 
 		// Listen for changes
 		selectionModel.selectedItemProperty()
 				.addListener((ObservableValue<? extends Locale> observable, Locale oldValue, Locale newValue) -> {
-					fAppLocale.set(newValue);
+					localePreference.setValue(newValue);
 				});
 
 	}
@@ -76,17 +82,17 @@ public class LanguagePreferenceController implements PreferencesInnerPanelContro
 
 	@Override
 	public Control getControl() {
-		return fControl;
+		return control;
 	}
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.language");
+		return i18n.t("preferences.language");
 	}
 
 	@Override
 	public void disableProperty(ObservableValue<Boolean> disableProperty) {
-		fControl.disableProperty().unbind();
-		fControl.disableProperty().bind(disableProperty);
+		control.disableProperty().unbind();
+		control.disableProperty().bind(disableProperty);
 	}
 }

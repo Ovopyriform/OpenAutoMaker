@@ -1,10 +1,20 @@
 package org.openautomaker.environment.preference.virtual_printer;
 
 import java.util.List;
+import java.util.prefs.Preferences;
 
-import org.openautomaker.environment.preference.AbsStringPreference;
+import org.openautomaker.environment.preference.ASimpleStringPreference;
 
-public class VirtualPrinterHeadPreference extends AbsStringPreference {
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+
+@Singleton
+public class VirtualPrinterHeadPreference extends ASimpleStringPreference {
+
+	@Inject
+	protected VirtualPrinterHeadPreference() {
+
+	}
 
 	/**
 	 * TODO: This should evaluate to the list of heads loaded from the config files.
@@ -20,4 +30,10 @@ public class VirtualPrinterHeadPreference extends AbsStringPreference {
 	public String getDefault() {
 		return "RBX01-SM";
 	}
+
+	@Override
+	protected Preferences getNode() {
+		return getUserNode();
+	}
+
 }

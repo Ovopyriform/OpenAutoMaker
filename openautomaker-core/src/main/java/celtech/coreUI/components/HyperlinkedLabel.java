@@ -1,7 +1,5 @@
 package celtech.coreUI.components;
 
-import java.awt.Desktop;
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -13,7 +11,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.environment.MachineType;
 import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.properties.NativeProperties;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
+import javafx.application.Application;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.event.ActionEvent;
@@ -21,6 +23,7 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.scene.text.TextFlow;
+import javafx.stage.Stage;
 
 /**
  *
@@ -28,11 +31,35 @@ import javafx.scene.text.TextFlow;
  */
 public class HyperlinkedLabel extends TextFlow {
 
+	private class Browser extends Application {
+
+		public void browseTo(String url) {
+			getHostServices().showDocument(url);
+		}
+
+		@Override
+		public void start(Stage primaryStage) throws Exception {
+			// nothing to do here.  Never running this app.
+		}
+
+	}
+
+	@Inject
+	private OpenAutomakerEnv environment;
+
+	@Inject
+	private NativeProperties nativeProperties;
+
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	private StringProperty text = new SimpleStringProperty("");
 	private static final Pattern hyperlinkPattern = Pattern.compile("\\<a href=\"([^\"]+)\">([^<]+)</a>");
 	private Map<String, URI> hyperlinkMap = new HashMap<>();
+
+	public HyperlinkedLabel() {
+		super();
+		GuiceContext.get().injectMembers(this);
+	}
 
 	public void replaceText(String newText) {
 		getChildren().clear();
@@ -56,43 +83,19 @@ public class HyperlinkedLabel extends TextFlow {
 				String linkURLString = matcher.group(1);
 				String linkText = matcher.group(2);
 				try {
-					OpenAutomakerEnv env = OpenAutomakerEnv.get();
-					MachineType machineType = env.getMachineType();
+					MachineType machineType = environment.getMachineType();
 
 					URI linkURI = new URI(linkURLString);
 					hyperlinkMap.put(linkText, linkURI);
 					Hyperlink hyperlink = new Hyperlink();
 					hyperlink.setOnAction((ActionEvent event) -> {
 						Hyperlink newhyperlink = (Hyperlink) event.getSource();
+
 						final String clickedLinkText = newhyperlink == null ? "" : newhyperlink.getText();
 						if (hyperlinkMap.containsKey(clickedLinkText)) {
-							URI linkToVisit = hyperlinkMap.get(clickedLinkText);
-							if (Desktop.isDesktopSupported() && machineType != MachineType.LINUX) {
-								try {
-									Desktop.getDesktop().browse(linkToVisit);
-								}
-								catch (IOException ex) {
-									System.err.println("Error when attempting to browse to " + linkToVisit.toString());
-								}
-							}
-							else if (machineType == MachineType.LINUX) {
-								try {
-									if (Runtime.getRuntime().exec(new String[] {
-											"which", "xdg-open"
-									}).getInputStream().read() != -1) {
-										Runtime.getRuntime().exec(new String[] {
-												"xdg-open", linkToVisit.toString()
-										});
-									}
-								}
-								catch (IOException ex) {
-									LOGGER.error("Failed to run linux-specific browser command");
-								}
-							}
-							else {
-								System.err.println("Couldn't get Desktop - not able to support hyperlinks");
-							}
+							new Browser().browseTo(hyperlinkMap.get(clickedLinkText).toString());
 						}
+
 					});
 					hyperlink.setText(linkText);
 					getChildren().add(hyperlink);

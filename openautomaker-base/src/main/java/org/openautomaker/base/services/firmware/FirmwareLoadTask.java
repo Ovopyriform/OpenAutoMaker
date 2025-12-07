@@ -9,11 +9,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.utils.SystemUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.i18n.OpenAutomakerI18N;
+import org.openautomaker.environment.I18N;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.exceptions.SDCardErrorException;
+import jakarta.inject.Inject;
 import javafx.concurrent.Task;
 
 /**
@@ -28,20 +30,28 @@ public class FirmwareLoadTask extends Task<FirmwareLoadResult> {
 
 	private Printer printerToUpdate = null;
 
+	private final I18N i18n;
+
 	/**
 	 * Modified so that this does not trigger the actual update - this should now be fired once this task reports success
 	 *
 	 * @param firmwareFileToLoad
 	 * @param printerToUpdate
 	 */
-	public FirmwareLoadTask(String firmwareFileToLoad, Printer printerToUpdate) {
+	@Inject
+	protected FirmwareLoadTask(
+			I18N i18n,
+			@Assisted String firmwareFileToLoad,
+			@Assisted Printer printerToUpdate) {
+
+		this.i18n = i18n;
+
 		this.firmwareFileToLoad = firmwareFileToLoad;
 		this.printerToUpdate = printerToUpdate;
 	}
 
 	@Override
 	protected FirmwareLoadResult call() throws Exception {
-		OpenAutomakerI18N i18n = OpenAutomakerEnv.getI18N();
 
 		FirmwareLoadResult returnValue = new FirmwareLoadResult();
 

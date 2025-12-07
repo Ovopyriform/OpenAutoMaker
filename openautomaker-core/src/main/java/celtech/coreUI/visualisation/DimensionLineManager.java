@@ -5,11 +5,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import celtech.Lookup;
+import org.openautomaker.ui.inject.visualisation.DimensionLineFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.appManager.Project;
 import celtech.coreUI.visualisation.DimensionLine.LineDirection;
 import celtech.modelcontrol.ModelContainer;
 import celtech.modelcontrol.ProjectifiableThing;
+import jakarta.inject.Inject;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -32,19 +37,26 @@ public class DimensionLineManager {
 		}
 	};
 
-	public DimensionLineManager(Pane paneToAddDimensionsTo, Project project, ReadOnlyBooleanProperty hideDimensionsProperty) {
+	@Inject
+	public DimensionLineManager(
+			ProjectGUIStates projectGUIStates,
+			DimensionLineFactory dimensionLineFactory,
+			@Assisted Pane paneToAddDimensionsTo,
+			@Assisted Project project,
+			@Assisted ReadOnlyBooleanProperty hideDimensionsProperty) {
+
 		hideDimensionsProperty.addListener(dragModeListener);
 
-		Lookup.getProjectGUIState(project).getProjectSelection().addListener(
+		projectGUIStates.get(project).getProjectSelection().addListener(
 				new ProjectSelection.SelectedModelContainersListener() {
 
 					@Override
 					public void whenAdded(ProjectifiableThing projectifiableThing) {
 						boolean addDimensionLines = false;
 						ArrayList<DimensionLine> lineList = new ArrayList<>();
-						DimensionLine verticalDimension = new DimensionLine();
-						DimensionLine frontBackDimension = new DimensionLine();
-						DimensionLine horizontalDimension = new DimensionLine();
+						DimensionLine verticalDimension = dimensionLineFactory.create();
+						DimensionLine frontBackDimension = dimensionLineFactory.create();
+						DimensionLine horizontalDimension = dimensionLineFactory.create();
 
 						if (projectifiableThing instanceof ScreenExtentsProviderTwoD) {
 							projectifiableThing.addScreenExtentsChangeListener(verticalDimension);

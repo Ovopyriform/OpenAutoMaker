@@ -1,89 +1,60 @@
 package celtech.roboxbase.comms.remote.rx;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import celtech.roboxbase.comms.rx.PrinterIDResponse;
 import celtech.roboxbase.comms.rx.RoboxRxPacket;
 import javafx.scene.paint.Color;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 /**
  *
  * @author ianhudson
  */
-public class PrinterIDResponseTest
-{
+public class PrinterIDResponseTest {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.PrinterIDResponse\",\"packetType\":\"PRINTER_ID_RESPONSE\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"model\":\"RBX01\",\"edition\":\"KS\",\"weekOfManufacture\":null,\"yearOfManufacture\":null,\"poNumber\":null,\"serialNumber\":null,\"checkByte\":null,\"electronicsVersion\":null,\"printerFriendlyName\":null,\"printerColour\":\"0xf0f8ffff\"}";
-    private static String testColourString = Color.ALICEBLUE.toString();
 
-    public PrinterIDResponseTest()
-    {
-    }
+	private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.PrinterIDResponse\",\"packetType\":\"PRINTER_ID_RESPONSE\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"model\":\"RBX01\",\"edition\":\"KS\",\"weekOfManufacture\":null,\"yearOfManufacture\":null,\"poNumber\":null,\"serialNumber\":null,\"checkByte\":null,\"electronicsVersion\":null,\"printerFriendlyName\":null,\"printerColour\":\"0xf0f8ffff\"}";
+	private static String testColourString = Color.ALICEBLUE.toString();
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+	@Test
+	public void serializesToJSON() throws Exception {
+		final PrinterIDResponse packet = getTestPacket();
 
-    @Before
-    public void setUp()
-    {
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
 
-    @After
-    public void tearDown()
-    {
-    }
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final PrinterIDResponse packet = getTestPacket();
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final PrinterIDResponse packet = getTestPacket();
 
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
+		try {
+			RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final PrinterIDResponse packet = getTestPacket();
+	private PrinterIDResponse getTestPacket() {
+		PrinterIDResponse packet = new PrinterIDResponse();
 
-        try
-        {
-            RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
+		packet.setSequenceNumber(44);
+		packet.setEdition("KS");
+		packet.setModel("RBX01");
+		packet.setPrinterColour(testColourString);
 
-    private PrinterIDResponse getTestPacket()
-    {
-        PrinterIDResponse packet = new PrinterIDResponse();
-
-        packet.setSequenceNumber(44);
-        packet.setEdition("KS");
-        packet.setModel("RBX01");
-        packet.setPrinterColour(testColourString);
-
-        return packet;
-    }
+		return packet;
+	}
 
 }

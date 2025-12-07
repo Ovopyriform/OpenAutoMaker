@@ -19,11 +19,11 @@ import org.openautomaker.base.printerControl.model.statetransitions.purge.PurgeS
 import org.openautomaker.base.services.gcodegenerator.GCodeGeneratorResult;
 import org.openautomaker.base.services.printing.DatafileSendAlreadyInProgress;
 import org.openautomaker.base.services.printing.DatafileSendNotInitialised;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.TaskResponder;
 import org.openautomaker.base.utils.AxisSpecifier;
 import org.openautomaker.base.utils.RectangularBounds;
 import org.openautomaker.base.utils.models.PrintableProject;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.base.utils.tasks.TaskResponder;
 import org.openautomaker.environment.PrinterType;
 
 import celtech.roboxbase.comms.CommandInterface;

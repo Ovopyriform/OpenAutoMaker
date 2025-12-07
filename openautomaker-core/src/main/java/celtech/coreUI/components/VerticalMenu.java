@@ -8,7 +8,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
 import celtech.coreUI.StandardColours;
+import jakarta.inject.Inject;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
@@ -110,10 +114,14 @@ public class VerticalMenu extends VBox {
 		}
 	}
 
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
 	public VerticalMenu() {
 		super();
+		GuiceContext.get().injectMembers(this);
 		URL fxml = getClass().getResource("/celtech/resources/fxml/components/verticalMenu.fxml");
-		FXMLLoader fxmlLoader = new FXMLLoader(fxml);
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(fxml);
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 		fxmlLoader.setClassLoader(getClass().getClassLoader());

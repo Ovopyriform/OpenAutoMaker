@@ -1,7 +1,7 @@
 
 package org.openautomaker.base.printerControl.model.statetransitions;
 
-import org.openautomaker.base.utils.tasks.TaskExecutor;
+import org.openautomaker.base.task_executor.TaskExecutor;
 
 /**
  * ArrivalAction represents an action to be called (when a state is arrived at).

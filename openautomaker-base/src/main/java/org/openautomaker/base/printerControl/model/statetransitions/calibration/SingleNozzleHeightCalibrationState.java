@@ -2,65 +2,53 @@ package org.openautomaker.base.printerControl.model.statetransitions.calibration
 
 import java.util.Optional;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
-
 /**
  *
  * @author Ian
  */
-public enum SingleNozzleHeightCalibrationState
-{
+public enum SingleNozzleHeightCalibrationState {
 
-    IDLE("calibrationPanel.readyToBeginNozzleOffsetCalibration",
-         "Single Nozzle Height Illustrations_Step 1.fxml"),
-    INITIALISING("calibrationPanel.initialisingOffset", "Single Nozzle Height Illustrations_Step 2.fxml"),
-    HEATING("calibrationPanel.heating", ""),
-    HEAD_CLEAN_CHECK("calibrationPanel.headCleanCheck", "Single Nozzle Height Illustrations_Step 4.fxml"),
+	IDLE("calibrationPanel.readyToBeginNozzleOffsetCalibration",
+			"Single Nozzle Height Illustrations_Step 1.fxml"),
+	INITIALISING("calibrationPanel.initialisingOffset", "Single Nozzle Height Illustrations_Step 2.fxml"),
+	HEATING("calibrationPanel.heating", ""),
+	HEAD_CLEAN_CHECK("calibrationPanel.headCleanCheck", "Single Nozzle Height Illustrations_Step 4.fxml"),
 	INSERT_PAPER("calibrationPanel.insertPieceOfPaper", "Single Nozzle Height Illustrations_Step 5.fxml"),
-    PROBING("calibrationPanel.moveThePaperInstruction", "Single Nozzle Height Illustrations_Step 6.fxml"),
-    INCREMENT_Z("", ""),
-    DECREMENT_Z("", ""),
-    BRING_BED_FORWARD("", ""),
-    REPLACE_PEI_BED("calibrationPanel.replacePEIBed", "Single Nozzle Height Illustrations_Step 7.fxml"),
-    FINISHED("calibrationPanel.calibrationSucceededMessage",
-             "Single Nozzle Height Illustrations_Step 8.fxml"),
-    FAILED("calibrationPanel.nozzleCalibrationFailed", "Single Nozzle Height Illustrations_Failure.fxml"),
-    CANCELLING("misc.resettingPrinter", ""),
-    CANCELLED("", ""),
-    DONE("", "");
+	PROBING("calibrationPanel.moveThePaperInstruction", "Single Nozzle Height Illustrations_Step 6.fxml"),
+	INCREMENT_Z("", ""),
+	DECREMENT_Z("", ""),
+	BRING_BED_FORWARD("", ""),
+	REPLACE_PEI_BED("calibrationPanel.replacePEIBed", "Single Nozzle Height Illustrations_Step 7.fxml"),
+	FINISHED("calibrationPanel.calibrationSucceededMessage",
+			"Single Nozzle Height Illustrations_Step 8.fxml"),
+	FAILED("calibrationPanel.nozzleCalibrationFailed", "Single Nozzle Height Illustrations_Failure.fxml"),
+	CANCELLING("misc.resettingPrinter", ""),
+	CANCELLED("", ""),
+	DONE("", "");
 
-    private final String stepTitleResource;
-    private final String diagramName;
+	private final String key;
+	private final String diagramName;
 
-    private SingleNozzleHeightCalibrationState(String stepTitleResource, String diagramName)
-    {
-        this.stepTitleResource = stepTitleResource;
-        this.diagramName = diagramName;
-    }
-    
-     /**
-     * Return if the cancel button should be show for this state.
-     */
-    public boolean showCancelButton() {
-        return (this != IDLE && this != FAILED && this != FINISHED && this != CANCELLED && this != DONE);
-    }
+	private SingleNozzleHeightCalibrationState(String stepTitleResource, String diagramName) {
+		this.key = stepTitleResource;
+		this.diagramName = diagramName;
+	}
 
-    public Optional<String> getDiagramName() {
-        if (diagramName.equals(""))
-        {
-            return Optional.empty();
-        }
-        return Optional.of(diagramName);
-    }
+	/**
+	 * Return if the cancel button should be show for this state.
+	 */
+	public boolean showCancelButton() {
+		return (this != IDLE && this != FAILED && this != FINISHED && this != CANCELLED && this != DONE);
+	}
 
-    public String getStepTitle()
-    {
-        if (stepTitleResource == null || stepTitleResource.equals(""))
-        {
-            return "";
-        } else
-        {
-            return OpenAutomakerEnv.getI18N().t(stepTitleResource);
-        }
-    }
+	public Optional<String> getDiagramName() {
+		if (diagramName.equals(""))
+			return Optional.empty();
+
+		return Optional.of(diagramName);
+	}
+
+	public String getKey() {
+		return key == null ? "" : key;
+	}
 }

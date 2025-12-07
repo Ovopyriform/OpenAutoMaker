@@ -3,7 +3,8 @@
 <?import javafx.scene.control.*?>
 <?import javafx.geometry.*?>
 <?import celtech.coreUI.components.*?>
-<?import celtech.coreUI.components.buttons.*?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButton?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel?>
 <?import java.lang.*?>
 <?import javafx.scene.layout.*?>
 

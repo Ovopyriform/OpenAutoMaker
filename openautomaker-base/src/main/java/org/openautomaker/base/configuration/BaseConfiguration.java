@@ -1,23 +1,22 @@
 package org.openautomaker.base.configuration;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_PROFILES;
-import static org.openautomaker.environment.OpenAutomakerEnv.TIMELAPSE;
-
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.application.HomePathPreference;
+
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 /**
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
+//TODO: Deprecate this class.  To many config classes
+@Singleton
 public class BaseConfiguration {
+	//TODO: Remove this class
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
@@ -46,7 +45,7 @@ public class BaseConfiguration {
 	public static final String applicationStorageDirectoryComponent = "ApplicationDataStorageDirectory";
 
 	public static final String printerDirectoryPath = "Printers";
-	public static final String printerFileExtension = ".roboxprinter";
+	//	public static final String printerFileExtension = ".roboxprinter";
 
 	public static final String headDirectoryPath = "Heads";
 	public static final String headFileExtension = ".roboxhead";
@@ -107,25 +106,27 @@ public class BaseConfiguration {
 	//private static final String fileMemoryItem = "FileMemory";
 
 
-	public static void initialise(Class<?> classToCheck) {
-		PrinterContainer.getCompletePrinterList();
+	//	public static void initialise(Class<?> classToCheck) {
+	//		PrinterContainer.getCompletePrinterList();
+	//	}
+
+	//TODO: Only here while this class exists.  To many config classes around for no reason.
+	private static BaseConfiguration instance;
+
+	private final HomePathPreference homePathPreference;
+
+	@Inject
+	protected BaseConfiguration(
+			HomePathPreference homePathPreference) {
+
+		this.homePathPreference = homePathPreference;
+
+		instance = this;
 	}
 
 	public static void shutdown() {
 
 	}
-
-	//	public static Path getApplicationHeadDirectory() {
-	//		return OpenAutomakerEnv.get().getApplicationPath(HEADS);
-	//	}
-
-	//	public static Path getApplicationPrinterDirectory() {
-	//		return OpenAutomakerEnv.get().getApplicationPath(PRINTERS);
-	//	}
-
-	//	public static Path getApplicationKeyDirectory() {
-	//		return OpenAutomakerEnv.get().getApplicationPath(KEY);
-	//	}
 
 	public static String getRemoteRootDirectory() {
 		return remoteRootDirectory;
@@ -156,64 +157,48 @@ public class BaseConfiguration {
 		autoRepairReels = value;
 	}
 
-	//	public static String getApplicationVersion() {
-	//		return OpenAutomakerEnv.get().getVersion();
+	//	public static Path getApplicationPrintProfileDirectory() {
+	//		return OpenAutomakerEnv.get().getApplicationPath(PRINT_PROFILES);
 	//	}
-
-	//	public static String getApplicationLocale() {
-	//		return OpenAutomakerEnv.get().getLocale().toLanguageTag();
+	//
+	//	public static Path getUserPrintProfileDirectory() {
+	//		return OpenAutomakerEnv.get().getUserPath(PRINT_PROFILES);
 	//	}
-
-	public static Path getTimelapseDirectory() {
-		return OpenAutomakerEnv.get().getUserPath(TIMELAPSE);
-	}
-
-	public static Path getUserStorageDirectory() {
-		return OpenAutomakerEnv.get().getUserPath();
-	}
-
-	public static Path getApplicationPrintProfileDirectory() {
-		return OpenAutomakerEnv.get().getApplicationPath(PRINT_PROFILES);
-	}
-
-	public static Path getUserPrintProfileDirectory() {
-		return OpenAutomakerEnv.get().getUserPath(PRINT_PROFILES);
-	}
-
-	public static Path getUserPrintProfileDirectoryForSlicer(Slicer slicerType) {
-		Path userSlicerPrintProfileDirectory = OpenAutomakerEnv.get().getUserPath(PRINT_PROFILES).resolve(slicerType.getPathModifier());
-
-
-		if (Files.notExists(userSlicerPrintProfileDirectory))
-			try {
-				Files.createDirectories(userSlicerPrintProfileDirectory);
-			} catch (IOException e) {
-				LOGGER.warn("Could not create user print profile directory");
-			}
-
-
-		//		if (slicerType == SlicerType.Cura) {
-		//			// Find any old .roboxprofiles hanging around and convert them to the new format
-		//			// They are added to the correct head folder and the old file is archived
-		//			try {
-		//				Path userProfileDir = Paths.get(getUserPrintProfileDirectory());
-		//
-		//				List<Path> oldRoboxFiles = Files.list(userProfileDir).filter(file -> file.getFileName().toString().endsWith(printProfileFileExtension)).collect(Collectors.toList());
-		//
-		//				if (!oldRoboxFiles.isEmpty()) {
-		//					for (Path file : oldRoboxFiles) {
-		//						RoboxProfileUtils.convertOldProfileIntoNewFormat(file, dirHandle.toPath());
-		//					}
-		//				}
-		//			} catch (IOException ex) {
-		//				LOGGER.error("Failed to convert old robox profiles to the new format.", ex);
-		//			}
-		//		}
-
-		return userSlicerPrintProfileDirectory;
-	}
+	//
+	//	public static Path getUserPrintProfileDirectoryForSlicer(Slicer slicerType) {
+	//		Path userSlicerPrintProfileDirectory = OpenAutomakerEnv.get().getUserPath(PRINT_PROFILES).resolve(slicerType.getPathModifier());
+	//
+	//
+	//		if (Files.notExists(userSlicerPrintProfileDirectory))
+	//			try {
+	//				Files.createDirectories(userSlicerPrintProfileDirectory);
+	//			} catch (IOException e) {
+	//				LOGGER.warn("Could not create user print profile directory");
+	//			}
+	//
+	//
+	//		//		if (slicerType == SlicerType.Cura) {
+	//		//			// Find any old .roboxprofiles hanging around and convert them to the new format
+	//		//			// They are added to the correct head folder and the old file is archived
+	//		//			try {
+	//		//				Path userProfileDir = Paths.get(getUserPrintProfileDirectory());
+	//		//
+	//		//				List<Path> oldRoboxFiles = Files.list(userProfileDir).filter(file -> file.getFileName().toString().endsWith(printProfileFileExtension)).collect(Collectors.toList());
+	//		//
+	//		//				if (!oldRoboxFiles.isEmpty()) {
+	//		//					for (Path file : oldRoboxFiles) {
+	//		//						RoboxProfileUtils.convertOldProfileIntoNewFormat(file, dirHandle.toPath());
+	//		//					}
+	//		//				}
+	//		//			} catch (IOException ex) {
+	//		//				LOGGER.error("Failed to convert old robox profiles to the new format.", ex);
+	//		//			}
+	//		//		}
+	//
+	//		return userSlicerPrintProfileDirectory;
+	//	}
 
 	public static Path getGCodeViewerDirectory() {
-		return OpenAutomakerEnv.get().getApplicationPath().resolve("GCodeViewer");
+		return instance.homePathPreference.getAppValue().resolve("GCodeViewer");
 	}
 }

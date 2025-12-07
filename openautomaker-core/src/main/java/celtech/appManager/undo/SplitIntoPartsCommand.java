@@ -16,7 +16,7 @@ import celtech.modelcontrol.ProjectifiableThing;
  *
  * @author tony
  */
-public class SplitIntoPartsCommand extends Command {
+public class SplitIntoPartsCommand implements Command {
 
 	ModelContainerProject project;
 	Set<ModelContainer> modelContainers;

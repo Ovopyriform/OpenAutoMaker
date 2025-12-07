@@ -1,8 +1,10 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.Control;
@@ -19,7 +21,14 @@ public class PasswordPreference implements PreferencesInnerPanelController.Prefe
 	private final StringProperty stringProperty;
 	private final String caption;
 
+	@Inject
+	private I18N i18n;
+
 	public PasswordPreference(StringProperty stringProperty, String caption) {
+
+		//TODO: Seems incorrect to use GuiceContext here.  Look into
+		GuiceContext.get().injectMembers(this);
+
 		this.stringProperty = stringProperty;
 		this.caption = caption;
 
@@ -57,7 +66,7 @@ public class PasswordPreference implements PreferencesInnerPanelController.Prefe
 
 	@Override
 	public String getDescription() {
-		return OpenAutomakerEnv.getI18N().t(caption);
+		return i18n.t(caption);
 	}
 
 	@Override

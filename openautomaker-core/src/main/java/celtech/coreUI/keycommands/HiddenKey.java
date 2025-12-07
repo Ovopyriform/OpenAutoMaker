@@ -4,9 +4,10 @@ import java.util.ArrayList;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
-import celtech.roboxbase.comms.DummyPrinterCommandInterface;
+import celtech.roboxbase.comms.VirtualPrinterCommandInterface;
+import jakarta.inject.Inject;
 import javafx.event.EventHandler;
 import javafx.scene.Scene;
 import javafx.scene.input.KeyEvent;
@@ -17,7 +18,8 @@ import javafx.scene.input.KeyEvent;
  */
 public class HiddenKey {
 
-	private static final Logger LOGGER = LogManager.getLogger(HiddenKey.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private boolean captureKeys = false;
 	private ArrayList<String> commandSequences = new ArrayList<>();
 	private ArrayList<String> parameterCaptureSequences = new ArrayList<>();
@@ -27,90 +29,97 @@ public class HiddenKey {
 	private String parameterCaptureBuffer = "";
 	private boolean parameterCaptureInProgress = false;
 
-	private final EventHandler<KeyEvent> hiddenErrorCommandEventHandler = (KeyEvent event) -> {
-		boolean wasConsumed = false;
+	private final EventHandler<KeyEvent> hiddenErrorCommandEventHandler;
 
-		switch (event.getCode()) {
-			case DIGIT1:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					wasConsumed |= triggerListeners("dummy:",
-							DummyPrinterCommandInterface.defaultRoboxAttachCommand);
-				}
-				break;
-			case DIGIT2:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					wasConsumed |= triggerListeners("dummy:",
-							DummyPrinterCommandInterface.defaultRoboxAttachCommand2);
-				}
-				break;
-			case DIGIT3:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					wasConsumed |= triggerListeners("dummy:", "ATTACH EXTRUDER 1");
-				}
-				break;
-			case DIGIT4:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					wasConsumed |= triggerListeners("dummy:", "ATTACH REEL RBX-PLA-OR022 1");
-				}
-				break;
-			case B:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					// trigger B_STUCK
-					wasConsumed |= triggerListeners("dummy:", "ERROR B_STUCK");
-				}
-				break;
-			case E:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					// trigger E_FILAMENT_SLIP
-					wasConsumed |= triggerListeners("dummy:", "ERROR E_FILAMENT_SLIP");
-				}
-				break;
+	@Inject
+	public HiddenKey(
+			SelectedPrinter selectedPrinter) {
 
-			case M:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					if (Lookup.getSelectedPrinterProperty().get().extrudersProperty().get(0).filamentLoadedProperty().get()) {
-						wasConsumed |= triggerListeners("dummy:", "UNLOAD 0");
+		hiddenErrorCommandEventHandler = (KeyEvent event) -> {
+			boolean wasConsumed = false;
+
+			switch (event.getCode()) {
+				case DIGIT1:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						wasConsumed |= triggerListeners("dummy:",
+								VirtualPrinterCommandInterface.defaultRoboxAttachCommand);
 					}
-					else {
-						wasConsumed |= triggerListeners("dummy:", "LOAD 0");
+					break;
+				case DIGIT2:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						wasConsumed |= triggerListeners("dummy:",
+								VirtualPrinterCommandInterface.defaultRoboxAttachCommand2);
+					}
+					break;
+				case DIGIT3:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						wasConsumed |= triggerListeners("dummy:", "ATTACH EXTRUDER 1");
+					}
+					break;
+				case DIGIT4:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						wasConsumed |= triggerListeners("dummy:", "ATTACH REEL RBX-PLA-OR022 1");
+					}
+					break;
+				case B:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						// trigger B_STUCK
+						wasConsumed |= triggerListeners("dummy:", "ERROR B_STUCK");
+					}
+					break;
+				case E:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						// trigger E_FILAMENT_SLIP
+						wasConsumed |= triggerListeners("dummy:", "ERROR E_FILAMENT_SLIP");
+					}
+					break;
+
+				case M:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						if (selectedPrinter.get().extrudersProperty().get(0).filamentLoadedProperty().get()) {
+							wasConsumed |= triggerListeners("dummy:", "UNLOAD 0");
+						}
+						else {
+							wasConsumed |= triggerListeners("dummy:", "LOAD 0");
+						}
+
+					}
+					break;
+				case N:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						if (selectedPrinter.get().extrudersProperty().get(1).filamentLoadedProperty().get()) {
+							wasConsumed |= triggerListeners("dummy:", "UNLOAD 1");
+						}
+						else {
+							wasConsumed |= triggerListeners("dummy:", "LOAD 1");
+						}
+
+					}
+					break;
+				case D:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						// trigger D_FILAMENT_SLIP
+						wasConsumed |= triggerListeners("dummy:", "ERROR D_FILAMENT_SLIP");
+					}
+				case S:
+					if (event.isShortcutDown() && event.isAltDown()) {
+						// trigger detach printer
+						wasConsumed |= triggerListeners("dummy:", "DETACH PRINTER");
 					}
 
-				}
-				break;
-			case N:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					if (Lookup.getSelectedPrinterProperty().get().extrudersProperty().get(1).filamentLoadedProperty().get()) {
-						wasConsumed |= triggerListeners("dummy:", "UNLOAD 1");
-					}
-					else {
-						wasConsumed |= triggerListeners("dummy:", "LOAD 1");
-					}
+					break;
 
-				}
-				break;
-			case D:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					// trigger D_FILAMENT_SLIP
-					wasConsumed |= triggerListeners("dummy:", "ERROR D_FILAMENT_SLIP");
-				}
-			case S:
-				if (event.isShortcutDown() && event.isAltDown()) {
-					// trigger detach printer
-					wasConsumed |= triggerListeners("dummy:", "DETACH PRINTER");
-				}
+			}
 
-				break;
-
-		}
-
-		if (!wasConsumed
-				&& unhandledKeyListener != null) {
-			unhandledKeyListener.unhandledKeyEvent(event);
-		}
-		else {
-			event.consume();
-		}
-	};
+			if (!wasConsumed
+					&& unhandledKeyListener != null) {
+				unhandledKeyListener.unhandledKeyEvent(event);
+			}
+			else {
+				event.consume();
+			}
+		};
+	}
 
 	private final EventHandler<KeyEvent> hiddenCommandEventHandler = (KeyEvent event) -> {
 		LOGGER.debug("Got character [" + event.getCharacter() + "]");

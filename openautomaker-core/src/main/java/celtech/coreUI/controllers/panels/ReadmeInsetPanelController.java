@@ -12,7 +12,7 @@ import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.application.HomePathPreference;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.events.Event;
@@ -43,14 +43,25 @@ public class ReadmeInsetPanelController implements Initializable {
 
 	@FXML
 	void backToStatusAction(ActionEvent event) {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.STATUS);
+		applicationStatus.setMode(ApplicationMode.STATUS);
+	}
+
+	private final ApplicationStatus applicationStatus;
+	private final HomePathPreference homePathPreference;
+
+	public ReadmeInsetPanelController(
+			ApplicationStatus applicationStatus,
+			HomePathPreference homePathPreference) {
+
+		this.applicationStatus = applicationStatus;
+		this.homePathPreference = homePathPreference;
 	}
 
 	@Override
 	//TODO: README panel? Just link instead.
 	public void initialize(URL location, ResourceBundle resources) {
 		String protocol = "file:///";
-		String basePath = OpenAutomakerEnv.get().getApplicationPath().resolve("README").resolve("README_AutoMaker.html").toString();
+		String basePath = homePathPreference.getAppValue().resolve("README").resolve("README_AutoMaker.html").toString();
 		basePath = basePath.replace("\\", "/");
 		String urlEncodedPath = "";
 

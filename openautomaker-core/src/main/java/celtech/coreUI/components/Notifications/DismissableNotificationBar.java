@@ -1,13 +1,10 @@
 package celtech.coreUI.components.Notifications;
 
-import celtech.Lookup;
+import org.openautomaker.guice.GuiceContext;
+
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 
-/**
- *
- * @author Ian
- */
 public class DismissableNotificationBar extends AppearingNotificationBar {
 
 	private EventHandler<ActionEvent> dismissAction = new EventHandler<>() {
@@ -17,22 +14,28 @@ public class DismissableNotificationBar extends AppearingNotificationBar {
 		}
 	};
 
-	public DismissableNotificationBar() {
+	private final NotificationDisplay notificationDisplay;
+
+	public DismissableNotificationBar(NotificationDisplay notificationDisplay) {
 		super();
+
+		GuiceContext.get().injectMembers(this);
+
+		this.notificationDisplay = notificationDisplay;
+
 		actionButton.setVisible(true);
 		actionButton.setOnAction(dismissAction);
 	}
 
-	public DismissableNotificationBar(String buttonText) {
-		super();
-		actionButton.setVisible(true);
-		actionButton.setOnAction(dismissAction);
+	public DismissableNotificationBar(NotificationDisplay notificationDisplay, String buttonText) {
+		this(notificationDisplay);
+
 		actionButton.setText(buttonText);
 	}
 
 	@Override
 	public void show() {
-		Lookup.getNotificationDisplay().addNotificationBar(this);
+		notificationDisplay.addNotificationBar(this);
 		startSlidingInToView();
 	}
 
@@ -42,7 +45,7 @@ public class DismissableNotificationBar extends AppearingNotificationBar {
 
 	@Override
 	public void finishedSlidingOutOfView() {
-		Lookup.getNotificationDisplay().removeNotificationBar(this);
+		notificationDisplay.removeNotificationBar(this);
 	}
 
 	@Override

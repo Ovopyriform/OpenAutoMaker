@@ -3,9 +3,13 @@ package celtech.coreUI.components;
 import java.io.IOException;
 import java.net.URL;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.component.graphic_button.GraphicButton;
+
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
-import celtech.coreUI.components.buttons.GraphicButton;
+import jakarta.inject.Inject;
 import javafx.beans.binding.BooleanBinding;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -44,10 +48,14 @@ public class TopMenuStrip extends HBox {
 		applicationStatus.setMode(ApplicationMode.LIBRARY);
 	}
 
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
 	public TopMenuStrip() {
 		super();
+		GuiceContext.get().injectMembers(this);
 		URL fxml = getClass().getResource("/celtech/resources/fxml/components/TopMenuStrip.fxml");
-		FXMLLoader fxmlLoader = new FXMLLoader(fxml);
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(fxml);
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 		fxmlLoader.setClassLoader(getClass().getClassLoader());

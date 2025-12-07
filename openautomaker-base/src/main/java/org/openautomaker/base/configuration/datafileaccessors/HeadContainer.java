@@ -1,101 +1,93 @@
 package org.openautomaker.base.configuration.datafileaccessors;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.HEADS;
-
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.configuration.HeadFileFilter;
+import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.fileRepresentation.HeadFile;
 import org.openautomaker.base.printerControl.model.Head.HeadType;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.printer.HeadDefsPathPreference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 
-/**
- *
- * @author ianhudson
- */
 //TODO: Seems like an odd way to sort out the heads.  Fix.
-public class HeadContainer
-{
+@Singleton
+public class HeadContainer {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private static HeadContainer instance = null;
-    private static final ObservableList<HeadFile> completeHeadList = FXCollections.observableArrayList();
-    private static final ObservableMap<String, HeadFile> completeHeadMap = FXCollections.observableHashMap();
-    private static final ObjectMapper mapper = new ObjectMapper();
-    public static final String defaultHeadID = "RBX01-SM";
-    public static final HeadType defaultHeadType = HeadType.SINGLE_MATERIAL_HEAD;
+	private static final ObservableList<HeadFile> completeHeadList = FXCollections.observableArrayList();
+	private static final ObservableMap<String, HeadFile> completeHeadMap = FXCollections.observableHashMap();
+	private static final ObjectMapper mapper = new ObjectMapper();
+	public static final String defaultHeadID = "RBX01-SM";
+	public static final HeadType defaultHeadType = HeadType.SINGLE_MATERIAL_HEAD;
 
-    private HeadContainer()
-    {
-		File applicationHeadDirHandle = OpenAutomakerEnv.get().getApplicationPath(HEADS).toFile();
-        File[] applicationheads = applicationHeadDirHandle.listFiles(new HeadFileFilter());
-        ArrayList<HeadFile> heads = ingestHeads(applicationheads);
-        completeHeadList.addAll(heads);
-        mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
-    }
+	//private final HeadDefsPathPreference headDefsPathPreference;
 
-    private ArrayList<HeadFile> ingestHeads(File[] headFiles)
-    {
-        ArrayList<HeadFile> headList = new ArrayList<>();
+	//TODO: This should check the application heads folder (default heads) and the user heads folder
+	@Inject
+	protected HeadContainer(HeadDefsPathPreference headDefsPathPreference) {
 
-        for (File headFile : headFiles)
-        {
-            try
-            {
-                HeadFile headFileData = mapper.readValue(headFile, HeadFile.class);
+		File applicationHeadDirHandle = headDefsPathPreference.getAppValue().toFile();
+		File[] applicationheads = applicationHeadDirHandle.listFiles(new FileFilter() {
 
-                headList.add(headFileData);
-                completeHeadMap.put(headFileData.getTypeCode(), headFileData);
+			@Override
+			public boolean accept(File pathname) {
+				return pathname.getName().endsWith(BaseConfiguration.headFileExtension);
 
-            } catch (IOException ex)
-            {
+			}
+		});
+
+		//TODO: At this point get any user defined heads also.
+
+		ArrayList<HeadFile> heads = ingestHeads(applicationheads);
+		completeHeadList.addAll(heads);
+		mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
+	}
+
+	private ArrayList<HeadFile> ingestHeads(File[] headFiles) {
+		ArrayList<HeadFile> headList = new ArrayList<>();
+
+		for (File headFile : headFiles) {
+			try {
+				HeadFile headFileData = mapper.readValue(headFile, HeadFile.class);
+
+				headList.add(headFileData);
+				completeHeadMap.put(headFileData.getTypeCode(), headFileData);
+
+			}
+			catch (IOException ex) {
 				LOGGER.error("Error loading head " + headFile.getAbsolutePath());
-            }
-        }
+			}
+		}
 
-        return headList;
-    }
+		return headList;
+	}
 
-    public static HeadContainer getInstance()
-    {
-        if (instance == null)
-        {
-            instance = new HeadContainer();
-        }
+	public HeadFile getHeadByID(String headID) {
+		HeadFile returnedHead = completeHeadMap.get(headID);
+		return returnedHead;
+	}
 
-        return instance;
-    }
+	public ObservableList<HeadFile> getCompleteHeadList() {
+		return completeHeadList;
+	}
 
-    public static HeadFile getHeadByID(String headID)
-    {
-        if (instance == null)
-        {
-            HeadContainer.getInstance();
-        }
+	public boolean isTypeCodeInDatabase(String typeCode) {
+		if (typeCode == null || typeCode.trim() == "")
+			return false;
 
-        HeadFile returnedHead = completeHeadMap.get(headID);
-        return returnedHead;
-    }
-
-    public static ObservableList<HeadFile> getCompleteHeadList()
-    {
-        if (instance == null)
-        {
-            instance = new HeadContainer();
-        }
-
-        return completeHeadList;
-    }
+		return completeHeadMap.containsKey(typeCode);
+	}
 }

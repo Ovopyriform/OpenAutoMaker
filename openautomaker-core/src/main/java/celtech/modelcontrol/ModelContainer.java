@@ -29,6 +29,11 @@ import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.RectangularBounds;
 import org.openautomaker.base.utils.Math.MathUtils;
 import org.openautomaker.base.utils.threed.MeshToWorldTransformer;
+import org.openautomaker.ui.inject.model.ModelContainerFactory;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
+
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 
 import celtech.coreUI.visualisation.ApplicationMaterials;
 import celtech.coreUI.visualisation.CameraViewChangeListener;
@@ -42,8 +47,8 @@ import celtech.coreUI.visualisation.metaparts.IntegerArrayList;
 import celtech.coreUI.visualisation.modelDisplay.SelectionHighlighter;
 import celtech.utils.threed.MeshCutter2;
 import celtech.utils.threed.MeshSeparator;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -61,14 +66,9 @@ import javafx.scene.shape.ObservableFaceArray;
 import javafx.scene.shape.TriangleMesh;
 import javafx.scene.transform.NonInvertibleTransformException;
 import javafx.scene.transform.Rotate;
-import javafx.scene.transform.Scale;
 import javafx.scene.transform.Transform;
 import javafx.scene.transform.Translate;
 
-/**
- *
- * @author Ian Hudson @ Liberty Systems Limited
- */
 public class ModelContainer extends ProjectifiableThing implements Serializable, Comparable<ModelContainer>, CameraViewChangeListener, MeshToWorldTransformer, ScaleableThreeD, TranslateableThreeD, ResizeableThreeD, RotatableThreeD,
 		Groupable, ScreenExtentsProviderThreeD, ShapeProviderThreeD {
 
@@ -77,21 +77,12 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 	private static final Logger LOGGER = LogManager.getLogger();
 	private boolean isInvalidMesh = false;
 
-	protected Translate transformDropToBedYAdjust;
-	private Rotate transformRotateTwistPreferred;
-	private Rotate transformRotateLeanPreferred;
+	protected Translate transformDropToBedYAdjust = new Translate(0, 0, 0);
+	private Rotate transformRotateTwistPreferred = new Rotate(0, 0, 0, 0, Y_AXIS);
+
+	private Rotate transformRotateLeanPreferred = new Rotate(0, 0, 0, 0, X_AXIS);
 
 	private MeshView meshView;
-
-	/**
-	 * Property wrapper around the scale.
-	 */
-	private DoubleProperty preferredZScale;
-	/**
-	 * Property wrappers around the rotations.
-	 */
-	private DoubleProperty preferredRotationTwist;
-	private DoubleProperty preferredRotationLean;
 
 	/**
 	 * The bounds of the object in its parent. For top level objects this is also the bounds in the bed coordinates. They are kept valid even after translates etc.
@@ -110,22 +101,84 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 	private MeshView collisionShape = null;
 	private List<CollisionShapeListener> collisionShapeListeners = new ArrayList<>();
 
-	public ModelContainer() {
+	@Inject
+	private transient ModelContainerFactory modelContainerFactory;
+
+	@Inject
+	private transient ModelGroupFactory modelGroupFactory;
+
+	@AssistedInject
+	protected ModelContainer() {
 		super();
 	}
 
-	public ModelContainer(File modelFile, MeshView meshView) {
+	@AssistedInject
+	protected ModelContainer(
+			@Assisted File modelFile,
+			@Assisted MeshView meshView) {
+
 		super(modelFile);
+
 		this.meshView = meshView;
 		getChildren().add(meshView);
 
-		initialise(modelFile);
+		modelId = nextModelId;
+		nextModelId += 1;
+
+		if (modelFile != null) {
+			setModelName(modelFile.getName());
+			this.setId(modelFile.getName() + Integer.toString(modelId));
+		}
+		else {
+			setModelName("group " + modelId);
+			this.setId("group " + modelId);
+		}
+
 		initialiseTransforms();
 	}
 
-	public ModelContainer(File modelFile, MeshView meshView, int extruderAssociation) {
+	@AssistedInject
+	public ModelContainer(
+			@Assisted File modelFile,
+			@Assisted MeshView meshView,
+			@Assisted int extruderAssociation) {
+
 		this(modelFile, meshView);
+
 		associateWithExtruderNumber.set(extruderAssociation);
+	}
+
+	//This is the old initialize
+	protected void initialise(File modelFile) {
+		setModelFile(modelFile);
+		modelId = nextModelId;
+		nextModelId += 1;
+
+		if (modelFile != null) {
+			setModelName(modelFile.getName());
+			this.setId(modelFile.getName() + Integer.toString(modelId));
+		}
+		else {
+			setModelName("group " + modelId);
+			this.setId("group " + modelId);
+		}
+
+		preferredXScale = new SimpleDoubleProperty(1);
+		preferredYScale = new SimpleDoubleProperty(1);
+		preferredZScale = new SimpleDoubleProperty(1);
+		preferredRotationLean = new SimpleDoubleProperty(0);
+		preferredRotationTwist = new SimpleDoubleProperty(0);
+		preferredRotationTurn = new SimpleDoubleProperty(0);
+		rotationTransforms = new ArrayList<>();
+		collisionShapeListeners = new ArrayList<>();
+	}
+
+	void clearBedTransform() {
+		updateLastTransformedBoundsInParentForTranslateByX(-bedCentreOffsetX);
+		updateLastTransformedBoundsInParentForTranslateByZ(-bedCentreOffsetZ);
+		transformBedCentre.setX(0);
+		transformBedCentre.setY(0);
+		transformBedCentre.setZ(0);
 	}
 
 	/**
@@ -173,14 +226,6 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 	}
 
 	protected void initialiseTransforms() {
-		transformScalePreferred = new Scale(1, 1, 1);
-		transformDropToBedYAdjust = new Translate(0, 0, 0);
-		transformMoveToPreferred = new Translate(0, 0, 0);
-		transformBedCentre = new Translate(0, 0, 0);
-
-		transformRotateLeanPreferred = new Rotate(0, 0, 0, 0, X_AXIS);
-		transformRotateTwistPreferred = new Rotate(0, 0, 0, 0, Y_AXIS);
-		transformRotateTurnPreferred = new Rotate(0, 0, 0, 0, Z_AXIS);
 		rotationTransforms.add(transformRotateTurnPreferred);
 		rotationTransforms.add(transformRotateLeanPreferred);
 		rotationTransforms.add(transformRotateTwistPreferred);
@@ -229,38 +274,6 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 		translateTo(bedCentreOffsetX, bedCentreOffsetZ);
 
 		lastTransformedBoundsInParent = calculateBoundsInParentCoordinateSystem();
-	}
-
-	protected void initialise(File modelFile) {
-		setModelFile(modelFile);
-		modelId = nextModelId;
-		nextModelId += 1;
-
-		if (modelFile != null) {
-			setModelName(modelFile.getName());
-			this.setId(modelFile.getName() + Integer.toString(modelId));
-		}
-		else {
-			setModelName("group " + modelId);
-			this.setId("group " + modelId);
-		}
-
-		preferredXScale = new SimpleDoubleProperty(1);
-		preferredYScale = new SimpleDoubleProperty(1);
-		preferredZScale = new SimpleDoubleProperty(1);
-		preferredRotationLean = new SimpleDoubleProperty(0);
-		preferredRotationTwist = new SimpleDoubleProperty(0);
-		preferredRotationTurn = new SimpleDoubleProperty(0);
-		rotationTransforms = new ArrayList<>();
-		collisionShapeListeners = new ArrayList<>();
-	}
-
-	void clearBedTransform() {
-		updateLastTransformedBoundsInParentForTranslateByX(-bedCentreOffsetX);
-		updateLastTransformedBoundsInParentForTranslateByZ(-bedCentreOffsetZ);
-		transformBedCentre.setX(0);
-		transformBedCentre.setY(0);
-		transformBedCentre.setZ(0);
 	}
 
 	private Translate currenttransformBedCentre;
@@ -319,7 +332,7 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 		newMeshView.setCullFace(CullFace.BACK);
 		newMeshView.setId(meshView.getId());
 
-		ModelContainer copy = new ModelContainer(getModelFile(), newMeshView);
+		ModelContainer copy = modelContainerFactory.create(getModelFile(), newMeshView);
 		copy.setUseExtruder0(associateWithExtruderNumber.get() == 0);
 		copy.setState(this.getState());
 		copy.recalculateScreenExtents();
@@ -530,7 +543,7 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 
 		final Vector3D faceNormal;
 		final Vector3D faceCentre;
-		Transform localToBedTransform;
+		//Transform localToBedTransform;
 		Node bed;
 
 		public ApplyTwist(MeshView meshView, int faceIndex) {
@@ -1269,7 +1282,7 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 			int ix = 1;
 			for (TriangleMesh subMesh : subMeshes) {
 				MeshView meshView = new MeshView(subMesh);
-				ModelContainer newModelContainer = new ModelContainer(getModelFile(), meshView);
+				ModelContainer newModelContainer = modelContainerFactory.create(getModelFile(), meshView);
 				newModelContainer.setState(state);
 				newModelContainer.associateWithExtruderNumber.set(associateWithExtruderNumber.get());
 				parts.add(newModelContainer);
@@ -1278,7 +1291,7 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 
 				ix++;
 			}
-			modelContainer = new ModelGroup(parts);
+			modelContainer = modelGroupFactory.create(parts);
 		}
 		return modelContainer;
 	}
@@ -1370,7 +1383,7 @@ public class ModelContainer extends ProjectifiableThing implements Serializable,
 			meshView.setCullFace(CullFace.BACK);
 			meshView.setId(getId() + "-" + binCounter);
 
-			ModelContainer modelContainer = new ModelContainer(getModelFile(), meshView);
+			ModelContainer modelContainer = modelContainerFactory.create(getModelFile(), meshView);
 
 			outputMeshes.add(modelContainer);
 		}

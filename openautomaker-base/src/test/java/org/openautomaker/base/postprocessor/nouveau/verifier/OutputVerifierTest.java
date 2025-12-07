@@ -1,12 +1,11 @@
 package org.openautomaker.base.postprocessor.nouveau.verifier;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+
+import org.junit.jupiter.api.Test;
 import org.openautomaker.base.postprocessor.nouveau.LayerPostProcessResult;
 import org.openautomaker.base.postprocessor.nouveau.PostProcessorFeature;
 import org.openautomaker.base.postprocessor.nouveau.PostProcessorFeatureSet;
@@ -16,216 +15,172 @@ import org.openautomaker.base.postprocessor.nouveau.helpers.ToolDefinition;
 import org.openautomaker.base.postprocessor.nouveau.nodes.ExtrusionNode;
 import org.openautomaker.base.postprocessor.nouveau.nodes.MCodeNode;
 import org.openautomaker.base.postprocessor.nouveau.nodes.NozzleValvePositionNode;
-import org.openautomaker.base.postprocessor.nouveau.verifier.OutputVerifier;
-import org.openautomaker.base.postprocessor.nouveau.verifier.VerifierResult;
 import org.openautomaker.base.printerControl.model.Head.HeadType;
 
-import static org.junit.Assert.*;
+public class OutputVerifierTest {
+	/**
+	 * Test of verifyAllLayers method, of class OutputVerifier.
+	 */
+	@Test
+	public void testVerifyAllLayers_noNozzleOpen() {
+		System.out.println("verifyAllLayers");
 
-/**
- *
- * @author Ian
- */
-public class OutputVerifierTest
-{
+		List<LayerDefinition> layers = new ArrayList<>();
+		layers.add(new LayerDefinition(0, new ToolDefinition[] {
+				new ToolDefinition(0, 5),
+				new ToolDefinition(1, 500)
+		}));
 
-    public OutputVerifierTest()
-    {
-    }
+		List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+		PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
+		featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+		OutputVerifier instance = new OutputVerifier(featureSet);
+		List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
 
-    @Before
-    public void setUp()
-    {
-    }
+		assertEquals(0, verifierResults.size());
+	}
 
-    @After
-    public void tearDown()
-    {
-    }
+	/**
+	 * Test of verifyAllLayers method, of class OutputVerifier.
+	 */
+	@Test
+	public void testVerifyAllLayers_allGood() {
+		System.out.println("verifyAllLayers");
 
-    /**
-     * Test of verifyAllLayers method, of class OutputVerifier.
-     */
-    @Test
-    public void testVerifyAllLayers_noNozzleOpen()
-    {
-        System.out.println("verifyAllLayers");
+		List<LayerDefinition> layers = new ArrayList<>();
+		layers.add(new LayerDefinition(0, new ToolDefinition[] {
+				new ToolDefinition(0, 5),
+				new ToolDefinition(1, 500)
+		}));
 
-        List<LayerDefinition> layers = new ArrayList<>();
-        layers.add(new LayerDefinition(0, new ToolDefinition[]
-        {
-            new ToolDefinition(0, 5),
-            new ToolDefinition(1, 500)
-        }));
+		List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
 
-        List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
+		NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
+		openNozzle.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
 
-        PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
-        featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
+		PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
+		featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
 
-        OutputVerifier instance = new OutputVerifier(featureSet);
-        List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
+		OutputVerifier instance = new OutputVerifier(featureSet);
+		List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
 
-        assertEquals(0, verifierResults.size());
-    }
+		assertEquals(0, verifierResults.size());
+	}
 
-    /**
-     * Test of verifyAllLayers method, of class OutputVerifier.
-     */
-    @Test
-    public void testVerifyAllLayers_allGood()
-    {
-        System.out.println("verifyAllLayers");
+	/**
+	 * Test of verifyAllLayers method, of class OutputVerifier.
+	 */
+	@Test
+	public void testVerifyAllLayers_heaterOnOff() {
+		System.out.println("heaterOnOff");
 
-        List<LayerDefinition> layers = new ArrayList<>();
-        layers.add(new LayerDefinition(0, new ToolDefinition[]
-        {
-            new ToolDefinition(0, 5),
-            new ToolDefinition(1, 500)
-        }));
+		List<LayerDefinition> layers = new ArrayList<>();
+		layers.add(new LayerDefinition(0, new ToolDefinition[] {
+				new ToolDefinition(0, 5),
+				new ToolDefinition(1, 500),
+				new ToolDefinition(0, 500)
+		}));
 
-        List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
+		List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
 
-        NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
-        openNozzle.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
+		NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
+		openNozzle.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
 
-        PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
-        featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
+		MCodeNode switchOffNozzle0 = new MCodeNode();
+		switchOffNozzle0.setMNumber(104);
+		switchOffNozzle0.setSNumber(0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtEnd(switchOffNozzle0);
 
-        OutputVerifier instance = new OutputVerifier(featureSet);
-        List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
+		MCodeNode heatNozzle0 = new MCodeNode();
+		heatNozzle0.setMNumber(104);
+		heatNozzle0.setSOnly(true);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(2).addChildAtStart(heatNozzle0);
 
-        assertEquals(0, verifierResults.size());
-    }
+		PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
+		featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
 
-    /**
-     * Test of verifyAllLayers method, of class OutputVerifier.
-     */
-    @Test
-    public void testVerifyAllLayers_heaterOnOff()
-    {
-        System.out.println("heaterOnOff");
+		OutputVerifier instance = new OutputVerifier(featureSet);
+		List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
 
-        List<LayerDefinition> layers = new ArrayList<>();
-        layers.add(new LayerDefinition(0, new ToolDefinition[]
-        {
-            new ToolDefinition(0, 5),
-            new ToolDefinition(1, 500),
-            new ToolDefinition(0, 500)
-        }));
+		assertEquals(0, verifierResults.size());
+	}
 
-        List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
+	/**
+	 * Test of verifyAllLayers method, of class OutputVerifier.
+	 */
+	@Test
+	public void testVerifyAllLayers_nozzleCloseInExtrusion() {
+		System.out.println("nozzleCloseInExtrusion");
 
-        NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
-        openNozzle.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
+		List<LayerDefinition> layers = new ArrayList<>();
+		layers.add(new LayerDefinition(0, new ToolDefinition[] {
+				new ToolDefinition(0, 5),
+				new ToolDefinition(1, 500)
+		}));
 
-        MCodeNode switchOffNozzle0 = new MCodeNode();
-        switchOffNozzle0.setMNumber(104);
-        switchOffNozzle0.setSNumber(0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtEnd(switchOffNozzle0);
+		List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
 
-        MCodeNode heatNozzle0 = new MCodeNode();
-        heatNozzle0.setMNumber(104);
-        heatNozzle0.setSOnly(true);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(2).addChildAtStart(heatNozzle0);
+		NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
+		openNozzle.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
 
-        PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
-        featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
+		ExtrusionNode extrusionToOperateOn = ((ExtrusionNode) allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).getAbsolutelyTheLastEvent());
+		extrusionToOperateOn.getExtrusion().dNotInUse();
+		extrusionToOperateOn.getExtrusion().eNotInUse();
+		extrusionToOperateOn.getNozzlePosition().setB(0);
 
-        OutputVerifier instance = new OutputVerifier(featureSet);
-        List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
+		NozzleValvePositionNode openNozzle2 = new NozzleValvePositionNode();
+		openNozzle2.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(1).addChildAtStart(openNozzle2);
 
-        assertEquals(0, verifierResults.size());
-    }
+		PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
+		featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
 
-    /**
-     * Test of verifyAllLayers method, of class OutputVerifier.
-     */
-    @Test
-    public void testVerifyAllLayers_nozzleCloseInExtrusion()
-    {
-        System.out.println("nozzleCloseInExtrusion");
+		OutputVerifier instance = new OutputVerifier(featureSet);
+		List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
 
-        List<LayerDefinition> layers = new ArrayList<>();
-        layers.add(new LayerDefinition(0, new ToolDefinition[]
-        {
-            new ToolDefinition(0, 5),
-            new ToolDefinition(1, 500)
-        }));
+		assertEquals(0, verifierResults.size());
+	}
 
-        List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
+	/**
+	 * Test of verifyAllLayers method, of class OutputVerifier.
+	 */
+	@Test
+	public void testVerifyAllLayers_nozzleCloseInExtrusionWithRetract() {
+		System.out.println("nozzleCloseInExtrusionWithRetract");
 
-        NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
-        openNozzle.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
+		List<LayerDefinition> layers = new ArrayList<>();
+		layers.add(new LayerDefinition(0, new ToolDefinition[] {
+				new ToolDefinition(0, 5),
+				new ToolDefinition(1, 500)
+		}));
 
-        ExtrusionNode extrusionToOperateOn = ((ExtrusionNode) allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).getAbsolutelyTheLastEvent());
-        extrusionToOperateOn.getExtrusion().dNotInUse();
-        extrusionToOperateOn.getExtrusion().eNotInUse();
-        extrusionToOperateOn.getNozzlePosition().setB(0);
+		List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
 
-        NozzleValvePositionNode openNozzle2 = new NozzleValvePositionNode();
-        openNozzle2.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(1).addChildAtStart(openNozzle2);
+		NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
+		openNozzle.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
 
-        PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
-        featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
+		ExtrusionNode extrusionToOperateOn = ((ExtrusionNode) allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).getAbsolutelyTheLastEvent());
+		extrusionToOperateOn.getExtrusion().dNotInUse();
+		extrusionToOperateOn.getExtrusion().eNotInUse();
+		extrusionToOperateOn.getNozzlePosition().setB(0);
+		extrusionToOperateOn.getExtrusion().setE(-10);
 
-        OutputVerifier instance = new OutputVerifier(featureSet);
-        List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
+		NozzleValvePositionNode openNozzle2 = new NozzleValvePositionNode();
+		openNozzle2.getNozzlePosition().setB(1.0);
+		allLayerPostProcessResults.get(0).getLayerData().getChildren().get(1).addChildAtStart(openNozzle2);
 
-        assertEquals(0, verifierResults.size());
-    }
+		PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
+		featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
 
-    /**
-     * Test of verifyAllLayers method, of class OutputVerifier.
-     */
-    @Test
-    public void testVerifyAllLayers_nozzleCloseInExtrusionWithRetract()
-    {
-        System.out.println("nozzleCloseInExtrusionWithRetract");
+		OutputVerifier instance = new OutputVerifier(featureSet);
+		List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
 
-        List<LayerDefinition> layers = new ArrayList<>();
-        layers.add(new LayerDefinition(0, new ToolDefinition[]
-        {
-            new ToolDefinition(0, 5),
-            new ToolDefinition(1, 500)
-        }));
-
-        List<LayerPostProcessResult> allLayerPostProcessResults = TestDataGenerator.generateLayerResults(layers);
-
-        NozzleValvePositionNode openNozzle = new NozzleValvePositionNode();
-        openNozzle.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).addChildAtStart(openNozzle);
-
-        ExtrusionNode extrusionToOperateOn = ((ExtrusionNode) allLayerPostProcessResults.get(0).getLayerData().getChildren().get(0).getAbsolutelyTheLastEvent());
-        extrusionToOperateOn.getExtrusion().dNotInUse();
-        extrusionToOperateOn.getExtrusion().eNotInUse();
-        extrusionToOperateOn.getNozzlePosition().setB(0);
-        extrusionToOperateOn.getExtrusion().setE(-10);
-
-        NozzleValvePositionNode openNozzle2 = new NozzleValvePositionNode();
-        openNozzle2.getNozzlePosition().setB(1.0);
-        allLayerPostProcessResults.get(0).getLayerData().getChildren().get(1).addChildAtStart(openNozzle2);
-
-        PostProcessorFeatureSet featureSet = new PostProcessorFeatureSet();
-        featureSet.enableFeature(PostProcessorFeature.OPEN_AND_CLOSE_NOZZLES);
-
-        OutputVerifier instance = new OutputVerifier(featureSet);
-        List<VerifierResult> verifierResults = instance.verifyAllLayers(allLayerPostProcessResults, HeadType.DUAL_MATERIAL_HEAD);
-
-        assertEquals(0, verifierResults.size());
-    }
+		assertEquals(0, verifierResults.size());
+	}
 }

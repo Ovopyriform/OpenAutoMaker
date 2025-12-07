@@ -4,11 +4,12 @@ import java.net.URL;
 import java.util.ResourceBundle;
 
 import org.openautomaker.base.printerControl.model.Printer;
-import org.openautomaker.environment.preference.DetectLoadedFilamentPreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.environment.preference.printer.DetectLoadedFilamentPreference;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.coreUI.controllers.StatusInsetController;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -77,6 +78,15 @@ public class DiagnosticPanelController implements Initializable, StatusInsetCont
 	@FXML
 	private RadioButton rbIndex1;
 
+	private final SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected DiagnosticPanelController(
+			SelectedPrinter selectedPrinter) {
+
+		this.selectedPrinter = selectedPrinter;
+	}
+
 	/**
 	 * Initializes the controller class.
 	 *
@@ -85,7 +95,7 @@ public class DiagnosticPanelController implements Initializable, StatusInsetCont
 	 */
 	@Override
 	public void initialize(URL url, ResourceBundle rb) {
-		Lookup.getSelectedPrinterProperty().addListener(new ChangeListener<Printer>() {
+		selectedPrinter.addListener(new ChangeListener<Printer>() {
 
 			@Override
 			public void changed(ObservableValue<? extends Printer> observable, Printer oldValue,

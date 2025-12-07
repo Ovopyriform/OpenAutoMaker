@@ -11,7 +11,16 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.base.inject.configuration.file_representation.PrinterSettingsOverridesFactory;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
+import org.openautomaker.ui.state.SelectedPrinter;
 
 import celtech.configuration.ApplicationConfiguration;
 import celtech.configuration.fileRepresentation.ProjectFile;
@@ -20,6 +29,7 @@ import celtech.modelcontrol.Groupable;
 import celtech.modelcontrol.ModelGroup;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.utils.threed.importers.svg.ShapeContainer;
+import jakarta.inject.Inject;
 
 /**
  *
@@ -29,8 +39,19 @@ public class ShapeContainerProject extends Project {
 
 	private static final Logger LOGGER = LogManager.getLogger(ShapeContainerProject.class.getName());
 
-	public ShapeContainerProject() {
-		super();
+	@Inject
+	public ShapeContainerProject(
+			ProjectsPathPreference projectsPathPreference,
+			SlicerPreference slicerPreference,
+			I18N i18n,
+			CameraManager cameraManager,
+			GCodeGeneratorManager gCodeGeneratorManager,
+			SelectedPrinter selectedPrinter,
+			ModelGroupFactory modelGroupFactory,
+			CameraProfileContainer cameraProfileContainer,
+			PrinterSettingsOverridesFactory printerSettingsOverridesFactory) {
+
+		super(projectsPathPreference, slicerPreference, i18n, cameraManager, gCodeGeneratorManager, modelGroupFactory, cameraProfileContainer, printerSettingsOverridesFactory);
 	}
 
 	@Override
@@ -107,41 +128,55 @@ public class ShapeContainerProject extends Project {
 	protected void fireWhenTimelapseSettingsChanged(TimelapseSettingsData timelapseSettings) {
 	}
 
+	//TODO: Again, odd.  Put in project persistance?
 	@Override
-	protected void load(ProjectFile projectFile, String basePath) throws ProjectLoadException {
+	protected void load(ProjectFile projectFile, Path filePath) throws ProjectLoadException {
+
+		if (!(projectFile instanceof ShapeContainerProjectFile))
+			throw new ProjectLoadException("Incorrect file type provided");
+
 		suppressProjectChanged = true;
 
-		if (projectFile instanceof ShapeContainerProjectFile) {
-			try {
-				projectNameProperty.set(projectFile.getProjectName());
-				lastModifiedDate.set(projectFile.getLastModifiedDate());
-				lastPrintJobID = projectFile.getLastPrintJobID();
+		try {
+			projectNameProperty.set(projectFile.getProjectName());
+			lastModifiedDate.set(projectFile.getLastModifiedDate());
+			lastPrintJobID = projectFile.getLastPrintJobID();
 
-				loadTimelapseSettings(projectFile);
+			loadTimelapseSettings(projectFile);
 
-				loadModels(basePath);
+			loadModels(filePath);
 
-			}
-			catch (IOException ex) {
-				LOGGER.error("Failed to load project " + basePath, ex);
-			}
-			catch (ClassNotFoundException ex) {
-				LOGGER.error("Failed to load project " + basePath, ex);
-			}
 		}
-
-		suppressProjectChanged = false;
+		catch (IOException ex) {
+			LOGGER.error("Failed to load project " + filePath, ex);
+		}
+		catch (ClassNotFoundException ex) {
+			LOGGER.error("Failed to load project " + filePath, ex);
+		}
+		finally {
+			suppressProjectChanged = false;
+		}
 	}
 
-	private void loadModels(String basePath) throws IOException, ClassNotFoundException {
-		FileInputStream fileInputStream = new FileInputStream(basePath
-				+ ApplicationConfiguration.projectModelsFileExtension);
+	private void loadModels(Path filePath) throws IOException, ClassNotFoundException {
+
+		// Legacy in case we've been passed a path without the project file name
+		if (!filePath.toString().endsWith(ApplicationConfiguration.projectFileExtension))
+			filePath = filePath.resolveSibling(filePath.getFileName().toString() + ApplicationConfiguration.projectFileExtension);
+
+		//Change the type of the file to the model type
+		filePath = filePath.resolveSibling(
+				filePath.getFileName().toString()
+						.replace(ApplicationConfiguration.projectFileExtension, ApplicationConfiguration.projectModelsFileExtension));
+
+		FileInputStream fileInputStream = new FileInputStream(filePath.toFile());
 		BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
 		ObjectInputStream modelsInput = new ObjectInputStream(bufferedInputStream);
 		int numModels = modelsInput.readInt();
 
 		for (int i = 0; i < numModels; i++) {
 			ShapeContainer modelContainer = (ShapeContainer) modelsInput.readObject();
+			GuiceContext.get().injectMembers(modelContainer);
 			addModel(modelContainer);
 		}
 	}

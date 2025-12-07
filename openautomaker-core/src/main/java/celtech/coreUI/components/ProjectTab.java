@@ -11,9 +11,15 @@ import java.util.Set;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.inject.project.ModelContainerProjectFactory;
+import org.openautomaker.ui.inject.project.ShapeContainerProjectFactory;
+import org.openautomaker.ui.inject.visualisation.DimensionLineManagerFactory;
+import org.openautomaker.ui.inject.visualisation.ThreeDViewManagerFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ModelContainerProject;
@@ -21,6 +27,7 @@ import celtech.appManager.Project;
 import celtech.appManager.ProjectCallback;
 import celtech.appManager.ProjectManager;
 import celtech.appManager.ProjectMode;
+import celtech.appManager.ProjectPersistance;
 import celtech.appManager.ShapeContainerProject;
 import celtech.configuration.ApplicationConfiguration;
 import celtech.coreUI.LayoutSubmode;
@@ -33,6 +40,7 @@ import celtech.coreUI.visualisation.SVGViewManager;
 import celtech.coreUI.visualisation.ThreeDViewManager;
 import celtech.modelcontrol.ModelContainer;
 import celtech.modelcontrol.ProjectifiableThing;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
@@ -57,14 +65,9 @@ import javafx.scene.input.TransferMode;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 
-/**
- *
- * @author Ian Hudson @ Liberty Systems Limited
- */
 public class ProjectTab extends Tab implements ProjectCallback {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			ProjectTab.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final Label nonEditableProjectNameField = new Label();
 	private final RestrictedTextField editableProjectNameField = new RestrictedTextField();
@@ -73,10 +76,10 @@ public class ProjectTab extends Tab implements ProjectCallback {
 	private AnchorPane overlayPane = null;
 	private ThreeDViewManager viewManager = null;
 	private SVGViewManager svgViewManager = null;
-	private final ProjectManager projectManager = ProjectManager.getInstance();
 	private boolean titleBeingEdited = false;
-	private final ModelLoader modelLoader = new ModelLoader();
+
 	private DimensionLineManager dimensionLineManager = null;
+
 	private BedAxes bedAxes = null;
 	private ZCutEntryBox zCutEntryBox = null;
 	private ObjectProperty<LayoutSubmode> layoutSubmode;
@@ -114,24 +117,60 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		}
 	}
 
-	public ProjectTab(
-			ReadOnlyDoubleProperty tabDisplayWidthProperty,
-			ReadOnlyDoubleProperty tabDisplayHeightProperty) {
+	@Inject
+	private I18N i18n;
+
+	@Inject
+	private ProjectManager projectManager;
+
+	@Inject
+	private ProjectPersistance projectPersistance;
+
+	@Inject
+	private ApplicationStatus applicationStatus;
+
+	@Inject
+	private SelectedProject selectedProject;
+
+	@Inject
+	private ModelContainerProjectFactory modelContainerProjectFactory;
+
+	@Inject
+	private ShapeContainerProjectFactory shapeContainerProjectFactory;
+
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactroy;
+
+	@Inject
+	private ProjectGUIStates projectGUIStates;
+
+	@Inject
+	private DimensionLineManagerFactory dimensionLineManagerFactory;
+
+	@Inject
+	private ThreeDViewManagerFactory threeDViewManagerFactory;
+
+	@Inject
+	private ModelLoader modelLoader;
+
+	public ProjectTab(ReadOnlyDoubleProperty tabDisplayWidthProperty, ReadOnlyDoubleProperty tabDisplayHeightProperty) {
+		GuiceContext.get().injectMembers(this);
+
 		this.tabDisplayWidthProperty = tabDisplayWidthProperty;
 		this.tabDisplayHeightProperty = tabDisplayHeightProperty;
 		coreInitialisation();
 	}
 
-	public ProjectTab(Project inboundProject,
-			ReadOnlyDoubleProperty tabDisplayWidthProperty,
-			ReadOnlyDoubleProperty tabDisplayHeightProperty,
-			boolean loadingAtStartup) {
+	public ProjectTab(Project inboundProject, ReadOnlyDoubleProperty tabDisplayWidthProperty, ReadOnlyDoubleProperty tabDisplayHeightProperty, boolean loadingAtStartup) {
+		GuiceContext.get().injectMembers(this);
+
 		project = inboundProject;
 		this.tabDisplayWidthProperty = tabDisplayWidthProperty;
 		this.tabDisplayHeightProperty = tabDisplayHeightProperty;
 		coreInitialisation();
 		initialiseWithProject(loadingAtStartup);
 	}
+
 
 	public Project getProject() {
 		return project;
@@ -205,7 +244,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		nonSpecificModelIndicator.setAlignment(Pos.CENTER);
 		nonSpecificModelIndicator.setMouseTransparent(true);
 		nonSpecificModelIndicator.setPickOnBounds(false);
-		Label loadAModel = new Label(OpenAutomakerEnv.getI18N().t("projectTab.loadAModel"));
+		Label loadAModel = new Label(i18n.t("projectTab.loadAModel"));
 		loadAModel.getStyleClass().add("load-a-model-text");
 		nonSpecificModelIndicator.getChildren().add(loadAModel);
 
@@ -236,7 +275,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		rhInsetContainer = new VBox();
 		rhInsetContainer.setSpacing(30);
 
-		rhInsetContainer.mouseTransparentProperty().bind(ApplicationStatus.getInstance().modeProperty().isNotEqualTo(ApplicationMode.SETTINGS));
+		rhInsetContainer.mouseTransparentProperty().bind(applicationStatus.modeProperty().isNotEqualTo(ApplicationMode.SETTINGS));
 		basePane.getChildren().add(rhInsetContainer);
 
 		//        VBox dimensionContainer = new VBox();
@@ -251,15 +290,15 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		AnchorPane.setLeftAnchor(modelActionsInsetPanelData.getNode(), 30.0);
 		basePane.getChildren().add(modelActionsInsetPanelData.getNode());
 
-		dimensionLineManager = new DimensionLineManager(basePane, project, hideDimensions);
+		dimensionLineManager = dimensionLineManagerFactory.create(basePane, project, hideDimensions);
 
-		layoutSubmode = Lookup.getProjectGUIState(project).getLayoutSubmodeProperty();
+		layoutSubmode = projectGUIStates.get(project).getLayoutSubmodeProperty();
 
 		layoutSubmode.addListener(new ChangeListener<LayoutSubmode>() {
 			@Override
 			public void changed(ObservableValue<? extends LayoutSubmode> observable, LayoutSubmode oldValue, LayoutSubmode newValue) {
 				if (newValue == LayoutSubmode.Z_CUT) {
-					Set<ProjectifiableThing> selectedModelContainers = Lookup.getProjectGUIState(project).getProjectSelection().getSelectedModelsSnapshot();
+					Set<ProjectifiableThing> selectedModelContainers = projectGUIStates.get(project).getProjectSelection().getSelectedModelsSnapshot();
 					if (project instanceof ModelContainerProject) {
 						zCutEntryBox.prime((ModelContainer) selectedModelContainers.iterator().next());
 						overlayPane.getChildren().add(zCutEntryBox);
@@ -297,7 +336,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 
 	private void setup3DView() {
 		nonSpecificModelIndicator.setVisible(false);
-		viewManager = new ThreeDViewManager((ModelContainerProject) project,
+		viewManager = threeDViewManagerFactory.create((ModelContainerProject) project,
 				tabDisplayWidthProperty,
 				tabDisplayHeightProperty);
 
@@ -331,7 +370,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 	private LoadedPanelData loadInsetPanel(String innerPanelFXMLName, Project project) {
 		URL settingsInsetPanelURL = getClass().getResource(
 				ApplicationConfiguration.fxmlPanelResourcePath + innerPanelFXMLName);
-		FXMLLoader loader = new FXMLLoader(settingsInsetPanelURL, new I18N().getResourceBundle());
+		FXMLLoader loader = fxmlLoaderFactroy.create(settingsInsetPanelURL);
 		Node insetPanel = null;
 		try {
 			insetPanel = loader.load();
@@ -385,7 +424,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		basePane.setOnDragOver(new EventHandler<DragEvent>() {
 			@Override
 			public void handle(DragEvent event) {
-				if (ApplicationStatus.getInstance().modeProperty().getValue() == ApplicationMode.LAYOUT) {
+				if (applicationStatus.modeProperty().getValue() == ApplicationMode.LAYOUT) {
 					if (event.getGestureSource() != basePane) {
 						Dragboard dragboard = event.getDragboard();
 						if (dragboard.hasFiles()) {
@@ -428,7 +467,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 			public void handle(DragEvent event) {
 				/* the drag-and-drop gesture entered the target */
 				/* show to the user that it is an actual gesture target */
-				if (ApplicationStatus.getInstance().modeProperty().getValue() == ApplicationMode.LAYOUT) {
+				if (applicationStatus.modeProperty().getValue() == ApplicationMode.LAYOUT) {
 					if (event.getGestureSource() != basePane) {
 						Dragboard dragboard = event.getDragboard();
 						if (dragboard.hasFiles()) {
@@ -519,7 +558,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 		if (viewManager != null)
 			viewManager.shutdown();
 		if (project != null) {
-			Project.saveProject(project);
+			projectPersistance.saveProject(project);
 			if (projectAwareController != null)
 				projectAwareController.setProject(null);
 			if (projectManager != null)
@@ -529,12 +568,12 @@ public class ProjectTab extends Tab implements ProjectCallback {
 	}
 
 	public void fireProjectSelected() {
-		Lookup.setSelectedProject(project);
+		selectedProject.set(project);
 	}
 
 	public void fireProjectDeselected() {
 		if (project != null && !project.isProjectSaved()) {
-			Project.saveProject(project);
+			projectPersistance.saveProject(project);
 		}
 	}
 
@@ -548,7 +587,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 
 	public void initialiseBlank3DProject() {
 		if (this.project == null) {
-			ModelContainerProject newProject = new ModelContainerProject();
+			ModelContainerProject newProject = modelContainerProjectFactory.create();
 			this.project = newProject;
 			initialiseWithProject(false);
 		}
@@ -556,7 +595,7 @@ public class ProjectTab extends Tab implements ProjectCallback {
 
 	public void initialiseBlank2DProject() {
 		if (this.project == null) {
-			ShapeContainerProject newProject = new ShapeContainerProject();
+			ShapeContainerProject newProject = shapeContainerProjectFactory.create();
 			this.project = newProject;
 			initialiseWithProject(false);
 		}

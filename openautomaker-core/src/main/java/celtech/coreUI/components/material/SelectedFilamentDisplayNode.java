@@ -2,8 +2,10 @@ package celtech.coreUI.components.material;
 
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
@@ -22,7 +24,12 @@ public class SelectedFilamentDisplayNode extends HBox {
 
 	private Filament filamentOnDisplay = null;
 
+	@Inject
+	private I18N i18n;
+
 	public SelectedFilamentDisplayNode() {
+		GuiceContext.get().injectMembers(this);
+
 		setAlignment(Pos.CENTER_LEFT);
 		rectangle = new Rectangle(SWATCH_SQUARE_SIZE, SWATCH_SQUARE_SIZE);
 		label = new Label();
@@ -45,7 +52,7 @@ public class SelectedFilamentDisplayNode extends HBox {
 		}
 		else {
 			rectangle.setVisible(false);
-			label.setText(OpenAutomakerEnv.getI18N().t("materialComponent.unknown"));
+			label.setText(i18n.t("materialComponent.unknown"));
 		}
 
 		filamentOnDisplay = filament;

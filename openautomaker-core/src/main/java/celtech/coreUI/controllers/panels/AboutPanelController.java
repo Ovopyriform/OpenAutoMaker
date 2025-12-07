@@ -1,22 +1,19 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterIdentity;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.application.VersionPreference;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.coreUI.DisplayManager;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Label;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -27,7 +24,7 @@ import javafx.scene.text.Text;
  *
  * @author Ian
  */
-public class AboutPanelController implements Initializable {
+public class AboutPanelController {
 
 	private final Clipboard clipboard = Clipboard.getSystemClipboard();
 	private final ClipboardContent content = new ClipboardContent();
@@ -79,14 +76,33 @@ public class AboutPanelController implements Initializable {
 
 	private Printer currentPrinter = null;
 
+
+	private final VersionPreference fVersionPreference;
+	private final DisplayManager fDisplayManager;
+	private final ApplicationStatus applicationStatus;
+	private final SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected AboutPanelController(
+			VersionPreference versionPreference,
+			DisplayManager displayManager,
+			ApplicationStatus applicationStatus,
+			SelectedPrinter selectedPrinter) {
+
+		this.fVersionPreference = versionPreference;
+		this.fDisplayManager = displayManager;
+		this.applicationStatus = applicationStatus;
+		this.selectedPrinter = selectedPrinter;
+	}
+
 	@FXML
 	private void viewREADME(ActionEvent event) {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.WELCOME);
+		applicationStatus.setMode(ApplicationMode.WELCOME);
 	}
 
 	@FXML
 	private void okPressed(ActionEvent event) {
-		ApplicationStatus.getInstance().returnToLastMode();
+		applicationStatus.returnToLastMode();
 	}
 
 	@FXML
@@ -103,14 +119,13 @@ public class AboutPanelController implements Initializable {
 
 	@FXML
 	private void systemInformationPressed(ActionEvent event) {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.SYSTEM_INFORMATION);
+		applicationStatus.setMode(ApplicationMode.SYSTEM_INFORMATION);
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-		version.setText(OpenAutomakerEnv.get().getVersion());
+	public void initialize() {
+		version.setText(fVersionPreference.getValue().getValue());
 
-		DisplayManager.getInstance().getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>() {
+		fDisplayManager.getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>() {
 			@Override
 			public void changed(ObservableValue<? extends DisplayManager.DisplayScalingMode> ov, DisplayManager.DisplayScalingMode t, DisplayManager.DisplayScalingMode scalingMode) {
 				switch (scalingMode) {
@@ -147,10 +162,10 @@ public class AboutPanelController implements Initializable {
 			}
 		});
 
-		Lookup.getSelectedPrinterProperty().addListener((ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
+		selectedPrinter.addListener((ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
 			bindToPrinter(newValue);
 		});
-		bindToPrinter(Lookup.getSelectedPrinterProperty().get());
+		bindToPrinter(selectedPrinter.get());
 	}
 
 	private void updateHeadData(Head head) {
@@ -176,11 +191,8 @@ public class AboutPanelController implements Initializable {
 		}
 	}
 
-	private ChangeListener<Head> headChangeListener = new ChangeListener<>() {
-		@Override
-		public void changed(ObservableValue<? extends Head> observable, Head oldValue, Head newValue) {
+	private ChangeListener<Head> headChangeListener = (observable, oldValue, newValue) -> {
 			updateHeadData(newValue);
-		}
 	};
 
 	private void bindToPrinter(Printer printer) {

@@ -1,6 +1,3 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.appManager.undo;
 
 import java.util.HashSet;
@@ -17,7 +14,7 @@ import celtech.modelcontrol.TranslateableTwoD;
  *
  * @author tony
  */
-public class CopyModelsCommand extends Command {
+public class CopyModelsCommand implements Command {
 
 	private static final Logger LOGGER = LogManager.getLogger(
 			CopyModelsCommand.class.getName());

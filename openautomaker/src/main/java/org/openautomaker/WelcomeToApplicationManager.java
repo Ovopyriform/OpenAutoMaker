@@ -1,12 +1,12 @@
 package org.openautomaker;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.OPENAUTOMAKER_LAST_VERSION_RUN;
-
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.environment.preference.application.LastRunVersionPreference;
+import org.openautomaker.environment.preference.application.VersionPreference;
 
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
+import jakarta.inject.Inject;
 
 /**
  *
@@ -14,24 +14,41 @@ import celtech.appManager.ApplicationStatus;
  */
 class WelcomeToApplicationManager {
 
-	static void displayWelcomeIfRequired() {
+	private final TaskExecutor taskExecutor;
+	private final LastRunVersionPreference lastRunVersionPreference;
+	private final VersionPreference versionPreference;
+	private final ApplicationStatus applicationStatus;
+
+	@Inject
+	protected WelcomeToApplicationManager(
+			TaskExecutor taskExecutor,
+			LastRunVersionPreference lastRunVersionPreference,
+			VersionPreference versionPreference,
+			ApplicationStatus applicationStatus) {
+
+		this.taskExecutor = taskExecutor;
+		this.lastRunVersionPreference = lastRunVersionPreference;
+		this.versionPreference = versionPreference;
+		this.applicationStatus = applicationStatus;
+
+	}
+
+	public void displayWelcomeIfRequired() {
 		if (!applicationJustInstalled())
 			return;
 
 		showWelcomePage();
 
-		OpenAutomakerEnv env = OpenAutomakerEnv.get();
-		env.setProperty(OPENAUTOMAKER_LAST_VERSION_RUN, env.getVersion());
+		lastRunVersionPreference.setValue(versionPreference.getValue());
 	}
 
-	private static boolean applicationJustInstalled() {
-		OpenAutomakerEnv env = OpenAutomakerEnv.get();
-		return env.getVersion().equals(env.getProperty(OPENAUTOMAKER_LAST_VERSION_RUN));
+	private boolean applicationJustInstalled() {
+		return !(versionPreference.getValue().isEqualTo(lastRunVersionPreference.getValue()));
 	}
 
-	private static void showWelcomePage() {
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
-			ApplicationStatus.getInstance().setMode(ApplicationMode.WELCOME);
+	private void showWelcomePage() {
+		taskExecutor.runOnGUIThread(() -> {
+			applicationStatus.setMode(ApplicationMode.WELCOME);
 		});
 	}
 }

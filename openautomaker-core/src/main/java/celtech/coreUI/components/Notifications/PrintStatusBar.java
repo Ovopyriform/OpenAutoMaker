@@ -6,46 +6,50 @@ import org.openautomaker.base.printerControl.PrintQueueStatus;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.roboxbase.comms.remote.BusyStatus;
 import celtech.roboxbase.comms.remote.PauseStatus;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
-import javafx.fxml.Initializable;
 
 /**
  *
  * @author tony
  */
-public class PrintStatusBar extends AppearingProgressBar implements Initializable {
+public class PrintStatusBar extends AppearingProgressBar {
 
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference = new SafetyFeaturesPreference();
+	@Inject
+	private SafetyFeaturesPreference safetyFeaturesPreference;
+
+	@Inject
+	private I18N i18n;
 
 	private Printer printer = null;
 
-	private final ChangeListener<Number> printerNumberElementListener = (ObservableValue<? extends Number> ov, Number lastState, Number newState) -> {
+	private final ChangeListener<Number> printerNumberElementListener = (observable, oldValue, newVlaue) -> {
 		reassessStatus();
 	};
 
-	private final ChangeListener<PrinterStatus> printerStatusChangeListener = (ObservableValue<? extends PrinterStatus> ov, PrinterStatus lastState, PrinterStatus newState) -> {
+	private final ChangeListener<PrinterStatus> printerStatusChangeListener = (observable, oldValue, newVlaue) -> {
 		reassessStatus();
 	};
 
-	private final ChangeListener<PrintQueueStatus> printQueueStatusChangeListener = (ObservableValue<? extends PrintQueueStatus> ov, PrintQueueStatus lastState, PrintQueueStatus newState) -> {
+	private final ChangeListener<PrintQueueStatus> printQueueStatusChangeListener = (observable, oldValue, newVlaue) -> {
 		reassessStatus();
 	};
 
-	private final ChangeListener<PauseStatus> pauseStatusChangeListener = (ObservableValue<? extends PauseStatus> ov, PauseStatus lastState, PauseStatus newState) -> {
+	private final ChangeListener<PauseStatus> pauseStatusChangeListener = (observable, oldValue, newVlaue) -> {
 		reassessStatus();
 	};
 
-	private final ChangeListener<BusyStatus> busyStatusChangeListener = (ObservableValue<? extends BusyStatus> ov, BusyStatus lastState, BusyStatus newState) -> {
+	private final ChangeListener<BusyStatus> busyStatusChangeListener = (observable, oldValue, newVlaue) -> {
 		reassessStatus();
 	};
 
@@ -58,18 +62,9 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 		}
 	};
 
-	private final EventHandler<ActionEvent> resumeEventHandler = (ActionEvent t) -> {
+	private final EventHandler<ActionEvent> resumeEventHandler = (actionEvent) -> {
 		try {
 			printer.resume();
-		}
-		catch (PrinterException ex) {
-			System.out.println("Couldn't resume print");
-		}
-	};
-
-	private final EventHandler<ActionEvent> cancelEventHandler = (ActionEvent t) -> {
-		try {
-			printer.cancel(null, fSafetyFeaturesPreference.get());
 		}
 		catch (PrinterException ex) {
 			System.out.println("Couldn't resume print");
@@ -80,6 +75,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 
 	public PrintStatusBar() {
 		super();
+		GuiceContext.get().injectMembers(this);
 	}
 
 	private void reassessStatus() {
@@ -98,7 +94,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 			case UNLOADING_FILAMENT_D:
 				statusProcessed = true;
 				barShouldBeDisplayed = true;
-				largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t(printer.busyStatusProperty().get().getI18nString()));
+				largeProgressDescription.setText(i18n.t(printer.busyStatusProperty().get().getI18nString()));
 				progressRequired(false);
 				targetLegendRequired(false);
 				targetValueRequired(false);
@@ -121,7 +117,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 				case SELFIE_PAUSE:
 					statusProcessed = true;
 					barShouldBeDisplayed = true;
-					largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t(printer.pauseStatusProperty().get().getI18nString()));
+					largeProgressDescription.setText(i18n.t(printer.pauseStatusProperty().get().getI18nString()));
 					progressRequired(false);
 					targetLegendRequired(false);
 					targetValueRequired(false);
@@ -142,7 +138,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 				case PRINTING_PROJECT:
 					statusProcessed = true;
 					barShouldBeDisplayed = true;
-					largeProgressDescription.setText(printer.printerStatusProperty().get().getI18nString());
+					largeProgressDescription.setText(i18n.t(printer.printerStatusProperty().get().getKey()));
 
 					if (printer.getPrintEngine().etcAvailableProperty().get()) {
 						int secondsRemaining = printer.getPrintEngine().progressETCProperty().intValue();
@@ -153,10 +149,10 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 							currentValue.setText(hoursMinutes);
 						}
 						else {
-							currentValue.setText(OpenAutomakerEnv.getI18N().t("dialogs.lessThanOneMinute"));
+							currentValue.setText(i18n.t("dialogs.lessThanOneMinute"));
 						}
 
-						largeTargetLegend.setText(OpenAutomakerEnv.getI18N().t("dialogs.progressETCLabel"));
+						largeTargetLegend.setText(i18n.t("dialogs.progressETCLabel"));
 
 						layerN.setText(String.format("%d", printer.getPrintEngine().progressCurrentLayerProperty().get()));
 						layerTotal.setText(String.format("%d", printer.getPrintEngine().progressNumLayersProperty().get()));
@@ -183,7 +179,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 				case RUNNING_MACRO_FILE:
 					statusProcessed = true;
 					barShouldBeDisplayed = true;
-					largeProgressDescription.setText(printer.getPrintEngine().macroBeingRun.get().getFriendlyName());
+					largeProgressDescription.setText(i18n.t(printer.getPrintEngine().macroBeingRun.get().getKey()));
 
 					targetLegendRequired(false);
 					targetValueRequired(false);
@@ -211,7 +207,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 				case CALIBRATING_NOZZLE_ALIGNMENT:
 					statusProcessed = true;
 					barShouldBeDisplayed = true;
-					largeProgressDescription.setText(printer.printerStatusProperty().get().getI18nString());
+					largeProgressDescription.setText(i18n.t(printer.printerStatusProperty().get().getKey()));
 
 					targetLegendRequired(false);
 					targetValueRequired(false);
@@ -239,7 +235,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 				case PURGING_HEAD:
 					statusProcessed = true;
 					barShouldBeDisplayed = true;
-					largeProgressDescription.setText(printer.printerStatusProperty().get().getI18nString());
+					largeProgressDescription.setText(i18n.t(printer.printerStatusProperty().get().getKey()));
 
 					targetLegendRequired(false);
 					targetValueRequired(false);
@@ -272,7 +268,7 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 					currentValueRequired(false);
 					progressRequired(false);
 					layerDataRequired(false);
-					largeProgressDescription.setText(printer.printerStatusProperty().get().getI18nString());
+					largeProgressDescription.setText(i18n.t(printer.printerStatusProperty().get().getKey()));
 					buttonsAllowed.set(false);
 					break;
 			}
@@ -309,7 +305,14 @@ public class PrintStatusBar extends AppearingProgressBar implements Initializabl
 		resumeButton.visibleProperty().bind(printer.canResumeProperty().and(buttonsAllowed));
 		resumeButton.setOnAction(resumeEventHandler);
 		cancelButton.visibleProperty().bind(printer.canCancelProperty().and(buttonsAllowed));
-		cancelButton.setOnAction(cancelEventHandler);
+		cancelButton.setOnAction((actionEvent) -> {
+			try {
+				printer.cancel(null, safetyFeaturesPreference.getValue());
+			}
+			catch (PrinterException ex) {
+				System.out.println("Couldn't resume print");
+			}
+		});
 
 		reassessStatus();
 	}

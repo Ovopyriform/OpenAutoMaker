@@ -13,7 +13,7 @@ import celtech.modelcontrol.ModelContainer;
  *
  * @author tony
  */
-public class AssignModelToExtruderCommand extends Command {
+public class AssignModelToExtruderCommand implements Command {
 
 	ModelContainerProject project;
 	private final Set<ModelContainer> modelContainersToAssignToExtruder0;

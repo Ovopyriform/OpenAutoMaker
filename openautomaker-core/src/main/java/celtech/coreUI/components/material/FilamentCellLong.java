@@ -5,15 +5,24 @@ package celtech.coreUI.components.material;
 
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
+
+import jakarta.inject.Inject;
 
 /**
  *
  * @author tony
  */
 public class FilamentCellLong extends FilamentCell {
+
+	@Inject
+	private I18N i18n;
+
 	public FilamentCellLong() {
 		super();
+
+		GuiceContext.get().injectMembers(this);
 	}
 
 	@Override
@@ -43,7 +52,7 @@ public class FilamentCellLong extends FilamentCell {
 		}
 		else {
 			setGraphic(null);
-			label.setText(OpenAutomakerEnv.getI18N().t("materialComponent.unknown"));
+			label.setText(i18n.t("materialComponent.unknown"));
 		}
 	}
 }

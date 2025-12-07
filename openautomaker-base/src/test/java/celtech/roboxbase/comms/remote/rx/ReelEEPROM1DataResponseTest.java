@@ -1,86 +1,57 @@
 package celtech.roboxbase.comms.remote.rx;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
+import org.openautomaker.base.MaterialType;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import celtech.roboxbase.comms.rx.ReelEEPROM1DataResponse;
 import celtech.roboxbase.comms.rx.RoboxRxPacket;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.openautomaker.base.MaterialType;
-
 /**
  *
  * @author ianhudson
  */
-public class ReelEEPROM1DataResponseTest
-{
+public class ReelEEPROM1DataResponseTest {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.ReelEEPROM1DataResponse\",\"packetType\":\"REEL_1_EEPROM_DATA\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"filamentID\":null,\"firstLayerNozzleTemperature\":0,\"nozzleTemperature\":0,\"firstLayerBedTemperature\":0,\"bedTemperature\":48,\"ambientTemperature\":0,\"filamentDiameter\":0.0,\"filamentMultiplier\":0.0,\"feedRateMultiplier\":0.0,\"remainingFilament\":0.0,\"displayColourString\":null,\"friendlyName\":null,\"reelNumber\":0,\"materialType\":\"PTG\"}";
-    
-    public ReelEEPROM1DataResponseTest()
-    {
-    }
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+	private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.ReelEEPROM1DataResponse\",\"packetType\":\"REEL_1_EEPROM_DATA\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"filamentID\":null,\"firstLayerNozzleTemperature\":0,\"nozzleTemperature\":0,\"firstLayerBedTemperature\":0,\"bedTemperature\":48,\"ambientTemperature\":0,\"filamentDiameter\":0.0,\"filamentMultiplier\":0.0,\"feedRateMultiplier\":0.0,\"remainingFilament\":0.0,\"displayColourString\":null,\"friendlyName\":null,\"reelNumber\":0,\"materialType\":\"PTG\"}";
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    @Before
-    public void setUp()
-    {
-    }
+	@Test
+	public void serializesToJSON() throws Exception {
+		final ReelEEPROM1DataResponse packet = getTestPacket();
 
-    @After
-    public void tearDown()
-    {
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
 
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final ReelEEPROM1DataResponse packet = getTestPacket();
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final ReelEEPROM1DataResponse packet = getTestPacket();
 
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final ReelEEPROM1DataResponse packet = getTestPacket();
+		try {
+			RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-        try
-        {
-            RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
+	private ReelEEPROM1DataResponse getTestPacket() {
+		ReelEEPROM1DataResponse packet = new ReelEEPROM1DataResponse();
 
-    private ReelEEPROM1DataResponse getTestPacket()
-    {
-        ReelEEPROM1DataResponse packet = new ReelEEPROM1DataResponse();
+		packet.setSequenceNumber(44);
+		packet.setBedTemperature(48);
+		packet.setMaterialType(MaterialType.PTG);
 
-        packet.setSequenceNumber(44);
-        packet.setBedTemperature(48);
-        packet.setMaterialType(MaterialType.PTG);
-
-        return packet;
-    }
+		return packet;
+	}
 }

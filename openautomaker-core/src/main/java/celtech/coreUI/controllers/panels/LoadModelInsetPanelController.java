@@ -10,34 +10,33 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.ResourceBundle;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.utils.SystemUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.application.HomePathPreference;
+import org.openautomaker.environment.preference.modeling.ModelsPathPreference;
+import org.openautomaker.ui.StageManager;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ProjectMode;
 import celtech.configuration.ApplicationConfiguration;
-import celtech.configuration.DirectoryMemoryProperty;
-import celtech.coreUI.DisplayManager;
 import celtech.coreUI.components.InsetPanelMenu;
 import celtech.coreUI.components.InsetPanelMenuItem;
 import celtech.coreUI.visualisation.ModelLoader;
+import jakarta.inject.Inject;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.concurrent.Worker.State;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebEngine;
@@ -49,13 +48,13 @@ import netscape.javascript.JSObject;
  *
  * @author Ian
  */
-public class LoadModelInsetPanelController implements Initializable {
+public class LoadModelInsetPanelController {
+
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final FileChooser modelFileChooser = new FileChooser();
-	private DisplayManager displayManager = null;
-	private static final Logger LOGGER = LogManager.getLogger(
-			LoadModelInsetPanelController.class.getName());
-	private ModelLoader modelLoader = new ModelLoader();
+	//private final DisplayManager displayManager;
+
 
 	@FXML
 	private VBox container;
@@ -68,7 +67,34 @@ public class LoadModelInsetPanelController implements Initializable {
 
 	@FXML
 	void cancelPressed(ActionEvent event) {
-		ApplicationStatus.getInstance().returnToLastMode();
+		applicationStatus.returnToLastMode();
+	}
+
+	private final I18N i18n;
+	private final StageManager stageManager;
+	private final ApplicationStatus applicationStatus;
+	private final ModelLoader modelLoader;
+	private final SelectedProject selectedProject;
+	private final HomePathPreference homePathPreference;
+	private final ModelsPathPreference modelsPathPreference;
+
+	@Inject
+	protected LoadModelInsetPanelController(
+			I18N i18n,
+			StageManager stageManager,
+			ApplicationStatus applicationStatus,
+			ModelLoader modelLoader,
+			SelectedProject selectedProject,
+			HomePathPreference homePathPreference,
+			ModelsPathPreference modelsPathPreference) {
+
+		this.i18n = i18n;
+		this.stageManager = stageManager;
+		this.applicationStatus = applicationStatus;
+		this.modelLoader = modelLoader;
+		this.selectedProject = selectedProject;
+		this.homePathPreference = homePathPreference;
+		this.modelsPathPreference = modelsPathPreference;
 	}
 
 	@FXML
@@ -81,105 +107,106 @@ public class LoadModelInsetPanelController implements Initializable {
 				iterator.remove();
 			}
 
-			String descriptionOfFile = OpenAutomakerEnv.getI18N().t("dialogs.meshFileChooserDescription");
+			String descriptionOfFile = i18n.t("dialogs.meshFileChooserDescription");
 
 			modelFileChooser.getExtensionFilters().addAll(
 					new FileChooser.ExtensionFilter(descriptionOfFile,
 							ApplicationConfiguration.getSupportedFileExtensionWildcards(
 									ProjectMode.MESH)));
 
-			modelFileChooser.setInitialDirectory(ApplicationConfiguration.getLastDirectoryFile(DirectoryMemoryProperty.LAST_MODEL_DIRECTORY));
+			modelFileChooser.setInitialDirectory(modelsPathPreference.getValue().toFile());
 
 			List<File> files;
 
-			files = modelFileChooser.showOpenMultipleDialog(DisplayManager.getMainStage());
+			files = modelFileChooser.showOpenMultipleDialog(stageManager.getMainStage());
 
 			if (files != null && !files.isEmpty()) {
-				ApplicationConfiguration.setLastDirectory(
-						DirectoryMemoryProperty.LAST_MODEL_DIRECTORY,
-						files.get(0).getParentFile().getAbsolutePath());
-				modelLoader.loadExternalModels(Lookup.getSelectedProjectProperty().get(), files,
+				modelsPathPreference.setValue(files.get(0).getParentFile().toPath());
+				modelLoader.loadExternalModels(selectedProject.get(), files,
 						true, null, false);
 			}
 		});
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-		displayManager = DisplayManager.getInstance();
+	public void initialize() {
 
-		menu.setTitle(OpenAutomakerEnv.getI18N().t("loadModel.menuTitle"));
+		menu.setTitle(i18n.t("loadModel.menuTitle"));
 
 		InsetPanelMenuItem myComputerItem = new InsetPanelMenuItem();
-		myComputerItem.setTitle(OpenAutomakerEnv.getI18N().t("loadModel.myComputer"));
+		myComputerItem.setTitle(i18n.t("loadModel.myComputer"));
 
 		InsetPanelMenuItem myMiniFactoryItem = new InsetPanelMenuItem();
-		myMiniFactoryItem.setTitle(OpenAutomakerEnv.getI18N().t("loadModel.myMiniFactory"));
+		myMiniFactoryItem.setTitle(i18n.t("loadModel.myMiniFactory"));
 
 		menu.addMenuItem(myComputerItem);
 		menu.addMenuItem(myMiniFactoryItem);
 
-		modelFileChooser.setTitle(OpenAutomakerEnv.getI18N().t("dialogs.modelFileChooser"));
+		modelFileChooser.setTitle(i18n.t("dialogs.modelFileChooser"));
 		modelFileChooser.getExtensionFilters().addAll(
-				new FileChooser.ExtensionFilter(OpenAutomakerEnv.getI18N().t("dialogs.modelFileChooserDescription"),
+				new FileChooser.ExtensionFilter(i18n.t("dialogs.modelFileChooserDescription"),
 						ApplicationConfiguration.getSupportedFileExtensionWildcards(
 								ProjectMode.NONE)));
 
-		ApplicationStatus.getInstance().modeProperty().addListener(
-				(ObservableValue<? extends ApplicationMode> observable, ApplicationMode oldValue, ApplicationMode newValue) -> {
-					if (newValue == ApplicationMode.ADD_MODEL && oldValue != newValue) {
-						webContentContainer.getChildren().clear();
+		applicationStatus.modeProperty().addListener((observable, oldValue, newValue) -> {
+			if (newValue != ApplicationMode.ADD_MODEL || oldValue == newValue)
+				return;
 
-						WebView webView = new WebView();
-						VBox.setVgrow(webView, Priority.ALWAYS);
+			webContentContainer.getChildren().clear();
 
-						final WebEngine webEngine = webView.getEngine();
+			WebView webView = new WebView();
+			VBox.setVgrow(webView, Priority.ALWAYS);
 
-						webEngine.getLoadWorker().stateProperty().addListener(
-								new ChangeListener<State>() {
-									@Override
-									public void changed(ObservableValue<? extends State> ov,
-											State oldState, State newState) {
-										switch (newState) {
-											case RUNNING:
-												break;
-											case SUCCEEDED:
-												JSObject win = (JSObject) webEngine.executeScript("window");
-												win.setMember("automaker", new WebCallback());
-												break;
-										}
-									}
-								});
-						webContentContainer.getChildren().addAll(webView);
-						webEngine.load("http://cel-robox.myminifactory.com");
-					}
-				});
+			final WebEngine webEngine = webView.getEngine();
+
+			webEngine.getLoadWorker().stateProperty().addListener(
+					new ChangeListener<State>() {
+						@Override
+						public void changed(ObservableValue<? extends State> ov,
+								State oldState, State newState) {
+							switch (newState) {
+								case RUNNING:
+									break;
+								case SUCCEEDED:
+									JSObject win = (JSObject) webEngine.executeScript("window");
+									win.setMember("automaker", new WebCallback());
+									break;
+							}
+						}
+					});
+			webContentContainer.getChildren().addAll(webView);
+			//TODO: Don't go here any more.
+			webEngine.load("http://cel-robox.myminifactory.com");
+		});
 	}
 
 	public class WebCallback {
 
 		public void downloadFile(String fileURL) {
-			LOGGER.debug("Got download URL of " + fileURL);
+			if (LOGGER.isDebugEnabled())
+				LOGGER.debug("Got download URL of " + fileURL);
 
 			String tempID = SystemUtils.generate16DigitID();
 			try {
 				URL downloadURL = new URL(fileURL);
 
 				String extension = FilenameUtils.getExtension(fileURL);
-				final String tempFilename = OpenAutomakerEnv.get().getApplicationPath().resolve(tempID + "." + extension).toString();
+				final String tempFilename = homePathPreference.getAppValue().resolve(tempID + "." + extension).toString();
 
 				URLConnection urlConn = downloadURL.openConnection();
 
 				InputStream webInputStream = urlConn.getInputStream();
 
 				if (extension.equalsIgnoreCase("stl")) {
-					LOGGER.debug("Got stl file from My Mini Factory");
-					final String targetname = BaseConfiguration.getUserStorageDirectory()
-							+ File.separator + FilenameUtils.getBaseName(fileURL);
+					if (LOGGER.isDebugEnabled())
+						LOGGER.debug("Got stl file from My Mini Factory");
+
+					final String targetname = homePathPreference.getUserValue().resolve(FilenameUtils.getBaseName(fileURL)).toString();
 					writeStreamToFile(webInputStream, targetname);
 				}
 				else if (extension.equalsIgnoreCase("zip")) {
-					LOGGER.debug("Got zip file from My Mini Factory");
+					if (LOGGER.isDebugEnabled())
+						LOGGER.debug("Got zip file from My Mini Factory");
+
 					writeStreamToFile(webInputStream, tempFilename);
 					ZipFile zipFile = new ZipFile(tempFilename);
 					try {
@@ -187,12 +214,12 @@ public class LoadModelInsetPanelController implements Initializable {
 						final List<File> filesToLoad = new ArrayList<>();
 						while (entries.hasMoreElements()) {
 							final ZipEntry entry = entries.nextElement();
-							final String tempTargetname = BaseConfiguration.getUserStorageDirectory()
-									+ File.separator + entry.getName();
+							final String tempTargetname = homePathPreference.getUserValue().resolve(entry.getName()).toString();
+
 							writeStreamToFile(zipFile.getInputStream(entry), tempTargetname);
 							filesToLoad.add(new File(tempTargetname));
 						}
-						modelLoader.loadExternalModels(Lookup.getSelectedProjectProperty().get(),
+						modelLoader.loadExternalModels(selectedProject.get(),
 								filesToLoad, null);
 					}
 					finally {

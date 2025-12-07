@@ -1,11 +1,10 @@
 package celtech.appManager;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -21,92 +20,87 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.ui.state.ProjectGUIStates;
 
-import celtech.Lookup;
 import celtech.configuration.ApplicationConfiguration;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 /**
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
+@Singleton
+//TODO: Change this to using a preference to store information.
 public class ProjectManager implements Savable, Serializable {
 
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private static final long serialVersionUID = 4714858633610290041L;
-	private static ProjectManager instance = null;
+
 	private static List<Project> openProjects = new ArrayList<>();
+
+	// This should be a preference not a dat file.
 	private final static String openProjectFileName = "projects.dat";
-	private static final Logger LOGGER = LogManager.getLogger(ProjectManager.class.getName());
-	private final static ProjectFileFilter fileFilter = new ProjectFileFilter();
 
-	private ProjectManager() {
-	}
+	private final ProjectsPathPreference projectsPathPreference;
+	private final ProjectPersistance projectPersistance;
+	private final ProjectGUIStates projectGUIStates;
 
-	public static ProjectManager getInstance() {
-		if (instance == null) {
-			ProjectManager pm = loadState();
-			if (pm != null) {
-				instance = pm;
-			}
-			else {
-				instance = new ProjectManager();
-			}
-		}
+	@Inject
+	protected ProjectManager(
+			ProjectsPathPreference projectsPathPreference,
+			ProjectPersistance projectPersistance,
+			ProjectGUIStates projectGUIStates) {
 
-		return instance;
-	}
+		this.projectsPathPreference = projectsPathPreference;
+		this.projectPersistance = projectPersistance;
+		this.projectGUIStates = projectGUIStates;
 
-	private static ProjectManager loadState() {
-		ProjectManager pm = null;
-
-		Path projectPath = OpenAutomakerEnv.get().getUserPath(PROJECTS);
+		Path projectPath = projectsPathPreference.getValue();
 		Path openProjectsDataPath = projectPath.resolve(openProjectFileName);
 
 		if (!Files.exists(openProjectsDataPath))
-			return pm;
+			return;
 
 		try (ObjectInputStream reader = new ObjectInputStream(new FileInputStream(openProjectsDataPath.toFile()))) {
 
 			if (LOGGER.isDebugEnabled())
 				LOGGER.debug("Load open projects from " + openProjectsDataPath.toString());
 
-			pm = new ProjectManager();
 			int numberOfOpenProjects = reader.readInt();
 			for (int counter = 0; counter < numberOfOpenProjects; counter++) {
 				Path projectPathData = Paths.get(reader.readUTF());
+
 				//TODO: Don't want this call to use a string
-				Project project = loadProject(projectPathData.toString());
+				Project project = loadProject(projectPathData);
 
 				if (project == null) {
 					LOGGER.warn("Project Manager could not open " + projectPathData.toString());
 					continue;
 				}
 
-				pm.projectOpened(project);
+				projectOpened(project);
 			}
 		}
 		catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			LOGGER.error("Open Projects file not found: " + openProjectsDataPath.toString());
 		}
 		catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			LOGGER.error("Something bad happened trying to load the projects file", e);
 		}
-
-		return pm;
 	}
 
-	public static Project loadProject(String projectPath) {
-		String basePath = projectPath.substring(0, projectPath.lastIndexOf('.'));
-		return Project.loadProject(basePath);
+	public Project loadProject(Path projectPath) {
+		return projectPersistance.loadProject(projectPath);
 	}
 
 	@Override
 	public boolean saveState() {
 		boolean savedSuccessfully = false;
 
-		try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(openProjectFileName).toFile()))) {
+		try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(projectsPathPreference.getValue().resolve(openProjectFileName).toFile()))) {
 			int numberOfProjectsWithModels = 0;
 
 			for (Project candidateProject : openProjects)
@@ -140,7 +134,9 @@ public class ProjectManager implements Savable, Serializable {
 	public void projectClosed(Project project) {
 		project.close();
 		openProjects.remove(project);
-		Lookup.removeProjectReferences(project);
+
+		// This simply removes this projects project GUI state
+		projectGUIStates.remove(project);
 	}
 
 	public List<Project> getOpenProjects() {
@@ -150,8 +146,15 @@ public class ProjectManager implements Savable, Serializable {
 	private Set<String> getAvailableProjectNames() {
 		Set<String> availableProjectNames = new HashSet<>();
 
-		File projectDir = OpenAutomakerEnv.get().getUserPath(PROJECTS).toFile();
-		File[] projectFiles = projectDir.listFiles(fileFilter);
+		File projectDir = projectsPathPreference.getValue().toFile();
+
+		File[] projectFiles = projectDir.listFiles(new FilenameFilter() {
+			@Override
+			public boolean accept(File dir, String name) {
+				return name.endsWith(ApplicationConfiguration.projectFileExtension);
+			}
+		});
+
 		for (File file : projectFiles) {
 			String fileName = file.getName();
 			String projectName = fileName.replace(ApplicationConfiguration.projectFileExtension, "");

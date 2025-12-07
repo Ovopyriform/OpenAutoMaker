@@ -1,22 +1,15 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.utils.threed;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.HashSet;
 import java.util.Set;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import javafx.geometry.Point3D;
 import javafx.scene.shape.TriangleMesh;
 
-/**
- *
- * @author tony
- */
 public class CutResultTest {
 
 	MeshCutter2.BedToLocalConverter nullConverter = new MeshCutter2.BedToLocalConverter() {

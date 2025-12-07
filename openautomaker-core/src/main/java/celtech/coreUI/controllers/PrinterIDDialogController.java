@@ -1,9 +1,5 @@
 package celtech.coreUI.controllers;
 
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.ResourceBundle;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.PrinterColourMap;
@@ -12,11 +8,11 @@ import org.openautomaker.base.printerControl.model.PrinterException;
 
 import celtech.coreUI.components.ColourChooserButton;
 import celtech.coreUI.components.RestrictedTextField;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Toggle;
@@ -33,9 +29,9 @@ import javafx.stage.Stage;
  *
  * @author ianhudson
  */
-public class PrinterIDDialogController implements Initializable {
+public class PrinterIDDialogController {
 
-	private static final Logger LOGGER = LogManager.getLogger(PrinterIDDialogController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private boolean okPressed = false;
 
@@ -75,25 +71,27 @@ public class PrinterIDDialogController implements Initializable {
 		myStage.close();
 	}
 
-	private int buttonValue = -1;
+	//private int buttonValue = -1;
 	private Stage myStage = null;
 
-	private ArrayList<Button> buttons = new ArrayList<>();
+	//private ArrayList<Button> buttons = new ArrayList<>();
 
 	private EventHandler<KeyEvent> textInputHandler = null;
 
 	private Printer printerToUse = null;
 
-	private PrinterColourMap colourMap = PrinterColourMap.getInstance();
+	private final PrinterColourMap colourMap;
+
+	@Inject
+	protected PrinterIDDialogController(PrinterColourMap printerColourMap) {
+		this.colourMap = printerColourMap;
+	}
 
 	/**
 	 * Initializes the controller class.
 	 *
-	 * @param url
-	 * @param rb
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 
 		textInputHandler = new EventHandler<>() {
 			@Override
@@ -135,12 +133,10 @@ public class PrinterIDDialogController implements Initializable {
 	 * @return
 	 */
 	public Color getChosenDisplayColour() {
-		if (colourButtonGroup.getSelectedToggle() != null) {
-			return ((ColourChooserButton) colourButtonGroup.getSelectedToggle()).getDisplayColour();
-		}
-		else {
+		if (colourButtonGroup.getSelectedToggle() == null)
 			return null;
-		}
+
+		return ((ColourChooserButton) colourButtonGroup.getSelectedToggle()).getDisplayColour();
 	}
 
 	/**

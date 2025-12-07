@@ -1,8 +1,6 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.util.Optional;
-import java.util.ResourceBundle;
 import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
@@ -11,9 +9,11 @@ import org.openautomaker.base.camera.CameraInfo;
 import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.CameraProfile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
+import org.openautomaker.base.device.CameraManager;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ModelContainerProject;
@@ -25,11 +25,11 @@ import celtech.coreUI.controllers.utilityPanels.SnapshotController;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.roboxbase.comms.RemoteDetectedPrinter;
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.layout.GridPane;
@@ -39,8 +39,8 @@ import javafx.scene.layout.GridPane;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class TimelapseInsetPanelController extends SnapshotController implements Initializable, ProjectAwareController, ModelContainerProject.ProjectChangesListener {
-	private static final Logger LOGGER = LogManager.getLogger(TimelapseInsetPanelController.class.getName());
+public class TimelapseInsetPanelController extends SnapshotController implements ProjectAwareController, ModelContainerProject.ProjectChangesListener {
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	@FXML
 	private GridPane timelapseInsetRoot;
@@ -70,9 +70,33 @@ public class TimelapseInsetPanelController extends SnapshotController implements
 		}
 	};
 
+	private final DisplayManager displayManager;
+	private final ApplicationStatus applicationStatus;
+	private final SelectedPrinter selectedPrinter;
+	private final CameraProfileContainer cameraProfileContainer;
+
+	//private final Lookup lookup;
+
+	@Inject
+	protected TimelapseInsetPanelController(
+			CameraManager cameraManager,
+			TaskExecutor taskExecutor,
+			DisplayManager displayManager,
+			ApplicationStatus applicationStatus,
+			SelectedPrinter selectedPrinter,
+			CameraProfileContainer cameraProfileContainer) {
+
+		super(cameraManager, taskExecutor, cameraProfileContainer);
+
+		this.displayManager = displayManager;
+		this.applicationStatus = applicationStatus;
+		this.selectedPrinter = selectedPrinter;
+		this.cameraProfileContainer = cameraProfileContainer;
+	}
+
 	@FXML
 	void editCameraProfile(ActionEvent event) {
-		DisplayManager.getInstance().showAndSelectCameraProfile(cameraProfileChooser.getValue());
+		displayManager.showAndSelectCameraProfile(cameraProfileChooser.getValue());
 	}
 
 	@FXML
@@ -83,22 +107,22 @@ public class TimelapseInsetPanelController extends SnapshotController implements
 	}
 
 	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		viewWidthFixed = false;
-		super.initialize(url, rb);
+		super.initialize();
 		try {
 			timelapseEnableButton.setSelected(false);
 
-			DisplayManager.getInstance().libraryModeEnteredProperty().addListener((observable, oldValue, enteredLibraryMode) -> {
+			displayManager.libraryModeEnteredProperty().addListener((observable, oldValue, enteredLibraryMode) -> {
 				if (!enteredLibraryMode)
 					repopulateCameraProfileChooser();
 			});
 
-			Lookup.getSelectedPrinterProperty().addListener(selectedPrinterChangeListener);
+			selectedPrinter.addListener(selectedPrinterChangeListener);
 
-			ApplicationStatus.getInstance().modeProperty().addListener(applicationModeChangeListener);
+			applicationStatus.modeProperty().addListener(applicationModeChangeListener);
 
-			whenPrinterChanged(Lookup.getSelectedPrinterProperty().get());
+			whenPrinterChanged(selectedPrinter.get());
 		}
 		catch (Exception ex) {
 			ex.printStackTrace();
@@ -145,7 +169,7 @@ public class TimelapseInsetPanelController extends SnapshotController implements
 	}
 
 	private void setPanelVisibility() {
-		if (ApplicationStatus.getInstance().modeProperty().get() == ApplicationMode.SETTINGS &&
+		if (applicationStatus.modeProperty().get() == ApplicationMode.SETTINGS &&
 				connectedServer != null &&
 				connectedServer.getCameraDetected()) {
 			timelapseInsetRoot.setVisible(true);
@@ -218,7 +242,7 @@ public class TimelapseInsetPanelController extends SnapshotController implements
 		timelapseSettings.getTimelapseProfile()
 				.ifPresentOrElse(cameraProfileChooser::setValue,
 						() -> {
-							cameraProfileChooser.setValue(CameraProfileContainer.getInstance().getDefaultProfile());
+							cameraProfileChooser.setValue(cameraProfileContainer.getDefaultProfile());
 						});
 
 		timelapseSettings.getTimelapseCamera()
@@ -246,8 +270,8 @@ public class TimelapseInsetPanelController extends SnapshotController implements
 		}
 		currentProject = null;
 
-		Lookup.getSelectedPrinterProperty().removeListener(selectedPrinterChangeListener);
+		selectedPrinter.removeListener(selectedPrinterChangeListener);
 
-		ApplicationStatus.getInstance().modeProperty().removeListener(applicationModeChangeListener);
+		applicationStatus.modeProperty().removeListener(applicationModeChangeListener);
 	}
 }

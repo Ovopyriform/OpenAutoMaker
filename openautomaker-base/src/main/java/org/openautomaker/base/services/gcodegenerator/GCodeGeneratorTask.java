@@ -12,8 +12,10 @@ import org.openautomaker.base.MaterialType;
 import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.slicer.Cura4PlusConfigConvertor;
-import org.openautomaker.base.configuration.slicer.SlicerConfigWriter;
-import org.openautomaker.base.configuration.slicer.SlicerConfigWriterFactory;
+import org.openautomaker.base.inject.postprocessor.PostProcessorTaskFactory;
+import org.openautomaker.base.inject.slicer.Cura4PlusConfigConvertorFactory;
+import org.openautomaker.base.inject.slicer.SlicerTaskFactory;
+import org.openautomaker.base.inject.utils.models.PrintableMeshesFactory;
 import org.openautomaker.base.printerControl.PrintJob;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.postProcessor.GCodePostProcessingResult;
@@ -23,10 +25,12 @@ import org.openautomaker.base.services.slicer.ProgressReceiver;
 import org.openautomaker.base.services.slicer.SliceResult;
 import org.openautomaker.base.services.slicer.SlicerTask;
 import org.openautomaker.base.services.slicer.SlicerUtils;
+import org.openautomaker.base.slicer.SlicerConfigWriter;
 import org.openautomaker.base.utils.models.PrintableMeshes;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.Slicer;
 
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.concurrent.Task;
@@ -45,10 +49,36 @@ public class GCodeGeneratorTask extends Task<GCodeGeneratorResult> implements Pr
 
 	private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
+	private final PostProcessorTaskFactory postProcessorTaskFactory;
+	private final SlicerTaskFactory slicerTaskFactory;
+	private final SlicerConfigWriter slicerConfigWriter;
+	private final SlicerUtils slicerUtils;
+	private final Cura4PlusConfigConvertorFactory cura4PlusConfigConvertorFactory;
+
+	private final PrintableMeshesFactory printableMeshesFactory;
+
+	private final I18N i18n;
+
 	/**
 	 *
 	 */
-	public GCodeGeneratorTask() {
+	@Inject
+	protected GCodeGeneratorTask(
+			SlicerTaskFactory slicerTaskFactory,
+			PostProcessorTaskFactory postProcessorTaskFactory,
+			SlicerConfigWriter slicerConfigWriter,
+			SlicerUtils slicerUtils,
+			Cura4PlusConfigConvertorFactory cura4PlusConfigConvertorFactory,
+			PrintableMeshesFactory printableMeshesFactory,
+			I18N i18n) {
+
+		this.slicerTaskFactory = slicerTaskFactory;
+		this.postProcessorTaskFactory = postProcessorTaskFactory;
+		this.slicerConfigWriter = slicerConfigWriter;
+		this.slicerUtils = slicerUtils;
+		this.cura4PlusConfigConvertorFactory = cura4PlusConfigConvertorFactory;
+		this.printableMeshesFactory = printableMeshesFactory;
+		this.i18n = i18n;
 	}
 
 	/**
@@ -81,26 +111,28 @@ public class GCodeGeneratorTask extends Task<GCodeGeneratorResult> implements Pr
 			result.setCancelled(true);
 			return result;
 		}
-		updateMessage(OpenAutomakerEnv.getI18N().t("printerStatus.slicing"));
+		updateMessage(i18n.t("printerStatus.slicing"));
 		PrintJob printJob = new PrintJob(meshesToPrint.getPrintQuality().getFriendlyName(), gcodePath);
 		Path slicerOutputFilePath = printJob.getGCodeFileLocation();
 		Path postProcOutputFilePath = printJob.getRoboxisedFileLocation();
 
-		SlicerTask slicerTask = new SlicerTask(meshesToPrint.getPrintQuality().getFriendlyName(), meshesToPrint, gcodePath.toString(), printerToUse, this);
+		SlicerTask slicerTask = slicerTaskFactory.create(meshesToPrint.getPrintQuality().getFriendlyName(), meshesToPrint, gcodePath, printerToUse, this);
 		executorService.execute(slicerTask);
 
 		SliceResult slicerResult = null;
 		try {
 			slicerResult = slicerTask.get();
-		} catch (InterruptedException ex) {
+		}
+		catch (InterruptedException ex) {
 			LOGGER.debug("GCode Generation interrupted, probably due to a cancel");
 			LOGGER.debug("Cancelling Slicer Task");
 			slicerTask.cancel(false);
 			LOGGER.debug("Killing Slicer");
-			SlicerUtils.killSlicing(meshesToPrint.getDefaultSlicerType());
-		} catch (ExecutionException ex) {
+			slicerUtils.killSlicing();
+		}
+		catch (ExecutionException ex) {
 			LOGGER.warn("Slicing task failed with exception " + ex);
-			SlicerUtils.killSlicing(meshesToPrint.getDefaultSlicerType());
+			slicerUtils.killSlicing();
 		}
 
 		result.setSlicerResult(slicerResult, slicerOutputFilePath.toString());
@@ -112,21 +144,23 @@ public class GCodeGeneratorTask extends Task<GCodeGeneratorResult> implements Pr
 		}
 
 		if (slicerResult != null && slicerResult.isSuccess()) {
-			updateMessage(OpenAutomakerEnv.getI18N().t("printerStatus.postProcessing"));
+			updateMessage(i18n.t("printerStatus.postProcessing"));
 			DoubleProperty progress = new SimpleDoubleProperty();
 			progress.addListener((n, ov, nv) -> this.updateProgress(60.0 + 0.4 * nv.doubleValue(), 100.0));
 
-			PostProcessorTask postProcessorTask = new PostProcessorTask(meshesToPrint.getPrintQuality().getFriendlyName(), meshesToPrint, gcodePath, printerToUse, progress, meshesToPrint.getDefaultSlicerType());
+			PostProcessorTask postProcessorTask = postProcessorTaskFactory.create(meshesToPrint.getPrintQuality().getFriendlyName(), meshesToPrint, gcodePath, printerToUse, progress, meshesToPrint.getDefaultSlicerType());
 			executorService.execute(postProcessorTask);
 
 			GCodePostProcessingResult postProcessingResult = null;
 			try {
 				postProcessingResult = postProcessorTask.get();
-			} catch (InterruptedException ex) {
+			}
+			catch (InterruptedException ex) {
 				LOGGER.debug("GCode Generation interrupted, probably due to a cancel");
 				LOGGER.debug("Cancelling Post Processor");
 				postProcessorTask.cancel(false);
-			} catch (ExecutionException ex) {
+			}
+			catch (ExecutionException ex) {
 				LOGGER.warn("Post Processor task failed with exception " + ex);
 			}
 
@@ -148,8 +182,6 @@ public class GCodeGeneratorTask extends Task<GCodeGeneratorResult> implements Pr
 		RoboxProfile settingsToUse = new RoboxProfile(meshesToUse.getSettings());
 
 		Slicer slicerTypeToUse = meshesToUse.getDefaultSlicerType();
-
-		SlicerConfigWriter configWriter = SlicerConfigWriterFactory.getConfigWriter(slicerTypeToUse);
 
 		if (printerToUse != null) {
 			// This is a hack to force the fan speed to 100% when using PLA
@@ -187,20 +219,19 @@ public class GCodeGeneratorTask extends Task<GCodeGeneratorResult> implements Pr
 		}
 
 		// Create a new set of meshes with the updated settings. 
-		meshesToPrint = new PrintableMeshes(meshesToUse.getMeshesForProcessing(), meshesToUse.getUsedExtruders(), meshesToUse.getExtruderForModel(), meshesToUse.getProjectName(), meshesToUse.getRequiredPrintJobID(), settingsToUse,
+		meshesToPrint = printableMeshesFactory.create(meshesToUse.getMeshesForProcessing(), meshesToUse.getUsedExtruders(), meshesToUse.getExtruderForModel(), meshesToUse.getProjectName(), meshesToUse.getRequiredPrintJobID(), settingsToUse,
 				meshesToUse.getPrintOverrides(), meshesToUse.getPrintQuality(), meshesToUse.getDefaultSlicerType(), meshesToUse.getCentreOfPrintedObject(), meshesToUse.isSafetyFeaturesRequired(), meshesToUse.isCameraEnabled(),
 				meshesToUse.getCameraTriggerData());
 
-		configWriter.setPrintCentre((float) (meshesToUse.getCentreOfPrintedObject().getX()), (float) (meshesToUse.getCentreOfPrintedObject().getZ()));
+		slicerConfigWriter.setPrintCentre((float) (meshesToUse.getCentreOfPrintedObject().getX()), (float) (meshesToUse.getCentreOfPrintedObject().getZ()));
 
 		Path configFilePath = gcodePath.resolve(meshesToUse.getPrintQuality() + BaseConfiguration.printProfileFileExtension);
 
-		configWriter.generateConfigForSlicer(settingsToUse, configFilePath);
+		slicerConfigWriter.generateConfigForSlicer(settingsToUse, configFilePath);
 
-		if (slicerTypeToUse != Slicer.CURA) {
-			Cura4PlusConfigConvertor cura4ConfigConvertor = new Cura4PlusConfigConvertor(printerToUse, meshesToPrint, slicerTypeToUse);
-			cura4ConfigConvertor.injectConfigIntoCura4SettingsFile(configFilePath, gcodePath);
-		}
+		//TODO: This looks like it should be managed by some kind of lifecycle manager
+		Cura4PlusConfigConvertor cura4ConfigConvertor = cura4PlusConfigConvertorFactory.create(printerToUse, meshesToPrint, slicerTypeToUse);
+		cura4ConfigConvertor.injectConfigIntoCura4SettingsFile(configFilePath, gcodePath);
 	}
 
 	@Override

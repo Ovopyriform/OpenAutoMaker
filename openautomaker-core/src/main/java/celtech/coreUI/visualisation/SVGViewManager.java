@@ -1,7 +1,6 @@
 package celtech.coreUI.visualisation;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_JOBS;
-
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -19,9 +18,13 @@ import org.openautomaker.base.postprocessor.nouveau.nodes.TravelNode;
 import org.openautomaker.base.postprocessor.stylus.PrintableShapesToGCode;
 import org.openautomaker.base.utils.models.PrintableShapes;
 import org.openautomaker.base.utils.models.ShapeForProcessing;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.root.PrintJobsPathPreference;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.inject.importer.ShapeContainerFactory;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.Project;
@@ -31,6 +34,7 @@ import celtech.coreUI.visualisation.svg.TextPath;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.modelcontrol.TranslateableTwoD;
 import celtech.utils.threed.importers.svg.ShapeContainer;
+import jakarta.inject.Inject;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ChangeListener;
@@ -60,16 +64,15 @@ import javafx.scene.transform.Affine;
 import javafx.scene.transform.Scale;
 import javafx.scene.transform.Translate;
 
-/**
- *
- * @author ianhudson
- */
 public class SVGViewManager extends Pane implements Project.ProjectChangesListener {
 
-	private static final Logger LOGGER = LogManager.getLogger(SVGViewManager.class.getName());
-	private final Project project;
+	private static final Logger LOGGER = LogManager.getLogger();
+
+	//TODO: Cleanup
+	//private final Project project;
 	private final UndoableProject undoableProject;
-	private final ApplicationStatus applicationStatus = ApplicationStatus.getInstance();
+
+	//private final ApplicationStatus applicationStatus;
 	private final ProjectSelection projectSelection;
 	private ObservableList<ProjectifiableThing> loadedModels;
 
@@ -93,14 +96,36 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 
 	private Pane parentPane = null;
 
-	private final ObjectProperty<DragMode> dragMode = new SimpleObjectProperty(DragMode.IDLE);
+	private final ObjectProperty<DragMode> dragMode = new SimpleObjectProperty<>(DragMode.IDLE);
 	private boolean justEnteredDragMode;
 
 	private ContextMenu bedContextMenu = null;
 
+	@Inject
+	private PrintJobsPathPreference printJobsPathPreference;
+
+	@Inject
+	private ProjectGUIStates projectGUIStates;
+
+	@Inject
+	private ShapeContainerFactory shapeContainerFactory;
+
+	@Inject
+	private UndoableProjectFactory undoableProjectFactory;
+
+	@Inject
+	private SelectedProject selectedProject;
+
+	@Inject
+	private PrintableShapesToGCode printableShapesToGCode;
+
+	@Inject
+	private ApplicationStatus applicationStatus;
+
 	public SVGViewManager(Project project) {
-		this.project = project;
-		this.undoableProject = new UndoableProject(project);
+		GuiceContext.get().injectMembers(this);
+
+		this.undoableProject = undoableProjectFactory.create(project);
 
 		parentPane = this;
 
@@ -120,7 +145,7 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 		getChildren().add(partsAndBed);
 		getChildren().add(gCodeOverlay);
 
-		projectSelection = Lookup.getProjectGUIState(project).getProjectSelection();
+		projectSelection = projectGUIStates.get(project).getProjectSelection();
 		loadedModels = project.getTopLevelThings();
 
 		applicationStatus.modeProperty().addListener(applicationModeListener);
@@ -175,25 +200,25 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 		addTextMenuItem.setOnAction((ActionEvent e) -> {
 			TextPath newPath = new TextPath();
 
-			ShapeContainer newShapeContainer = new ShapeContainer("Text", newPath);
+			ShapeContainer newShapeContainer = shapeContainerFactory.create("Text", newPath);
 
 			Point2D pointToPlaceAt = partsAndBed.screenToLocal(bedContextMenu.getAnchorX(), bedContextMenu.getAnchorY());
 
 			newShapeContainer.translateTo(pointToPlaceAt.getX(), pointToPlaceAt.getY());
 
-			Lookup.getSelectedProjectProperty().get().addModel(newShapeContainer);
+			selectedProject.get().addModel(newShapeContainer);
 		});
 
 		addRectangleMenuItem.setOnAction((ActionEvent e) -> {
 			Rectangle newShape = new Rectangle(10, 10);
 
-			ShapeContainer newShapeContainer = new ShapeContainer("Rectangle", newShape);
+			ShapeContainer newShapeContainer = shapeContainerFactory.create("Rectangle", newShape);
 
 			Point2D pointToPlaceAt = partsAndBed.screenToLocal(bedContextMenu.getAnchorX(), bedContextMenu.getAnchorY());
 
 			newShapeContainer.translateTo(pointToPlaceAt.getX(), pointToPlaceAt.getY());
 
-			Lookup.getSelectedProjectProperty().get().addModel(newShapeContainer);
+			selectedProject.get().addModel(newShapeContainer);
 		});
 
 		addCircleMenuItem.setOnAction((ActionEvent e) -> {
@@ -201,12 +226,12 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 			Circle newShape = new Circle(10);
 			newShape.setSmooth(true);
 
-			ShapeContainer newShapeContainer = new ShapeContainer("Circle", newShape);
+			ShapeContainer newShapeContainer = shapeContainerFactory.create("Circle", newShape);
 
 			Point2D pointToPlaceAt = partsAndBed.screenToLocal(bedContextMenu.getAnchorX(), bedContextMenu.getAnchorY());
 			newShapeContainer.translateTo(pointToPlaceAt.getX(), pointToPlaceAt.getY());
 
-			Lookup.getSelectedProjectProperty().get().addModel(newShapeContainer);
+			selectedProject.get().addModel(newShapeContainer);
 		});
 
 		generateGCodeMenuItem.setOnAction((ActionEvent e) -> {
@@ -220,12 +245,15 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 				}
 			});
 
-			PrintableShapes ps = new PrintableShapes(shapes, Lookup.getSelectedProjectProperty().get().getProjectName(), "test2D");
-			List<GCodeEventNode> gcodeData = PrintableShapesToGCode.parsePrintableShapes(ps);
+			PrintableShapes ps = new PrintableShapes(shapes, selectedProject.get().getProjectName(), "test2D");
+			List<GCodeEventNode> gcodeData = printableShapesToGCode.parsePrintableShapes(ps);
 			DragKnifeCompensator dnc = new DragKnifeCompensator();
 			List<GCodeEventNode> dragKnifeCompensatedGCodeNodes = dnc.doCompensation(gcodeData, 0.2);
-			PrintableShapesToGCode.writeGCodeToFile(OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve("stylusTestRaw.gcode"), gcodeData);
-			PrintableShapesToGCode.writeGCodeToFile(OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve("stylusTestCompensated.gcode"), dragKnifeCompensatedGCodeNodes);
+
+			Path printJobsPath = printJobsPathPreference.getValue();
+
+			printableShapesToGCode.writeGCodeToFile(printJobsPath.resolve("stylusTestRaw.gcode"), gcodeData);
+			printableShapesToGCode.writeGCodeToFile(printJobsPath.resolve("stylusTestCompensated.gcode"), dragKnifeCompensatedGCodeNodes);
 			renderGCode(dragKnifeCompensatedGCodeNodes);
 		});
 
@@ -359,7 +387,7 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 	}
 
 	private void handleMouseSingleClickedEvent(MouseEvent event) {
-		boolean handleThisEvent = true;
+		// boolean handleThisEvent = true;
 		LOGGER.info("source was " + event.getSource());
 		LOGGER.info("target was " + event.getTarget());
 		PickResult pickResult = event.getPickResult();
@@ -367,7 +395,7 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 		Point3D pickedPoint = pickResult.getIntersectedPoint();
 		Node intersectedNode = pickResult.getIntersectedNode();
 
-		boolean shortcut = event.isShortcutDown();
+		// boolean shortcut = event.isShortcutDown();
 
 		if (intersectedNode != bed) {
 			bedContextMenu.hide();
@@ -444,17 +472,18 @@ public class SVGViewManager extends Pane implements Project.ProjectChangesListen
 		}
 	};
 
-	private void selectModel(ShapeContainer selectedNode, boolean multiSelect) {
-		if (selectedNode == null) {
-			projectSelection.deselectAllModels();
-		}
-		else if (!selectedNode.isSelected()) {
-			if (!multiSelect) {
-				projectSelection.deselectAllModels();
-			}
-			projectSelection.addSelectedItem(selectedNode);
-		}
-	}
+	//TODO: Cleanup
+	//	private void selectModel(ShapeContainer selectedNode, boolean multiSelect) {
+	//		if (selectedNode == null) {
+	//			projectSelection.deselectAllModels();
+	//		}
+	//		else if (!selectedNode.isSelected()) {
+	//			if (!multiSelect) {
+	//				projectSelection.deselectAllModels();
+	//			}
+	//			projectSelection.addSelectedItem(selectedNode);
+	//		}
+	//	}
 
 	private void deselectAllModels() {
 		for (ProjectifiableThing modelContainer : loadedModels) {

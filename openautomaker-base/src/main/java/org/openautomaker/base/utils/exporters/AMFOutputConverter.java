@@ -1,7 +1,5 @@
 package org.openautomaker.base.utils.exporters;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_JOBS;
-
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -24,8 +22,9 @@ import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.models.MeshForProcessing;
 import org.openautomaker.base.utils.threed.CentreCalculations;
 import org.openautomaker.base.utils.threed.MeshToWorldTransformer;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.root.PrintJobsPathPreference;
 
+import jakarta.inject.Inject;
 import javafx.collections.ObservableFloatArray;
 import javafx.geometry.Point3D;
 import javafx.scene.shape.MeshView;
@@ -34,11 +33,23 @@ import javafx.scene.shape.TriangleMesh;
 
 /**
  *
+ * 
  * @author ianhudson
  */
 public class AMFOutputConverter implements MeshFileOutputConverter {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+
+	private final PrintJobsPathPreference printJobsPathPreference;
+
+	@Inject
+	protected AMFOutputConverter(
+			PrintJobsPathPreference printJobsPathPreference) {
+
+		super();
+
+		this.printJobsPathPreference = printJobsPathPreference;
+	}
 
 	void outputProject(List<MeshForProcessing> meshesForProcessing, XMLStreamWriter streamWriter) throws XMLStreamException {
 		Map<MeshView, Integer> vertexOffsetForModels = new HashMap<>();
@@ -167,7 +178,7 @@ public class AMFOutputConverter implements MeshFileOutputConverter {
 
 	@Override
 	public MeshExportResult outputFile(List<MeshForProcessing> meshesForProcessing, String printJobUUID, boolean outputAsSingleFile) {
-		return outputFile(meshesForProcessing, printJobUUID, OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve(printJobUUID), outputAsSingleFile);
+		return outputFile(meshesForProcessing, printJobUUID, printJobsPathPreference.getValue().resolve(printJobUUID), outputAsSingleFile);
 	}
 
 	@Override
@@ -192,9 +203,11 @@ public class AMFOutputConverter implements MeshFileOutputConverter {
 			outputProject(meshesForProcessing, prettyPrintWriter);
 			xmlStreamWriter.flush();
 			xmlStreamWriter.close();
-		} catch (IOException ex) {
+		}
+		catch (IOException ex) {
 			LOGGER.error("Unable to write AMF file to given path: " + ex);
-		} catch (XMLStreamException ex) {
+		}
+		catch (XMLStreamException ex) {
 			LOGGER.error("Unable to write AMF file: " + ex);
 		}
 
@@ -239,13 +252,15 @@ public class AMFOutputConverter implements MeshFileOutputConverter {
 				target.writeCharacters(LINEFEED_CHAR);
 				target.writeCharacters(repeat(depth, INDENT_CHAR));
 				depth++;
-			} else if ("writeEndElement".equals(m)) {
+			}
+			else if ("writeEndElement".equals(m)) {
 				depth--;
 				if (hasChildElement.get(depth) == true) {
 					target.writeCharacters(LINEFEED_CHAR);
 					target.writeCharacters(repeat(depth, INDENT_CHAR));
 				}
-			} else if ("writeEmptyElement".equals(m)) {
+			}
+			else if ("writeEmptyElement".equals(m)) {
 				// update state of parent node
 				if (depth > 0) {
 					hasChildElement.put(depth - 1, true);

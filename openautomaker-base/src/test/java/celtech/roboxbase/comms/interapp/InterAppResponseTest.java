@@ -1,82 +1,44 @@
 package celtech.roboxbase.comms.interapp;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import celtech.roboxbase.comms.interapp.InterAppResponse;
-import celtech.roboxbase.comms.interapp.InterAppResponseStatus;
+public class InterAppResponseTest {
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
+	private static final ObjectMapper mapper = new ObjectMapper();
+	private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.interapp.InterAppResponse\",\"responseStatus\":\"REJECTED_PRINTER_NOT_READY\"}";
 
-/**
- *
- * @author ianhudson
- */
-public class InterAppResponseTest
-{
+	@Test
+	public void serializesToJSON() throws Exception {
+		final InterAppResponse packet = getTestPacket();
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.interapp.InterAppResponse\",\"responseStatus\":\"REJECTED_PRINTER_NOT_READY\"}";
+		String mappedValue = mapper.writeValueAsString(packet);
+		assertEquals(jsonifiedClass, mappedValue);
+	}
 
-    public InterAppResponseTest()
-    {
-    }
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final InterAppResponse packet = getTestPacket();
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+		try {
+			InterAppResponse packetRec = mapper.readValue(jsonifiedClass, InterAppResponse.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+	private InterAppResponse getTestPacket() {
+		InterAppResponse packet = new InterAppResponse();
 
-    @Before
-    public void setUp()
-    {
-    }
+		packet.setResponseStatus(InterAppResponseStatus.REJECTED_PRINTER_NOT_READY);
 
-    @After
-    public void tearDown()
-    {
-    }
-
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final InterAppResponse packet = getTestPacket();
-
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
-
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final InterAppResponse packet = getTestPacket();
-
-        try
-        {
-            InterAppResponse packetRec = mapper.readValue(jsonifiedClass, InterAppResponse.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
-
-    private InterAppResponse getTestPacket()
-    {
-        InterAppResponse packet = new InterAppResponse();
-
-        packet.setResponseStatus(InterAppResponseStatus.REJECTED_PRINTER_NOT_READY);
-
-        return packet;
-    }
+		return packet;
+	}
 }

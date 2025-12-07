@@ -1,9 +1,6 @@
 
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionManager;
@@ -12,13 +9,13 @@ import org.openautomaker.base.printerControl.model.statetransitions.calibration.
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.SingleNozzleHeightStateTransitionManager;
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.XAndYStateTransitionManager;
 
+import jakarta.inject.Inject;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyFloatProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
@@ -30,10 +27,9 @@ import javafx.scene.layout.VBox;
  *
  * @author tony
  */
-class DiagramController implements Initializable {
+class DiagramController {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			DiagramController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private StateTransitionManager stateTransitionManager;
 
@@ -87,6 +83,11 @@ class DiagramController implements Initializable {
 
 	@FXML
 	private Button buttonA;
+
+	@Inject
+	protected DiagramController() {
+
+	}
 
 	public void setStateTransitionManager(StateTransitionManager stateTransitionManager) {
 		this.stateTransitionManager = stateTransitionManager;
@@ -172,8 +173,7 @@ class DiagramController implements Initializable {
 		}
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	public void initialize() {
 		setupOffsetCombos();
 	}
 

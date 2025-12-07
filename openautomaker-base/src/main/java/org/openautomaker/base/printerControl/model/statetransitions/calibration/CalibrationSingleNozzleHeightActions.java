@@ -3,25 +3,28 @@ package org.openautomaker.base.printerControl.model.statetransitions.calibration
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.configuration.fileRepresentation.HeadFile;
 import org.openautomaker.base.configuration.fileRepresentation.NozzleData;
+import org.openautomaker.base.inject.printer_control.CalibrationPrinterErrorHandlerFactory;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.NozzleHeater;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionActions;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.base.utils.tasks.Cancellable;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.rx.HeadEEPROMDataResponse;
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
-import javafx.beans.value.ObservableValue;
 
 /**
  *
@@ -40,22 +43,41 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 	private boolean failedActionPerformed = false;
 	private final boolean safetyFeaturesRequired;
 
-	public CalibrationSingleNozzleHeightActions(Printer printer, Cancellable userCancellable, Cancellable errorCancellable, boolean safetyFeaturesRequired) {
+	private final CalibrationPrinterErrorHandlerFactory calibrationPrinterErrorHandlerFactory;
+	private final PrinterUtils printerUtils;
+	private final HeadContainer headContainer;
+
+	@Inject
+	protected CalibrationSingleNozzleHeightActions(
+			TaskExecutor taskExecutor,
+			CalibrationPrinterErrorHandlerFactory calibrationPrinterErrorHandlerFactory,
+			PrinterUtils printerUtils,
+			CalibrationUtils calibrationUtils,
+			HeadContainer headContainer,
+			@Assisted Printer printer,
+			@Assisted("userCancellable") Cancellable userCancellable,
+			@Assisted("errorCancellable") Cancellable errorCancellable,
+			@Assisted boolean safetyFeaturesRequired) {
+
 		super(userCancellable, errorCancellable);
+
+		this.calibrationPrinterErrorHandlerFactory = calibrationPrinterErrorHandlerFactory;
+		this.printerUtils = printerUtils;
+		this.headContainer = headContainer;
 
 		this.safetyFeaturesRequired = safetyFeaturesRequired;
 
 		this.printer = printer;
-		zco.addListener((ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		zco.addListener((observable, oldValue, newValue) -> {
+			taskExecutor.runOnGUIThread(() -> {
 				// zcoGUIT mirrors zco but is only changed on the GUI Thread
 				LOGGER.debug("set zcoGUIT to " + zco.get());
 				zcoGUIT.set(zco.get());
 			});
 		});
-		printerErrorHandler = new CalibrationPrinterErrorHandler(printer, errorCancellable);
+		printerErrorHandler = calibrationPrinterErrorHandlerFactory.create(printer, errorCancellable);
 		printerErrorHandler.registerForPrinterErrors();
-		CalibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
+		calibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
 	}
 
 	@Override
@@ -78,7 +100,7 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 
     private void clearZOffsetsOnHead() throws RoboxCommsException
     {
-        HeadFile headDataFile = HeadContainer.getHeadByID(savedHeadData.getHeadTypeCode());
+		HeadFile headDataFile = headContainer.getHeadByID(savedHeadData.getHeadTypeCode());
         NozzleData nozzle1Data = headDataFile.getNozzles().get(0);
         NozzleData nozzle2Data = null;
         if (headDataFile.getNozzles().size() == 1)
@@ -116,20 +138,20 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 		}
 
 		waitOnNozzleTemperature(0);
-		if (PrinterUtils.waitOnMacroFinished(printer, userOrErrorCancellable)) {
+		if (printerUtils.waitOnMacroFinished(printer, userOrErrorCancellable)) {
 			return;
 		}
 
 		if (printer.headProperty().get().headTypeProperty().get() == Head.HeadType.DUAL_MATERIAL_HEAD) {
 			waitOnNozzleTemperature(1);
-			if (PrinterUtils.waitOnMacroFinished(printer, userOrErrorCancellable)) {
+			if (printerUtils.waitOnMacroFinished(printer, userOrErrorCancellable)) {
 				return;
 			}
 		}
 
 		printer.goToZPosition(50);
 		printer.goToXYPosition(printer.getPrintVolumeCentre().getX(), printer.getPrintVolumeCentre().getY());
-		if (PrinterUtils.waitOnBusy(printer, userOrErrorCancellable)) {
+		if (printerUtils.waitOnBusy(printer, userOrErrorCancellable)) {
 			return;
 		}
 		printer.switchOnHeadLEDs();
@@ -137,7 +159,7 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 
 	private void waitOnNozzleTemperature(int nozzleNumber) throws InterruptedException {
 		NozzleHeater nozzleHeater = printer.headProperty().get().getNozzleHeaters().get(nozzleNumber);
-		PrinterUtils.waitUntilTemperatureIsReached(nozzleHeater.nozzleTemperatureProperty(), null, nozzleHeater.nozzleTargetTemperatureProperty().get(), 5, 300, userOrErrorCancellable);
+		printerUtils.waitUntilTemperatureIsReached(nozzleHeater.nozzleTemperatureProperty(), null, nozzleHeater.nozzleTargetTemperatureProperty().get(), 5, 300, userOrErrorCancellable);
 	}
 
 	public void doHomeZAction() throws CalibrationException {
@@ -195,7 +217,7 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 	public void doBringBedToFrontAndRaiseHead() throws PrinterException, CalibrationException {
 		printer.switchToAbsoluteMoveMode();
 		printer.goToXYZPosition(105, 150, 25);
-		PrinterUtils.waitOnBusy(printer, userOrErrorCancellable);
+		printerUtils.waitOnBusy(printer, userOrErrorCancellable);
 	}
 
 	private void switchHeatersAndHeadLightOff() throws PrinterException {
@@ -289,7 +311,7 @@ public class CalibrationSingleNozzleHeightActions extends StateTransitionActions
 		printerErrorHandler.deregisterForPrinterErrors();
 		switchHeatersAndHeadLightOff();
 		doBringBedToFrontAndRaiseHead();
-		PrinterUtils.waitOnBusy(printer, (Cancellable) null);
+		printerUtils.waitOnBusy(printer, (Cancellable) null);
 	}
 
 	private void abortAnyOngoingPrint() {

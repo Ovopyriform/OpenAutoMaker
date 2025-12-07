@@ -12,8 +12,11 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.ui.inject.model.ModelContainerFactory;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.appManager.ModelContainerProject;
 import celtech.modelcontrol.Groupable;
@@ -23,6 +26,7 @@ import celtech.modelcontrol.ModelGroup;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.utils.threed.MeshCutter2;
 import celtech.utils.threed.MeshDebug;
+import jakarta.inject.Inject;
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
@@ -31,10 +35,11 @@ import javafx.scene.shape.TriangleMesh;
  *
  * @author tony
  */
-public class CutCommand extends Command {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			CutCommand.class.getName());
+//TODO: Look at raw types again.  Looks like there needs to be an interface somewhere.
+public class CutCommand implements Command {
+
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	/**
 	 * Cuts for groups have to be treated differently to cuts of single models due to the requirement that Undo must reconstitute any previous hierarchy of grouping that existed before the cut.
@@ -131,10 +136,26 @@ public class CutCommand extends Command {
 
 	boolean cutWorked = false;
 
-	public CutCommand(ModelContainerProject project, Set<ModelContainer> modelContainers, float cutHeightValue) {
+	private final I18N i18n;
+	private final SystemNotificationManager systemNotificationManager;
+	private final ModelContainerFactory modelContainerFactory;
+
+	@Inject
+	public CutCommand(
+			I18N i18n,
+			SystemNotificationManager systemNotificationManager,
+			ModelContainerFactory modelContainerFactory,
+			@Assisted ModelContainerProject project,
+			@Assisted Set<ModelContainer> modelContainers,
+			@Assisted float cutHeightValue) {
+
+		this.i18n = i18n;
+		this.systemNotificationManager = systemNotificationManager;
+
 		this.project = project;
 		this.cutHeightValue = cutHeightValue;
 		this.modelContainers = modelContainers;
+		this.modelContainerFactory = modelContainerFactory;
 	}
 
 	@Override
@@ -201,8 +222,7 @@ public class CutCommand extends Command {
 		catch (Exception ex) {
 			cutWorked = false;
 			LOGGER.error("an error occurred during cutting ", ex);
-			BaseLookup.getSystemNotificationHandler().showErrorNotification(
-					OpenAutomakerEnv.getI18N().t("cutOperation.title"), OpenAutomakerEnv.getI18N().t("cutOperation.message"));
+			systemNotificationManager.showErrorNotification(i18n.t("cutOperation.title"), i18n.t("cutOperation.message"));
 			return;
 		}
 		cutWorked = true;
@@ -336,8 +356,7 @@ public class CutCommand extends Command {
 			for (TriangleMesh subMesh : meshPair) {
 				MeshView meshView = new MeshView(subMesh);
 				meshView.cullFaceProperty().set(CullFace.NONE);
-				ModelContainer newModelContainer = new ModelContainer(
-						modelContainer.getModelFile(), meshView);
+				ModelContainer newModelContainer = modelContainerFactory.create(modelContainer.getModelFile(), meshView);
 				MeshDebug.setDebuggingNode(newModelContainer);
 				newModelContainer.setModelName(modelName + " " + ix);
 				newModelContainer.setState(modelContainer.getState());

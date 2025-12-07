@@ -6,14 +6,16 @@ import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.device.PrinterManager;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+
+import jakarta.inject.Inject;
 
 /**
  *
@@ -26,7 +28,20 @@ public class AutoMakerController implements HttpHandler {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference = new SafetyFeaturesPreference();
+	private final SafetyFeaturesPreference safetyFeaturesPreference;
+
+	private final PrinterManager printerManager;
+
+	@Inject
+	protected AutoMakerController(
+			PrinterManager printerManager,
+			SafetyFeaturesPreference safetyFeaturesPreference) {
+
+		super();
+
+		this.printerManager = printerManager;
+		this.safetyFeaturesPreference = safetyFeaturesPreference;
+	}
 
 	@Override
 	public void handle(HttpExchange t) throws IOException {
@@ -38,14 +53,14 @@ public class AutoMakerController implements HttpHandler {
 
 		String statusResponse;
 
-		List<Printer> connectedPrinters = BaseLookup.getConnectedPrinters();
+		List<Printer> connectedPrinters = printerManager.getConnectedPrinters();
 
 		LOGGER.info(t.getRequestURI().getPath());
 		if (t.getRequestURI().getPath().matches(abortPrintPage)) {
 			statusResponse = "<h3>OK</h3>";
 			if (connectedPrinters.size() > 0) {
 				try {
-					connectedPrinters.get(0).cancel(null, fSafetyFeaturesPreference.get());
+					connectedPrinters.get(0).cancel(null, safetyFeaturesPreference.getValue());
 				}
 				catch (PrinterException ex) {
 					LOGGER.error("Error attempting to abort");
@@ -72,7 +87,7 @@ public class AutoMakerController implements HttpHandler {
 			statusResponse = "<h3>AutoMaker Remote</h3>"
 					+ "<p>Attached Printers:";
 
-			for (Printer printer : BaseLookup.getConnectedPrinters()) {
+			for (Printer printer : printerManager.getConnectedPrinters()) {
 				statusResponse += printer.getPrinterIdentity().printerUniqueIDProperty().get()
 						+ "\r";
 			}

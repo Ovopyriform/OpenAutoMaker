@@ -1,15 +1,10 @@
 package celtech.configuration;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.OPENAUTOMAKER_LEGACY;
-
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.MachineType;
-import org.openautomaker.environment.OpenAutomakerEnv;
 
 import celtech.appManager.ProjectMode;
 import javafx.geometry.Pos;
@@ -20,6 +15,8 @@ import javafx.util.Duration;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
+@Deprecated
+// Find a better way to do this.
 public class ApplicationConfiguration {
 
 	private static final Logger LOGGER = LogManager.getLogger();
@@ -50,9 +47,9 @@ public class ApplicationConfiguration {
 
 	public static final String fxmlLicensingResourcePath = resourcePath + "fxml/licensing/";
 
-	public static final String fontResourcePath = resourcePath + "fonts/";
+	public static final String fontResourcePath = "/org/openautomaker/ui/" + "fonts/";
 
-	public static final String cssResourcePath = resourcePath + "css/";
+	public static final String cssResourcePath = "/org/openautomaker/ui/" + "css/";
 
 	private static final String mainCSSFile = cssResourcePath + "JMetroDarkTheme.css";
 
@@ -111,11 +108,6 @@ public class ApplicationConfiguration {
 
 	private static void addExtension(List<String> extensionList, String extension) {
 		extensionList.add(extension);
-
-		//Yuk - linux is case sensitive when looking at extensions
-		if (OpenAutomakerEnv.get().getMachineType() == MachineType.LINUX) {
-			extensionList.add(extension.toUpperCase());
-		}
 	}
 
 	public static ArrayList<String> getSupportedFileExtensionWildcards(ProjectMode projectMode) {
@@ -180,34 +172,63 @@ public class ApplicationConfiguration {
 		return returnVal;
 	}
 
-	public static String resetLastDirectoryToDefaults(DirectoryMemoryProperty whichProperty) {
-		String defaultDirectory = OpenAutomakerEnv.get().getUserPath().toString();
-		setLastDirectory(whichProperty, defaultDirectory);
-		return defaultDirectory;
-	}
+	//	private static Preference<Path> getPathPreference(DirectoryMemoryProperty whichProperty) {
+	//		Preference<Path> pathPref = null;
+	//		
+	//		switch(whichProperty) {
+	//			case LAST_FIRMWARE_DIRECTORY:
+	//				pathPref = new FirmwarePathPreference();
+	//				break;
+	//			case LAST_GCODE_DIRECTORY:
+	//				pathPref = new GCodePathPreference();
+	//				break;
+	//			case LAST_MACRO_DIRECTORY:
+	//				pathPref = new MacroPathPreference();
+	//				break;
+	//			case LAST_MODEL_DIRECTORY:
+	//				pathPref = new ModelsPathPreference();
+	//				break;
+	//			default:
+	//				break;
+	//		}
+	//
+	//		return pathPref;
+	//	}
 
-	private static String getLastDirectory(DirectoryMemoryProperty memoryProperty) {
-		String dir = OpenAutomakerEnv.get().getProperty(OPENAUTOMAKER_LEGACY + "." + memoryProperty.name());
+	//TODO: Shouldn't use this method.  Should be direct access to preferences.
+	//	public static String resetLastDirectoryToDefaults(DirectoryMemoryProperty whichProperty) {
+	//
+	//		Path path = null;
+	//
+	//		Preference<Path> pathPref = getPathPreference(whichProperty);
+	//
+	//		pathPref.remove();
+	//		return pathPref.getValue().toString();
+	//
+	//		//String defaultDirectory = OpenAutomakerEnv.get().getUserPath().toString();
+	//		//setLastDirectory(whichProperty, defaultDirectory);
+	//		//return defaultDirectory;
+	//	}
 
-		if (dir == null)
-			dir = resetLastDirectoryToDefaults(memoryProperty);
+	//	private static String getLastDirectory(DirectoryMemoryProperty memoryProperty) {
+	//		Preference<Path> pathPref = getPathPreference(memoryProperty);
+	//		return pathPref.getValue().toString();
+	//	}
 
-		return dir;
-	}
+	//	public static File getLastDirectoryFile(DirectoryMemoryProperty memoryProperty) {
+	//		String directory = getLastDirectory(memoryProperty);
+	//
+	//		File modelDirectory = new File(directory);
+	//		if (!modelDirectory.exists()) {
+	//			directory = ApplicationConfiguration.resetLastDirectoryToDefaults(memoryProperty);
+	//			modelDirectory = new File(directory);
+	//		}
+	//		return modelDirectory;
+	//	}
 
-	public static File getLastDirectoryFile(DirectoryMemoryProperty memoryProperty) {
-		String directory = getLastDirectory(memoryProperty);
-		File modelDirectory = new File(directory);
-		if (!modelDirectory.exists()) {
-			directory = ApplicationConfiguration.resetLastDirectoryToDefaults(memoryProperty);
-			modelDirectory = new File(directory);
-		}
-		return modelDirectory;
-	}
-
-	public static void setLastDirectory(DirectoryMemoryProperty memoryProperty, String value) {
-		OpenAutomakerEnv.get().setProperty(OPENAUTOMAKER_LEGACY + "." + memoryProperty.name(), value);
-	}
+	//	public static void setLastDirectory(DirectoryMemoryProperty memoryProperty, String value) {
+	//		getPathPreference(memoryProperty).setValue(Path.of(value));
+	//	}
 
 	/**
 	 * TODO: WTF is this nonsense

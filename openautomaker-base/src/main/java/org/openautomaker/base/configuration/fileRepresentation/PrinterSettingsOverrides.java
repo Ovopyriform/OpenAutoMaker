@@ -12,6 +12,7 @@ import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
 import org.openautomaker.environment.Slicer;
 
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
@@ -26,321 +27,276 @@ import javafx.beans.property.StringProperty;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class PrinterSettingsOverrides
-{
+public class PrinterSettingsOverrides {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private static final RoboxProfileSettingsContainer ROBOX_PROFILE_SETTINGS_CONTAINER = RoboxProfileSettingsContainer.getInstance();
-    
-    private final StringProperty customSettingsName = new SimpleStringProperty();
-    private final ObjectProperty<PrintQualityEnumeration> printQuality
-            = new SimpleObjectProperty<>(PrintQualityEnumeration.NORMAL);
-    private final BooleanProperty dataChanged = new SimpleBooleanProperty(false);
 
-    private int brimOverride = 0;
-    private float fillDensityOverride = 0;
-    private final BooleanProperty printSupportOverride = new SimpleBooleanProperty(false);
-    private final BooleanProperty printSupportGapEnabledOverride = new SimpleBooleanProperty(false);
-    private final ObjectProperty<SupportType> printSupportTypeOverride = new SimpleObjectProperty<>(SupportType.AS_PROFILE);
-    private boolean raftOverride = false;
-    private boolean spiralPrintOverride = false;
-    
-    private boolean fillDensityChangedByUser = false;
-    
-    public PrinterSettingsOverrides()
-    {
-        customSettingsName.set("");
-        Optional<RoboxProfile> initialRoboxProfile = ROBOX_PROFILE_SETTINGS_CONTAINER
-                .getRoboxProfileWithName(printQuality.get().getFriendlyName(), Slicer.CURA, HeadContainer.defaultHeadID);
-        if(initialRoboxProfile.isPresent()) 
-        {
-            brimOverride = initialRoboxProfile.get().getSpecificIntSetting("brimWidth_mm");
-            fillDensityOverride = initialRoboxProfile.get().getSpecificFloatSetting("fillDensity_normalised");
-        }
-        printSupportTypeOverride.set(SupportType.AS_PROFILE);
-    }
 
-    // A clone without copying the dataChanged property.
-    public PrinterSettingsOverrides duplicate()
-    {
-        PrinterSettingsOverrides copy = new PrinterSettingsOverrides();
-        copy.customSettingsName.set(this.customSettingsName.get());
-        copy.printQuality.set(this.printQuality.get());
-        copy.printSupportOverride.set(this.printSupportOverride.get());
-        copy.printSupportGapEnabledOverride.set(this.printSupportGapEnabledOverride.get());
-        copy.printSupportTypeOverride.set(this.printSupportTypeOverride.get());
-        copy.brimOverride = this.brimOverride;
-        copy.fillDensityOverride = this.fillDensityOverride;
-        copy.raftOverride = this.raftOverride;
-        copy.spiralPrintOverride = this.spiralPrintOverride;
-        copy.fillDensityChangedByUser = this.fillDensityChangedByUser;
+	private final StringProperty customSettingsName = new SimpleStringProperty();
+	private final ObjectProperty<PrintQualityEnumeration> printQuality = new SimpleObjectProperty<>(PrintQualityEnumeration.NORMAL);
+	private final BooleanProperty dataChanged = new SimpleBooleanProperty(false);
 
-        return copy;
-    }
+	private int brimOverride = 0;
+	private float fillDensityOverride = 0;
+	private final BooleanProperty printSupportOverride = new SimpleBooleanProperty(false);
+	private final BooleanProperty printSupportGapEnabledOverride = new SimpleBooleanProperty(false);
+	private final ObjectProperty<SupportType> printSupportTypeOverride = new SimpleObjectProperty<>(SupportType.AS_PROFILE);
+	private boolean raftOverride = false;
+	private boolean spiralPrintOverride = false;
 
-    private void toggleDataChanged()
-    {
-        dataChanged.set(dataChanged.not().get());
-    }
+	private boolean fillDensityChangedByUser = false;
 
-    public ReadOnlyBooleanProperty getDataChanged()
-    {
-        return dataChanged;
-    }
+	//Injected, don't persist
+	private transient final RoboxProfileSettingsContainer roboxProfileSettingsContainer;
+	private transient final HeadContainer headContainer;
 
-    public void setPrintQuality(PrintQualityEnumeration value)
-    {
-        if (printQuality.get() != value)
-        {
-            printQuality.set(value);
-            toggleDataChanged();
-        }
-    }
+	@Inject
+	protected PrinterSettingsOverrides(
+			RoboxProfileSettingsContainer roboxProfileSettingsContainer,
+			HeadContainer headContainer) {
 
-    public PrintQualityEnumeration getPrintQuality()
-    {
-        return printQuality.get();
-    }
+		this.roboxProfileSettingsContainer = roboxProfileSettingsContainer;
+		this.headContainer = headContainer;
 
-    public ObjectProperty<PrintQualityEnumeration> printQualityProperty()
-    {
-        return printQuality;
-    }
+		customSettingsName.set("");
+		Optional<RoboxProfile> initialRoboxProfile = roboxProfileSettingsContainer.getRoboxProfileWithName(printQuality.get().getFriendlyName(), Slicer.CURA_4, HeadContainer.defaultHeadID);
+		if (initialRoboxProfile.isPresent()) {
+			brimOverride = initialRoboxProfile.get().getSpecificIntSetting("brimWidth_mm");
+			fillDensityOverride = initialRoboxProfile.get().getSpecificFloatSetting("fillDensity_normalised");
+		}
+		printSupportTypeOverride.set(SupportType.AS_PROFILE);
+	}
 
-    public void setSettingsName(String settingsName)
-    {
-        if (!customSettingsName.get().equals(settingsName))
-        {
-            customSettingsName.set(settingsName);
-            toggleDataChanged();
-        }
-    }
+	// A clone without copying the dataChanged property.
+	public PrinterSettingsOverrides duplicate() {
+		PrinterSettingsOverrides copy = new PrinterSettingsOverrides(roboxProfileSettingsContainer, headContainer);
+		copy.customSettingsName.set(this.customSettingsName.get());
+		copy.printQuality.set(this.printQuality.get());
+		copy.printSupportOverride.set(this.printSupportOverride.get());
+		copy.printSupportGapEnabledOverride.set(this.printSupportGapEnabledOverride.get());
+		copy.printSupportTypeOverride.set(this.printSupportTypeOverride.get());
+		copy.brimOverride = this.brimOverride;
+		copy.fillDensityOverride = this.fillDensityOverride;
+		copy.raftOverride = this.raftOverride;
+		copy.spiralPrintOverride = this.spiralPrintOverride;
+		copy.fillDensityChangedByUser = this.fillDensityChangedByUser;
 
-    public String getSettingsName()
-    {
-        return customSettingsName.get();
-    }
+		return copy;
+	}
 
-    public StringProperty getSettingsNameProperty()
-    {
-        return customSettingsName;
-    }
+	private void toggleDataChanged() {
+		dataChanged.set(dataChanged.not().get());
+	}
 
-    public Optional<RoboxProfile> getBaseProfile(String headType, Slicer slicerType, PrintQualityEnumeration printQuality)
-    {
-        Optional<RoboxProfile> profileOption = Optional.empty();
-        switch (printQuality) {
-            case DRAFT:
-                profileOption = ROBOX_PROFILE_SETTINGS_CONTAINER
-                        .getRoboxProfileWithName(BaseConfiguration.draftSettingsProfileName, slicerType, headType);
-                break;
-            case NORMAL:
-                profileOption = ROBOX_PROFILE_SETTINGS_CONTAINER
-                        .getRoboxProfileWithName(BaseConfiguration.normalSettingsProfileName, slicerType, headType);
-                break;
-            case FINE:
-                profileOption = ROBOX_PROFILE_SETTINGS_CONTAINER
-                        .getRoboxProfileWithName(BaseConfiguration.fineSettingsProfileName, slicerType, headType);
-                break;
-            case CUSTOM:
-                profileOption = ROBOX_PROFILE_SETTINGS_CONTAINER
-                        .getRoboxProfileWithName(customSettingsName.get(), slicerType, headType);
-                break;
+	public ReadOnlyBooleanProperty getDataChanged() {
+		return dataChanged;
+	}
 
-        }
-        
-        return profileOption;
-    }
+	public void setPrintQuality(PrintQualityEnumeration value) {
+		if (printQuality.get() != value) {
+			printQuality.set(value);
+			toggleDataChanged();
+		}
+	}
 
-    public RoboxProfile getSettings(String headType, Slicer slicerType)
-    {
-        Optional<RoboxProfile> settings = getBaseProfile(headType, slicerType, printQuality.get());
-        return applyOverrides(settings, headType);
-    }
-    
-    public RoboxProfile getSettings(String headType, Slicer slicerType, PrintQualityEnumeration printQuality)
-    {
-        Optional<RoboxProfile> settings = getBaseProfile(headType, slicerType, printQuality);
-        return applyOverrides(settings, headType);
-    }
+	public PrintQualityEnumeration getPrintQuality() {
+		return printQuality.get();
+	}
 
-    /**
-     * Standard profiles must have the overrides applied.
-     *
-     * @param roboxProfile
-     * @return
-     */
-    public RoboxProfile applyOverrides(Optional<RoboxProfile> roboxProfile, String headType)
-    {
-        if(!roboxProfile.isPresent()) 
-        {
-            return null;
-        }
-        RoboxProfile profileCopy = new RoboxProfile(roboxProfile.get());
-        profileCopy.addOrOverride("brimWidth_mm", String.valueOf(brimOverride));
-        profileCopy.addOrOverride("generateSupportMaterial", String.valueOf(printSupportOverride.get()));
-        profileCopy.addOrOverride("supportGapEnabled", String.valueOf(printSupportGapEnabledOverride.get()));
-        profileCopy.addOrOverride("printRaft", String.valueOf(raftOverride));
-        profileCopy.addOrOverride("spiralPrint", String.valueOf(spiralPrintOverride));
-        if (fillDensityChangedByUser)
-        {
-            // Only override the profiles fill density if the value has been changed by the user.
-            profileCopy.addOrOverride("fillDensity_normalised", String.valueOf(fillDensityOverride));
-        }
-        
-        if (raftOverride)
-        {
-            profileCopy.addOrOverride("adhesionType", "raft");
-        }
-        
-        if (brimOverride > 0) 
-        {
-            profileCopy.addOrOverride("adhesionType", "brim");
-        }
+	public ObjectProperty<PrintQualityEnumeration> printQualityProperty() {
+		return printQuality;
+	}
 
-        if (spiralPrintOverride)
-        {
-            profileCopy.addOrOverride("numberOfPerimeters", "1");
-        }
+	public void setSettingsName(String settingsName) {
+		if (!customSettingsName.get().equals(settingsName)) {
+			customSettingsName.set(settingsName);
+			toggleDataChanged();
+		}
+	}
 
-        if (HeadContainer.getHeadByID(headType).getType() == Head.HeadType.DUAL_MATERIAL_HEAD)
-        {
-            // Overrides what is on profile. Unless AS_PROFILE is selected.
-            if(printSupportTypeOverride.get().equals(SupportType.MATERIAL_1)) 
-            {
-                profileCopy.addOrOverride("supportNozzle", "1");
-                profileCopy.addOrOverride("supportInterfaceNozzle", "1");
-                profileCopy.addOrOverride("raftBrimNozzle", "1");
-            } else if (printSupportTypeOverride.get().equals(SupportType.MATERIAL_2)) 
-            {
-                profileCopy.addOrOverride("supportNozzle", "0");
-                profileCopy.addOrOverride("supportInterfaceNozzle", "0");
-                profileCopy.addOrOverride("raftBrimNozzle", "0");
-            }
-        }
-        
-        return profileCopy;
-    }
+	public String getSettingsName() {
+		return customSettingsName.get();
+	}
 
-    public int getBrimOverride()
-    {
-        return brimOverride;
-    }
+	public StringProperty getSettingsNameProperty() {
+		return customSettingsName;
+	}
 
-    public void setBrimOverride(int brimOverride)
-    {
-        if (this.brimOverride != brimOverride)
-        {
-            this.brimOverride = brimOverride;
-            toggleDataChanged();
-        }
-    }
+	public Optional<RoboxProfile> getBaseProfile(String headType, Slicer slicerType, PrintQualityEnumeration printQuality) {
+		Optional<RoboxProfile> profileOption = Optional.empty();
+		switch (printQuality) {
+			case DRAFT:
+				profileOption = roboxProfileSettingsContainer.getRoboxProfileWithName(BaseConfiguration.draftSettingsProfileName, slicerType, headType);
+				break;
+			case NORMAL:
+				profileOption = roboxProfileSettingsContainer.getRoboxProfileWithName(BaseConfiguration.normalSettingsProfileName, slicerType, headType);
+				break;
+			case FINE:
+				profileOption = roboxProfileSettingsContainer.getRoboxProfileWithName(BaseConfiguration.fineSettingsProfileName, slicerType, headType);
+				break;
+			case CUSTOM:
+				profileOption = roboxProfileSettingsContainer.getRoboxProfileWithName(customSettingsName.get(), slicerType, headType);
+				break;
 
-    public float getFillDensityOverride()
-    {
-        return fillDensityOverride;
-    }
+		}
 
-    public void setFillDensityOverride(float fillDensityOverride)
-    {
-        if (this.fillDensityOverride != fillDensityOverride)
-        {
-            this.fillDensityOverride = fillDensityOverride;
-            toggleDataChanged();
-        }
-    }
+		return profileOption;
+	}
 
-    public boolean getPrintSupportOverride()
-    {
-        return printSupportOverride.get();
-    }
+	public RoboxProfile getSettings(String headType, Slicer slicerType) {
+		Optional<RoboxProfile> settings = getBaseProfile(headType, slicerType, printQuality.get());
+		return applyOverrides(settings, headType);
+	}
 
-    public BooleanProperty getPrintSupportOverrideProperty()
-    {
-        return printSupportOverride;
-    }
+	public RoboxProfile getSettings(String headType, Slicer slicerType, PrintQualityEnumeration printQuality) {
+		Optional<RoboxProfile> settings = getBaseProfile(headType, slicerType, printQuality);
+		return applyOverrides(settings, headType);
+	}
 
-    public void setPrintSupportOverride(boolean printSupportOverride)
-    {
-        this.printSupportOverride.set(printSupportOverride);
-        toggleDataChanged();
-    }
+	/**
+	 * Standard profiles must have the overrides applied.
+	 *
+	 * @param roboxProfile
+	 * @return
+	 */
+	public RoboxProfile applyOverrides(Optional<RoboxProfile> roboxProfile, String headType) {
+		if (!roboxProfile.isPresent()) {
+			return null;
+		}
+		RoboxProfile profileCopy = new RoboxProfile(roboxProfile.get());
+		profileCopy.addOrOverride("brimWidth_mm", String.valueOf(brimOverride));
+		profileCopy.addOrOverride("generateSupportMaterial", String.valueOf(printSupportOverride.get()));
+		profileCopy.addOrOverride("supportGapEnabled", String.valueOf(printSupportGapEnabledOverride.get()));
+		profileCopy.addOrOverride("printRaft", String.valueOf(raftOverride));
+		profileCopy.addOrOverride("spiralPrint", String.valueOf(spiralPrintOverride));
+		if (fillDensityChangedByUser) {
+			// Only override the profiles fill density if the value has been changed by the user.
+			profileCopy.addOrOverride("fillDensity_normalised", String.valueOf(fillDensityOverride));
+		}
 
-    public boolean getPrintSupportGapEnabledOverride()
-    {
-        return printSupportGapEnabledOverride.get();
-    }
+		if (raftOverride) {
+			profileCopy.addOrOverride("adhesionType", "raft");
+		}
 
-    public BooleanProperty getPrintSupportGapEnabledOverrideProperty()
-    {
-        return printSupportGapEnabledOverride;
-    }
+		if (brimOverride > 0) {
+			profileCopy.addOrOverride("adhesionType", "brim");
+		}
 
-    public void setPrintSupportGapEnabledOverride(boolean printSupportGapEnabledOverride)
-    {
-        this.printSupportGapEnabledOverride.set(printSupportGapEnabledOverride);
-        toggleDataChanged();
-    }
+		if (spiralPrintOverride) {
+			profileCopy.addOrOverride("numberOfPerimeters", "1");
+		}
 
-    public SupportType getPrintSupportTypeOverride()
-    {
-        return printSupportTypeOverride.get();
-    }
+		if (headContainer.getHeadByID(headType).getType() == Head.HeadType.DUAL_MATERIAL_HEAD) {
+			// Overrides what is on profile. Unless AS_PROFILE is selected.
+			if (printSupportTypeOverride.get().equals(SupportType.MATERIAL_1)) {
+				profileCopy.addOrOverride("supportNozzle", "1");
+				profileCopy.addOrOverride("supportInterfaceNozzle", "1");
+				profileCopy.addOrOverride("raftBrimNozzle", "1");
+			}
+			else if (printSupportTypeOverride.get().equals(SupportType.MATERIAL_2)) {
+				profileCopy.addOrOverride("supportNozzle", "0");
+				profileCopy.addOrOverride("supportInterfaceNozzle", "0");
+				profileCopy.addOrOverride("raftBrimNozzle", "0");
+			}
+		}
 
-    public ObjectProperty<SupportType> getPrintSupportTypeOverrideProperty()
-    {
-        return printSupportTypeOverride;
-    }
+		return profileCopy;
+	}
 
-    public void setPrintSupportTypeOverride(SupportType printSupportTypeOverride)
-    {
-        if (this.printSupportTypeOverride.get() != printSupportTypeOverride)
-        {
-            this.printSupportTypeOverride.set(printSupportTypeOverride);
-            toggleDataChanged();
-        }
-    }
+	public int getBrimOverride() {
+		return brimOverride;
+	}
 
-    public boolean getRaftOverride()
-    {
-        return raftOverride;
-    }
+	public void setBrimOverride(int brimOverride) {
+		if (this.brimOverride != brimOverride) {
+			this.brimOverride = brimOverride;
+			toggleDataChanged();
+		}
+	}
 
-    public void setRaftOverride(boolean raftOverride)
-    {
-        if (this.raftOverride != raftOverride)
-        {
-            this.raftOverride = raftOverride;
-            toggleDataChanged();
-        }
-    }
+	public float getFillDensityOverride() {
+		return fillDensityOverride;
+	}
 
-    public boolean getSpiralPrintOverride()
-    {
-        return spiralPrintOverride;
-    }
+	public void setFillDensityOverride(float fillDensityOverride) {
+		if (this.fillDensityOverride != fillDensityOverride) {
+			this.fillDensityOverride = fillDensityOverride;
+			toggleDataChanged();
+		}
+	}
 
-    public void setSpiralPrintOverride(boolean spiralPrintOverride)
-    {
-        if (this.spiralPrintOverride != spiralPrintOverride)
-        {
-            this.spiralPrintOverride = spiralPrintOverride;
-            toggleDataChanged();
-        }
-    }
+	public boolean getPrintSupportOverride() {
+		return printSupportOverride.get();
+	}
 
-    public boolean isFillDensityChangedByUser() 
-    {
-        return fillDensityChangedByUser;
-    }
+	public BooleanProperty getPrintSupportOverrideProperty() {
+		return printSupportOverride;
+	}
 
-    public void setFillDensityChangedByUser(boolean fillDensityChangedByUser) 
-    {
-        if (this.fillDensityChangedByUser != fillDensityChangedByUser)
-        {
-            this.fillDensityChangedByUser = fillDensityChangedByUser;
-            toggleDataChanged();
-        }
-    }
+	public void setPrintSupportOverride(boolean printSupportOverride) {
+		this.printSupportOverride.set(printSupportOverride);
+		toggleDataChanged();
+	}
+
+	public boolean getPrintSupportGapEnabledOverride() {
+		return printSupportGapEnabledOverride.get();
+	}
+
+	public BooleanProperty getPrintSupportGapEnabledOverrideProperty() {
+		return printSupportGapEnabledOverride;
+	}
+
+	public void setPrintSupportGapEnabledOverride(boolean printSupportGapEnabledOverride) {
+		this.printSupportGapEnabledOverride.set(printSupportGapEnabledOverride);
+		toggleDataChanged();
+	}
+
+	public SupportType getPrintSupportTypeOverride() {
+		return printSupportTypeOverride.get();
+	}
+
+	public ObjectProperty<SupportType> getPrintSupportTypeOverrideProperty() {
+		return printSupportTypeOverride;
+	}
+
+	public void setPrintSupportTypeOverride(SupportType printSupportTypeOverride) {
+		if (this.printSupportTypeOverride.get() != printSupportTypeOverride) {
+			this.printSupportTypeOverride.set(printSupportTypeOverride);
+			toggleDataChanged();
+		}
+	}
+
+	public boolean getRaftOverride() {
+		return raftOverride;
+	}
+
+	public void setRaftOverride(boolean raftOverride) {
+		if (this.raftOverride != raftOverride) {
+			this.raftOverride = raftOverride;
+			toggleDataChanged();
+		}
+	}
+
+	public boolean getSpiralPrintOverride() {
+		return spiralPrintOverride;
+	}
+
+	public void setSpiralPrintOverride(boolean spiralPrintOverride) {
+		if (this.spiralPrintOverride != spiralPrintOverride) {
+			this.spiralPrintOverride = spiralPrintOverride;
+			toggleDataChanged();
+		}
+	}
+
+	public boolean isFillDensityChangedByUser() {
+		return fillDensityChangedByUser;
+	}
+
+	public void setFillDensityChangedByUser(boolean fillDensityChangedByUser) {
+		if (this.fillDensityChangedByUser != fillDensityChangedByUser) {
+			this.fillDensityChangedByUser = fillDensityChangedByUser;
+			toggleDataChanged();
+		}
+	}
 }

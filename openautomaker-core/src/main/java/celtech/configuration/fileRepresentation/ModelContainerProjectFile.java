@@ -147,25 +147,26 @@ public class ModelContainerProjectFile extends ProjectFile {
 	}
 
 	public void populateFromProject(ModelContainerProject project) {
+		extruder0FilamentID = project.getExtruder0FilamentProperty().get().getFilamentID();
+		extruder1FilamentID = project.getExtruder1FilamentProperty().get().getFilamentID();
+		settingsName = project.getPrinterSettings().getSettingsName();
+		printQuality = project.getPrinterSettings().getPrintQuality();
+		brimOverride = project.getPrinterSettings().getBrimOverride();
+		fillDensityOverride = project.getPrinterSettings().getFillDensityOverride();
+		fillDensityOverridenByUser = project.getPrinterSettings().isFillDensityChangedByUser();
+		printSupportOverride = project.getPrinterSettings().getPrintSupportOverride();
+		printSupportTypeOverride = project.getPrinterSettings().getPrintSupportTypeOverride();
+		printRaft = project.getPrinterSettings().getRaftOverride();
+		groupStructure = project.getGroupStructure();
+		groupState = project.getGroupState();
+		spiralPrint = project.getPrinterSettings().getSpiralPrintOverride();
 	}
 
 	@Override
 	public void implementationSpecificPopulate(Project project) {
-		if (project instanceof ModelContainerProject) {
-			ModelContainerProject mcp = (ModelContainerProject) project;
-			extruder0FilamentID = mcp.getExtruder0FilamentProperty().get().getFilamentID();
-			extruder1FilamentID = mcp.getExtruder1FilamentProperty().get().getFilamentID();
-			settingsName = mcp.getPrinterSettings().getSettingsName();
-			printQuality = mcp.getPrinterSettings().getPrintQuality();
-			brimOverride = mcp.getPrinterSettings().getBrimOverride();
-			fillDensityOverride = mcp.getPrinterSettings().getFillDensityOverride();
-			fillDensityOverridenByUser = mcp.getPrinterSettings().isFillDensityChangedByUser();
-			printSupportOverride = mcp.getPrinterSettings().getPrintSupportOverride();
-			printSupportTypeOverride = mcp.getPrinterSettings().getPrintSupportTypeOverride();
-			printRaft = mcp.getPrinterSettings().getRaftOverride();
-			groupStructure = mcp.getGroupStructure();
-			groupState = mcp.getGroupState();
-			spiralPrint = mcp.getPrinterSettings().getSpiralPrintOverride();
-		}
+		if (!(project instanceof ModelContainerProject))
+			return;
+
+		populateFromProject((ModelContainerProject) project);
 	}
 }

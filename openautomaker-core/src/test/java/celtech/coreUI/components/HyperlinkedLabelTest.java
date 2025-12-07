@@ -1,29 +1,24 @@
 package celtech.coreUI.components;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.openautomaker.test_library.GuiceExtension;
+import org.testfx.framework.junit5.ApplicationExtension;
+import org.testfx.framework.junit5.Start;
 
-import celtech.FXTest;
-import celtech.JavaFXConfiguredTest;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.text.Text;
+import javafx.stage.Stage;
 
-/**
- *
- * @author Ian
- */
-@Category(FXTest.class)
-public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
+@ExtendWith({ GuiceExtension.class, ApplicationExtension.class })
+public class HyperlinkedLabelTest {
 
-	@Before
-	@Override
-	public void setUp() {
+	@Start
+	public void start(Stage stage) {
+
 	}
 
 	@Test
@@ -34,7 +29,7 @@ public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
 
 		assertEquals(1, instance.getChildren().size());
 		assertTrue(instance.getChildren().get(0) instanceof Text);
-		assertThat(((Text) instance.getChildren().get(0)).getText(), is(newText));
+		assertEquals(((Text) instance.getChildren().get(0)).getText(), newText);
 	}
 
 	@Test
@@ -48,8 +43,8 @@ public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
 		assertEquals(2, instance.getChildren().size());
 		assertTrue(instance.getChildren().get(0) instanceof Text);
 		assertTrue(instance.getChildren().get(1) instanceof Hyperlink);
-		assertThat(((Text) instance.getChildren().get(0)).getText(), is(expectedTextContent));
-		assertThat(((Hyperlink) instance.getChildren().get(1)).getText(), is(expectedHyperlinkContent));
+		assertEquals(((Text) instance.getChildren().get(0)).getText(), expectedTextContent);
+		assertEquals(((Hyperlink) instance.getChildren().get(1)).getText(), expectedHyperlinkContent);
 	}
 
 	@Test
@@ -68,10 +63,10 @@ public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
 		assertTrue(instance.getChildren().get(1) instanceof Hyperlink);
 		assertTrue(instance.getChildren().get(2) instanceof Text);
 		assertTrue(instance.getChildren().get(3) instanceof Hyperlink);
-		assertThat(((Text) instance.getChildren().get(0)).getText(), is(expectedTextContent1));
-		assertThat(((Hyperlink) instance.getChildren().get(1)).getText(), is(expectedHyperlinkContent1));
-		assertThat(((Text) instance.getChildren().get(2)).getText(), is(expectedTextContent2));
-		assertThat(((Hyperlink) instance.getChildren().get(3)).getText(), is(expectedHyperlinkContent2));
+		assertEquals(((Text) instance.getChildren().get(0)).getText(), expectedTextContent1);
+		assertEquals(((Hyperlink) instance.getChildren().get(1)).getText(), expectedHyperlinkContent1);
+		assertEquals(((Text) instance.getChildren().get(2)).getText(), expectedTextContent2);
+		assertEquals(((Hyperlink) instance.getChildren().get(3)).getText(), expectedHyperlinkContent2);
 	}
 
 	@Test
@@ -83,8 +78,7 @@ public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
 
 		assertEquals(1, instance.getChildren().size());
 		assertTrue(instance.getChildren().get(0) instanceof Hyperlink);
-		assertThat(((Hyperlink) instance.getChildren().get(0)).getText(), is(
-				expectedHyperlinkContent));
+		assertEquals(((Hyperlink) instance.getChildren().get(0)).getText(), expectedHyperlinkContent);
 	}
 
 	@Test
@@ -99,12 +93,12 @@ public class HyperlinkedLabelTest extends JavaFXConfiguredTest {
 		hyperLinkLabel.replaceText(NEW_TEXT);
 
 		assertEquals(3, hyperLinkLabel.getChildren().size());
-		assertTrue("The first element of the TextFlow should be plain text", hyperLinkLabel.getChildren().get(0) instanceof Text);
-		assertTrue("The second element of the TextFlow should be a hyperlink", hyperLinkLabel.getChildren().get(1) instanceof Hyperlink);
-		assertTrue("The third element of the TextFlow should be plain text", hyperLinkLabel.getChildren().get(2) instanceof Text);
+		assertTrue(hyperLinkLabel.getChildren().get(0) instanceof Text, "The first element of the TextFlow should be plain text");
+		assertTrue(hyperLinkLabel.getChildren().get(1) instanceof Hyperlink, "The second element of the TextFlow should be a hyperlink");
+		assertTrue(hyperLinkLabel.getChildren().get(2) instanceof Text, "The third element of the TextFlow should be plain text");
 
-		assertThat(((Text) hyperLinkLabel.getChildren().get(0)).getText(), is(EXPECTED_TEXT_CONTENT_1));
-		assertThat(((Hyperlink) hyperLinkLabel.getChildren().get(1)).getText(), is(EXPECTED_HYPERLINK_CONTENT));
-		assertThat(((Text) hyperLinkLabel.getChildren().get(2)).getText(), is(EXPECTED_TEXT_CONTENT_2));
+		assertEquals(((Text) hyperLinkLabel.getChildren().get(0)).getText(), EXPECTED_TEXT_CONTENT_1);
+		assertEquals(((Hyperlink) hyperLinkLabel.getChildren().get(1)).getText(), EXPECTED_HYPERLINK_CONTENT);
+		assertEquals(((Text) hyperLinkLabel.getChildren().get(2)).getText(), EXPECTED_TEXT_CONTENT_2);
 	}
 }

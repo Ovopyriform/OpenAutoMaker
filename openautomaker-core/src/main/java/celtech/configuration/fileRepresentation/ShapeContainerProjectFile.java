@@ -3,6 +3,7 @@ package celtech.configuration.fileRepresentation;
 import celtech.appManager.Project;
 import celtech.appManager.ShapeContainerProject;
 
+
 public class ShapeContainerProjectFile extends ProjectFile {
 
 	public ShapeContainerProjectFile() {

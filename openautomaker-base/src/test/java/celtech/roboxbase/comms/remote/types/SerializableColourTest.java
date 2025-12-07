@@ -1,68 +1,38 @@
 package celtech.roboxbase.comms.remote.types;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import celtech.roboxbase.comms.remote.types.SerializableColour;
 import javafx.scene.paint.Color;
-
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
 
 /**
  *
  * @author ianhudson
  */
-public class SerializableColourTest
-{
+public class SerializableColourTest {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"webColour\":\"0xf0f8ffff\"}";
+	private static final String jsonifiedClass = "{\"webColour\":\"0xf0f8ffff\"}";
 
-    public SerializableColourTest()
-    {
-    }
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+	@Test
+	public void serializesToJSON() throws Exception {
+		final SerializableColour packet = new SerializableColour();
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+		packet.setWebColour(Color.ALICEBLUE.toString());
 
-    @Before
-    public void setUp()
-    {
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-    @After
-    public void tearDown()
-    {
-    }
-
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final SerializableColour packet = new SerializableColour();
-
-        packet.setWebColour(Color.ALICEBLUE.toString());
-
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
-
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final SerializableColour packet = new SerializableColour();
-        packet.setWebColour(Color.ALICEBLUE.toString());
-        SerializableColour packetRec = mapper.readValue(jsonifiedClass, SerializableColour.class);
-        assertEquals(packet, packetRec);
-    }
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final SerializableColour packet = new SerializableColour();
+		packet.setWebColour(Color.ALICEBLUE.toString());
+		SerializableColour packetRec = mapper.readValue(jsonifiedClass, SerializableColour.class);
+		assertEquals(packet, packetRec);
+	}
 }

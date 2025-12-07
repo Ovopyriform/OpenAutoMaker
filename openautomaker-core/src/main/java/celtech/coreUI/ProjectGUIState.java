@@ -3,10 +3,16 @@
  */
 package celtech.coreUI;
 
+import org.openautomaker.ui.inject.project.ProjectGUIRulesFactory;
+import org.openautomaker.ui.inject.project.ProjectSelectionFactory;
+
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.appManager.Project;
 import celtech.appManager.undo.CommandStack;
 import celtech.coreUI.visualisation.ProjectSelection;
 import celtech.modelcontrol.ModelContainer;
+import jakarta.inject.Inject;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -26,11 +32,17 @@ public class ProjectGUIState {
 
 	private final ProjectGUIRules projectGUIRules;
 
-	public ProjectGUIState(Project project) {
-		projectSelection = new ProjectSelection(project);
+	@Inject
+	protected ProjectGUIState(
+			ProjectSelectionFactory projectSelectionFactory,
+			ProjectGUIRulesFactory projectGUIRulesFactory,
+			@Assisted Project project) {
+
+		projectSelection = projectSelectionFactory.create(project);
+
 		layoutSubmode = new SimpleObjectProperty<>(LayoutSubmode.SELECT);
 		commandStack = new CommandStack();
-		projectGUIRules = new ProjectGUIRules(projectSelection, excludedFromSelection);
+		projectGUIRules = projectGUIRulesFactory.create(projectSelection, excludedFromSelection);
 	}
 
 	public CommandStack getCommandStack() {

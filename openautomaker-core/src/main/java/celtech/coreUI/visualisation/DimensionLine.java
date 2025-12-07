@@ -7,12 +7,14 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
 
 import celtech.appManager.Project;
 import celtech.appManager.undo.UndoableProject;
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.modelcontrol.ResizeableThreeD;
 import celtech.modelcontrol.ResizeableTwoD;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.geometry.Point2D;
@@ -23,13 +25,10 @@ import javafx.scene.shape.Polygon;
 import javafx.scene.transform.Rotate;
 import javafx.scene.transform.Translate;
 
-/**
- *
- * @author Ian
- */
-class DimensionLine extends Pane implements ScreenExtentsProvider.ScreenExtentsListener {
+public class DimensionLine extends Pane implements ScreenExtentsProvider.ScreenExtentsListener {
 
-	private static final Logger LOGGER = LogManager.getLogger(DimensionLine.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private final RestrictedNumberField dimensionLabel = new RestrictedNumberField();
 	private final Line dimensionLine = new Line();
 	private final Polygon upArrow = new Polygon();
@@ -76,8 +75,16 @@ class DimensionLine extends Pane implements ScreenExtentsProvider.ScreenExtentsL
 		FORWARD_BACK
 	}
 
+	@Inject
+	private UndoableProjectFactory undoableProjectFactory;
+
+	@Inject
+	protected DimensionLine() {
+		super();
+	}
+
 	public void initialise(Project project, ScreenExtentsProviderTwoD screenExtentsProvider, LineDirection direction) {
-		undoableproject = new UndoableProject(project);
+		undoableproject = undoableProjectFactory.create(project);
 		if (ResizeableTwoD.class.isInstance(screenExtentsProvider)) {
 			container = (ResizeableTwoD) screenExtentsProvider;
 		}

@@ -13,13 +13,15 @@ import java.util.Optional;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.appManager.NotificationType;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.HeadFile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
+import org.openautomaker.base.inject.postprocessor.GCodeOutputWriterFactory;
+import org.openautomaker.base.inject.postprocessor.UtilityMethodsFactory;
+import org.openautomaker.base.notification_manager.NotificationType;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.postprocessor.GCodeOutputWriter;
 import org.openautomaker.base.postprocessor.NozzleProxy;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
@@ -43,14 +45,16 @@ import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.camera.CameraTriggerData;
 import org.openautomaker.base.utils.SystemUtils;
 import org.openautomaker.base.utils.TimeUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.PrinterType;
 import org.openautomaker.environment.Slicer;
-import org.openautomaker.environment.preference.SlicerPreference;
 import org.parboiled.Parboiled;
 import org.parboiled.parserunners.BasicParseRunner;
 import org.parboiled.support.ParsingResult;
 
+import com.google.inject.assistedinject.Assisted;
+
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.concurrent.Task;
 
@@ -114,22 +118,45 @@ public class PostProcessor {
 
 	private final TimeUtils timeUtils = new TimeUtils();
 
-	public PostProcessor(String printJobUUID,
-			String nameOfPrint,
-			List<Boolean> usedExtruders,
-			Printer printer,
-			Path gcodeFileToProcess,
-			Path gcodeOutputFile,
-			HeadFile headFile,
-			RoboxProfile settings,
-			PrinterSettingsOverrides printerOverrides,
-			PostProcessorFeatureSet postProcessorFeatureSet,
-			String headType,
-			DoubleProperty taskProgress,
-			Map<Integer, Integer> objectToNozzleNumberMap,
-			CameraTriggerData cameraTriggerData,
-			boolean safetyFeaturesRequired,
-			Slicer slicerType) {
+	//Dependencies
+	private final GCodeOutputWriterFactory gCodeOutputWriterFactory;
+	private final SystemNotificationManager systemNotificationManager;
+	private final OutputUtilities outputUtilities;
+
+	private final I18N i18n;
+
+	private final PrinterContainer printerContainer;
+
+	@Inject
+	public PostProcessor(
+			GCodeOutputWriterFactory gCodeOutputWriterFactory,
+			SystemNotificationManager systemNotificationManager,
+			OutputUtilities outputUtilities,
+			I18N i18n,
+			UtilityMethodsFactory utilityMethodsFactory,
+			PrinterContainer printerContainer,
+			@Assisted("printJobUUID") String printJobUUID,
+			@Assisted("nameOfPrint") String nameOfPrint,
+			@Assisted List<Boolean> usedExtruders,
+			@Assisted Printer printer,
+			@Assisted("gcodeFileToProcess") Path gcodeFileToProcess,
+			@Assisted("gcodeOutputFile") Path gcodeOutputFile,
+			@Assisted HeadFile headFile,
+			@Assisted RoboxProfile settings,
+			@Assisted PrinterSettingsOverrides printerOverrides,
+			@Assisted PostProcessorFeatureSet postProcessorFeatureSet,
+			@Assisted("headType") String headType,
+			@Assisted DoubleProperty taskProgress,
+			@Assisted Map<Integer, Integer> objectToNozzleNumberMap,
+			@Assisted CameraTriggerData cameraTriggerData,
+			@Assisted boolean safetyFeaturesRequired,
+			@Assisted Slicer slicerType) {
+
+		this.gCodeOutputWriterFactory = gCodeOutputWriterFactory;
+		this.systemNotificationManager = systemNotificationManager;
+		this.outputUtilities = outputUtilities;
+		this.i18n = i18n;
+
 		this.printJobUUID = printJobUUID;
 		this.nameOfPrint = nameOfPrint;
 		this.usedExtruders = usedExtruders;
@@ -143,6 +170,7 @@ public class PostProcessor {
 		this.printerOverrides = printerOverrides;
 		this.safetyFeaturesRequired = safetyFeaturesRequired;
 		this.slicerType = slicerType;
+		this.printerContainer = printerContainer;
 
 		nozzleProxies.clear();
 
@@ -167,31 +195,33 @@ public class PostProcessor {
 				postProcessingMode = PostProcessingMode.FORCED_USE_OF_E_EXTRUDER;
 				LOGGER.warn("Attempt to postprocess with a DM head and only the E extruder.");
 			}
-			else if (slicerType == Slicer.CURA) {
-				switch (printerOverrides.getPrintSupportTypeOverride()) {
-					case MATERIAL_1:
-						postProcessingMode = PostProcessingMode.SUPPORT_IN_FIRST_MATERIAL;
-						break;
-					case MATERIAL_2:
-						postProcessingMode = PostProcessingMode.SUPPORT_IN_SECOND_MATERIAL;
-						break;
-					default:
-						break;
-				}
-			}
+			//TODO: Remove as Cura removed
+			//			else if (slicerType == Slicer.CURA) {
+			//				switch (printerOverrides.getPrintSupportTypeOverride()) {
+			//					case MATERIAL_1:
+			//						postProcessingMode = PostProcessingMode.SUPPORT_IN_FIRST_MATERIAL;
+			//						break;
+			//					case MATERIAL_2:
+			//						postProcessingMode = PostProcessingMode.SUPPORT_IN_SECOND_MATERIAL;
+			//						break;
+			//					default:
+			//						break;
+			//				}
+			//			}
 			else {
 				postProcessingMode = PostProcessingMode.LEAVE_TOOL_CHANGES_ALONE_DUAL;
 			}
 		}
-		else if (slicerType != Slicer.CURA) {
-			if (!settingsProfile.getSpecificBooleanSettingWithDefault("infill_before_walls", false))
-				featureSet.enableFeature(PostProcessorFeature.MOVE_PERIMETERS_TO_FRONT);
-
-			if (settingsProfile.getSpecificBooleanSettingWithDefault("support_after_model", true))
-				featureSet.enableFeature(PostProcessorFeature.MOVE_SUPPORT_AFTER_MODEL);
-
-			postProcessingMode = PostProcessingMode.LEAVE_TOOL_CHANGES_ALONE_SINGLE;
-		}
+		//TODO: Remove as Cura removed
+		//		else if (slicerType != Slicer.CURA) {
+		//			if (!settingsProfile.getSpecificBooleanSettingWithDefault("infill_before_walls", false))
+		//				featureSet.enableFeature(PostProcessorFeature.MOVE_PERIMETERS_TO_FRONT);
+		//
+		//			if (settingsProfile.getSpecificBooleanSettingWithDefault("support_after_model", true))
+		//				featureSet.enableFeature(PostProcessorFeature.MOVE_SUPPORT_AFTER_MODEL);
+		//
+		//			postProcessingMode = PostProcessingMode.LEAVE_TOOL_CHANGES_ALONE_SINGLE;
+		//		}
 		else {
 			postProcessingMode = PostProcessingMode.TASK_BASED_NOZZLE_SELECTION;
 		}
@@ -202,7 +232,7 @@ public class PostProcessor {
 		}
 
 		nodeManagementUtilities = new NodeManagementUtilities(featureSet, nozzleProxies);
-		postProcessorUtilityMethods = new UtilityMethods(featureSet, settingsProfile, headType, nodeManagementUtilities, cameraTriggerData);
+		postProcessorUtilityMethods = utilityMethodsFactory.create(featureSet, settingsProfile, headType, nodeManagementUtilities, cameraTriggerData);
 		nozzleControlUtilities = new NozzleAssignmentUtilities(nozzleProxies, settingsProfile, headFile, featureSet, postProcessingMode, objectToNozzleNumberMap);
 		closeLogic = new CloseLogic(settingsProfile, featureSet, headType, nodeManagementUtilities);
 		heaterSaver = new FilamentSaver(100, 120);
@@ -222,8 +252,6 @@ public class PostProcessor {
 
 			int layerCounter = -1;
 
-			OutputUtilities outputUtilities = new OutputUtilities();
-
 			timeUtils.timerStart(this, "PostProcessor");
 			LOGGER.debug("Beginning post-processing operation");
 
@@ -239,7 +267,7 @@ public class PostProcessor {
 
 				fileReader = new BufferedReader(new FileReader(inputFile));
 
-				writer = BaseLookup.getPostProcessorOutputWriterFactory().create(gcodeOutputFile);
+				writer = gCodeOutputWriterFactory.create(gcodeOutputFile);
 
 				boolean nozzle0HeatRequired = false;
 				boolean nozzle1HeatRequired = false;
@@ -353,7 +381,7 @@ public class PostProcessor {
 
 				Optional<PrinterType> printerTypeCode;
 				if (printer == null) {
-					PrinterDefinitionFile printerDef = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+					PrinterDefinitionFile printerDef = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 					printerTypeCode = Optional.of(PrinterType.getPrinterTypeForTypeCode(printerDef.getTypeCode()));
 				}
 				else {
@@ -493,23 +521,23 @@ public class PostProcessor {
 			catch (RuntimeException ex) {
 				if (ex.getCause() instanceof ParserInputException) {
 					LOGGER.error("Fatal postprocessing error on layer - out of bounds - " + layerCounter + " got exception: " + ex.getCause().getMessage());
-					BaseLookup.getSystemNotificationHandler().showDismissableNotification(
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.modelOutOfBounds"),
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.dismiss"),
+					systemNotificationManager.showDismissableNotification(
+							i18n.t("notification.postProcessorFailure.modelOutOfBounds"),
+							i18n.t("notification.postProcessorFailure.dismiss"),
 							NotificationType.CAUTION);
 				}
 				else if (ex.getCause() != null) {
 					LOGGER.error("Fatal postprocessing error on layer " + layerCounter + " got exception: " + ex.getCause().getMessage());
-					BaseLookup.getSystemNotificationHandler().showDismissableNotification(
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.unknown"),
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.dismiss"),
+					systemNotificationManager.showDismissableNotification(
+							i18n.t("notification.postProcessorFailure.unknown"),
+							i18n.t("notification.postProcessorFailure.dismiss"),
 							NotificationType.CAUTION);
 				}
 				else {
 					LOGGER.error("Fatal postprocessing error on layer " + layerCounter);
-					BaseLookup.getSystemNotificationHandler().showDismissableNotification(
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.unknown"),
-							OpenAutomakerEnv.getI18N().t("notification.postProcessorFailure.dismiss"),
+					systemNotificationManager.showDismissableNotification(
+							i18n.t("notification.postProcessorFailure.unknown"),
+							i18n.t("notification.postProcessorFailure.dismiss"),
 							NotificationType.CAUTION);
 				}
 				ex.printStackTrace();
@@ -544,10 +572,12 @@ public class PostProcessor {
 
 		// Parse the last layer if it exists...
 		if (layerBuffer.length() > 0) {
-			GCodeParser gcodeParser = new SlicerPreference().get() == Slicer.CURA ? Parboiled.createParser(CuraGCodeParser.class) : Parboiled.createParser(Cura4PlusGCodeParser.class);
+			//TODO: Remove as Cura removed
+			//GCodeParser gcodeParser = new SlicerPreference().getValue() == Slicer.CURA ? Parboiled.createParser(CuraGCodeParser.class) : Parboiled.createParser(Cura4PlusGCodeParser.class);
+			GCodeParser gcodeParser = Parboiled.createParser(Cura4PlusGCodeParser.class);
 
 			if (printer == null) {
-				PrinterDefinitionFile printerDef = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+				PrinterDefinitionFile printerDef = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 				gcodeParser.setPrintVolumeBounds(
 						printerDef.getPrintVolumeWidth(),
 						printerDef.getPrintVolumeDepth(),

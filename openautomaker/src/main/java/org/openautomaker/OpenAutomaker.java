@@ -1,49 +1,42 @@
 package org.openautomaker;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.SCRIPT;
-
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.configuration.BaseConfiguration;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.inject.BaseModule;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
-import org.openautomaker.base.utils.ApplicationUtils;
-import org.openautomaker.base.utils.tasks.TaskResponse;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.base.task_executor.TaskResponse;
 import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.DetectLoadedFilamentPreference;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
-import org.openautomaker.environment.preference.SearchForRemoteCamerasPreference;
-import org.openautomaker.environment.preference.virtual_printer.VirtualPrinterEnabledPreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.environment.inject.EnvironmentModule;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.inject.OpenAutomakerModule;
+import org.openautomaker.javafx.inject.JavaFXModule;
+import org.openautomaker.ui.inject.UIModule;
 
-import celtech.Lookup;
 import celtech.coreUI.DisplayManager;
 import celtech.coreUI.components.ChoiceLinkDialogBox;
 import celtech.coreUI.components.ChoiceLinkDialogBox.PrinterDisconnectedException;
 import celtech.roboxbase.comms.RoboxCommsManager;
+import celtech.roboxbase.comms.interapp.AbstractInterAppRequest;
 import celtech.roboxbase.comms.interapp.InterAppCommsConsumer;
 import celtech.roboxbase.comms.interapp.InterAppCommsThread;
-import celtech.roboxbase.comms.interapp.InterAppRequest;
 import celtech.roboxbase.comms.interapp.InterAppStartupStatus;
 import celtech.webserver.LocalWebInterface;
-import de.jangassen.MenuToolkit;
-import de.jangassen.dialogs.about.AboutStageBuilder;
-import de.jangassen.icns.IcnsParser;
-import de.jangassen.icns.IcnsType;
+import jakarta.inject.Inject;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.collections.ObservableList;
 import javafx.geometry.Rectangle2D;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuBar;
 import javafx.scene.image.Image;
-import javafx.stage.Modality;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
@@ -60,40 +53,76 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private final OpenAutomakerEnv fOpenAutomakerEnv;
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference;
-	private final DetectLoadedFilamentPreference fDetectLoadedFilamentPreference;
-	private final SearchForRemoteCamerasPreference fSearchForRemoteCamerasPreference;
-	private final VirtualPrinterEnabledPreference fUseVirtualPrinterPreference;
+	@Inject
+	private OpenAutomakerEnv environment;
 
-	private static DisplayManager displayManager = null;
+	@Inject
+	private SafetyFeaturesPreference fSafetyFeaturesPreference;
 
-	private RoboxCommsManager commsManager = null;
+	@Inject
+	private I18N i18n;
+
+	// Unless they're used here, these shouldn't need to be injected here.  Initialised as needed.
+
+	@Inject
+	private DisplayManager displayManager;
+
+	@Inject
+	private RoboxCommsManager commsManager;
+
+	@Inject
+	private BaseLookup baseLookup;
+
+
+	@Inject
+	private TaskExecutor taskExecutor;
+
+	@Inject
+	private SystemNotificationManager systemNotificationHandler;
+
+	@Inject
+	PrinterManager printerManager;
+
+	@Inject
+	WelcomeToApplicationManager welcomeToApplicationManager;
+
 	//private AutoUpdate autoUpdater = null;
 	private List<Printer> waitingForCancelFrom = new ArrayList<>();
 	private Stage mainStage;
 	private LocalWebInterface localWebInterface = null;
-	private final InterAppCommsThread interAppCommsListener = new InterAppCommsThread();
+
+	@Inject
+	private InterAppCommsThread interAppCommsListener;
+
 	private final List<String> modelsToLoadAtStartup = new ArrayList<>();
 	private String modelsToLoadAtStartup_projectName = "Import";
 	private boolean modelsToLoadAtStartup_dontgroup = false;
 
+	// Supporting deep linking??
 	private final String uriScheme = "automaker:";
 	private final String paramDivider = "\\?";
 
+	private final GuiceContext guiceContext;
+
 	public OpenAutomaker() {
-		fOpenAutomakerEnv = OpenAutomakerEnv.get();
-		fSafetyFeaturesPreference = new SafetyFeaturesPreference();
-		fDetectLoadedFilamentPreference = new DetectLoadedFilamentPreference();
-		fSearchForRemoteCamerasPreference = new SearchForRemoteCamerasPreference();
-		fUseVirtualPrinterPreference = new VirtualPrinterEnabledPreference();
+
+		// Guice this up.  Get rid of static singletons
+		guiceContext = new GuiceContext(this, () -> List.of(
+				new EnvironmentModule(),
+				new OpenAutomakerModule(),
+				new BaseModule(),
+				new UIModule(),
+				new JavaFXModule()));
+
+		guiceContext.init();
 	}
 
 	@Override
 	public void init() throws Exception {
-		AutoMakerInterAppRequestCommands interAppCommand = AutoMakerInterAppRequestCommands.NONE;
+		InterAppRequestCommand interAppCommand = InterAppRequestCommand.NONE;
 		List<InterAppParameter> interAppParameters = new ArrayList<>();
 
+		//TODO: Shouldn't this only allow loading of a project so you can associate the file type with the program?
 		if (getParameters().getUnnamed().size() == 1) {
 			String potentialParam = getParameters().getUnnamed().get(0);
 			if (potentialParam.startsWith(uriScheme)) {
@@ -110,13 +139,14 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 
 							for (String subParam : subParams) {
 								InterAppParameter parameter = InterAppParameter.fromParts(subParam);
-								if (parameter != null) {
+
+								if (parameter != null)
 									interAppParameters.add(parameter);
-								}
 							}
-							if (interAppParameters.size() > 0) {
-								interAppCommand = AutoMakerInterAppRequestCommands.LOAD_MESH_INTO_LAYOUT_VIEW;
-							}
+
+							if (interAppParameters.size() > 0)
+								interAppCommand = InterAppRequestCommand.LOAD_MESH_INTO_LAYOUT_VIEW;
+
 							break;
 						default:
 							break;
@@ -125,123 +155,132 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 			}
 		}
 
-		AutoMakerInterAppRequest interAppCommsRequest = new AutoMakerInterAppRequest();
+		InterAppRequest interAppCommsRequest = new InterAppRequest();
 		interAppCommsRequest.setCommand(interAppCommand);
 		interAppCommsRequest.setUrlEncodedParameters(interAppParameters);
 
 		InterAppStartupStatus startupStatus = interAppCommsListener.letUsBegin(interAppCommsRequest, this);
 
-		if (startupStatus == InterAppStartupStatus.STARTED_OK) {
-			BaseConfiguration.initialise(OpenAutomaker.class);
-			Lookup.setupDefaultValuesFX();
+		if (startupStatus != InterAppStartupStatus.STARTED_OK) {
+			if (LOGGER.isDebugEnabled())
+				LOGGER.debug("Error initialising InterAppRequest: " + startupStatus.name());
 
-			ApplicationUtils.outputApplicationStartupBanner();
-
-			commsManager = RoboxCommsManager.getInstance(fOpenAutomakerEnv.getApplicationPath(SCRIPT), false, FXProperty.bind(fDetectLoadedFilamentPreference),
-					FXProperty.bind(fSearchForRemoteCamerasPreference));
-
-			switch (interAppCommand) {
-				case LOAD_MESH_INTO_LAYOUT_VIEW:
-
-					interAppCommsRequest.getUnencodedParameters().forEach(
-							param -> {
-								if (param.getType() == InterAppParameterType.MODEL_NAME) {
-									modelsToLoadAtStartup.add(param.getUnencodedParameter());
-								}
-								else if (param.getType() == InterAppParameterType.PROJECT_NAME) {
-									modelsToLoadAtStartup_projectName = param.getUnencodedParameter();
-								}
-								else if (param.getType() == InterAppParameterType.DONT_GROUP_MODELS) {
-									switch (param.getUnencodedParameter()) {
-										case "true":
-											modelsToLoadAtStartup_dontgroup = true;
-											break;
-										default:
-											break;
-									}
-								}
-							});
-					break;
-				default:
-					break;
-			}
+			return;
 		}
 
-		LOGGER.debug("Startup status was: " + startupStatus.name());
+		//TODO: This seems like it shouldn't need be here.
+		//BaseConfiguration.initialise(OpenAutomaker.class);
+		//Lookup.setupDefaultValuesFX();
+
+		//BaseLookup.setupDefaultValues();
+
+		//Now Injected
+		//BaseLookup.setTaskExecutor(fGuiceContext.getInstance(LiveTaskExecutor.class));
+		//BaseLookup.setSystemNotificationHandler(fGuiceContext.getInstance(SystemNotificationManager.class));
+		//BaseLookup.setSlicerMappings(slicerMappingsContainer.getSlicerMappings());
+
+		//This seems odd, perhaps just inject this or create a factory using assisted inject?
+		//BaseLookup.setPostProcessorOutputWriterFactory(LiveGCodeOutputWriter::new);
+
+		//Now Injected
+		//		Lookup.setNotificationDisplay(new NotificationDisplay());
+		//		Lookup.setProgressDisplay(new ProgressDisplay());
+
+		//ApplicationUtils.outputApplicationStartupBanner();
+
+		//		commsManager = RoboxCommsManager.getInstance(
+		//				false,
+		//				FXProperty.bind(fDetectLoadedFilamentPreference),
+		//				FXProperty.bind(fSearchForRemoteCamerasPreference));
+
+		switch (interAppCommand) {
+			case LOAD_MESH_INTO_LAYOUT_VIEW:
+
+				interAppCommsRequest.getUnencodedParameters().forEach(
+						param -> {
+							if (param.getType() == InterAppParameterType.MODEL_NAME) {
+								modelsToLoadAtStartup.add(param.getUnencodedParameter());
+							}
+							else if (param.getType() == InterAppParameterType.PROJECT_NAME) {
+								modelsToLoadAtStartup_projectName = param.getUnencodedParameter();
+							}
+							else if (param.getType() == InterAppParameterType.DONT_GROUP_MODELS) {
+								switch (param.getUnencodedParameter()) {
+									case "true":
+										modelsToLoadAtStartup_dontgroup = true;
+										break;
+									default:
+										break;
+								}
+							}
+						});
+				break;
+			default:
+				break;
+		}
+
+		// Some FXML load seems to go here in startup
+
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("Startup status was: " + startupStatus.name());
 	}
 
 	//TODO: Finalise this for the mac, windows and linux.
-	private void attachMenus(Stage stage) {
-		MenuToolkit tk = MenuToolkit.toolkit(fOpenAutomakerEnv.getLocale());
-
-		AboutStageBuilder aboutStageBuilder = AboutStageBuilder.start("About OpenAutomaker")
-				.withAppName("OpenAutomaker")
-				.withCloseOnFocusLoss().withText("Line 1\nLine2")
-				.withVersionString("Version " + fOpenAutomakerEnv.getVersion())
-				.withCopyright("Copyright \u00A9 " + Calendar
-						.getInstance().get(Calendar.YEAR));
-
-		try {
-			//AutoMakerEnvironment.get().getApplicationPath().resolve("AutoMaker.icns").toFile();
-			IcnsParser parser = IcnsParser.forFile(fOpenAutomakerEnv.getApplicationPath().resolve("..").resolve("Resources").resolve("AutoMaker.icns").toFile());
-			aboutStageBuilder = aboutStageBuilder.withImage(new Image(parser.getIconStream(IcnsType.ICON)));
-		}
-		catch (IOException e) {
-			LOGGER.error("Couold not load ICNS");
-		}
-
-		Menu applicationMenu = tk.createDefaultApplicationMenu("OpenAutomaker", aboutStageBuilder.build());
-
-		//TODO: Create the full menu bar.  Only really needed once I have the jar based project structure
-		MenuBar bar = new MenuBar();
-		bar.useSystemMenuBarProperty().set(true);
-		bar.getMenus().add(applicationMenu);
-		tk.setMenuBar(bar);
-
-		//		Menu menu = new Menu("test");
-		//		MenuItem myItem = new MenuItem("Hallo welt");
-		//		menu.getItems().add(myItem);
-		//		tk.setDockIconMenu(menu);
-	}
+	/*
+	 * private void attachMenus(Stage stage) { MenuToolkit tk = MenuToolkit.toolkit(new LocalePreference().getValue());
+	 * 
+	 * AboutStageBuilder aboutStageBuilder = AboutStageBuilder.start("About OpenAutomaker") .withAppName("OpenAutomaker") .withCloseOnFocusLoss().withText("Line 1\nLine2") .withVersionString("Version " + new VersionPreference().getValue().getValue())
+	 * .withCopyright("Copyright \u00A9 " + Calendar .getInstance().get(Calendar.YEAR));
+	 * 
+	 * try { //AutoMakerEnvironment.get().getApplicationPath().resolve("AutoMaker.icns").toFile(); IcnsParser parser = IcnsParser.forFile(new ApplicationPathPreference().getValue().resolve("Resources").resolve("OpenAutomaker.icns").toFile());
+	 * aboutStageBuilder = aboutStageBuilder.withImage(new Image(parser.getIconStream(IcnsType.ICN))); } catch (NullPointerException e) { LOGGER.error("NPE from image parser ICNS"); } catch (IOException e) { LOGGER.error("Could not load ICNS"); }
+	 * 
+	 * Menu applicationMenu = tk.createDefaultApplicationMenu("OpenAutomaker", aboutStageBuilder.build());
+	 * 
+	 * //TODO: Create the full menu bar. Only really needed once I have the jar based project structure MenuBar bar = new MenuBar(); bar.useSystemMenuBarProperty().set(true); bar.getMenus().add(applicationMenu); tk.setMenuBar(bar);
+	 * 
+	 * // Menu menu = new Menu("test"); // MenuItem myItem = new MenuItem("Hallo welt"); // menu.getItems().add(myItem); // tk.setDockIconMenu(menu); }
+	 */
 
 	@Override
 	public void start(Stage stage) throws Exception {
-		mainStage = new Stage();
-
-		I18N i18n = new I18N();
+		// Not sure why it wasn't using the primary stage.  Have changed that for the moment
+		//mainStage = new Stage();
+		mainStage = stage;
 
 		try {
-			displayManager = DisplayManager.getInstance();
-			//i18nBundle = BaseLookup.getLanguageBundle();
 
 			String applicationName = i18n.t("application.title");
 
+			// TODO: The configDisplayManager seems to do a lot of stuff that doesn't need to be done once the stage exists.
 			displayManager.configureDisplayManager(mainStage, applicationName, modelsToLoadAtStartup_projectName, modelsToLoadAtStartup, modelsToLoadAtStartup_dontgroup);
 
 			attachIcons(mainStage);
 
 			//if (OpenAutomakerEnv.get().getMachineType() == MachineType.MAC)
-			attachMenus(mainStage);
+			//attachMenus(mainStage);
 
 			mainStage.setOnCloseRequest((WindowEvent event) -> {
 				boolean transferringDataToPrinter = false;
 				boolean willShutDown = true;
 
-				for (Printer printer : BaseLookup.getConnectedPrinters()) {
+				ObservableList<Printer> connectedPrinters = printerManager.getConnectedPrinters();
+
+				for (Printer printer : connectedPrinters) {
 					transferringDataToPrinter = transferringDataToPrinter | printer.getPrintEngine().transferGCodeToPrinterService.isRunning();
 				}
 
 				if (transferringDataToPrinter) {
-					boolean shutDownAnyway = BaseLookup.getSystemNotificationHandler().showJobsTransferringShutdownDialog();
+					boolean shutDownAnyway = systemNotificationHandler.showJobsTransferringShutdownDialog();
 
 					if (shutDownAnyway) {
-						for (Printer printer : BaseLookup.getConnectedPrinters()) {
+						for (Printer printer : connectedPrinters) {
 							waitingForCancelFrom.add(printer);
 
 							try {
 								printer.cancel((TaskResponse<Object> taskResponse) -> {
 									waitingForCancelFrom.remove(printer);
-								}, fSafetyFeaturesPreference.get());
+								}, fSafetyFeaturesPreference.getValue());
 							}
 							catch (PrinterException ex) {
 								LOGGER.error("Error cancelling print on printer " + printer.getPrinterIdentity().printerFriendlyNameProperty().get() + " - " + ex.getMessage());
@@ -255,7 +294,7 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 				}
 
 				if (willShutDown) {
-					ApplicationUtils.outputApplicationShutdownBanner();
+					//ApplicationUtils.outputApplicationShutdownBanner();
 					Platform.exit();
 				}
 				else {
@@ -286,7 +325,7 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 	//	}
 
 	public static void main(String[] args) {
-		System.setProperty("javafx.preloader", AutoMakerPreloader.class.getName());
+		System.setProperty("javafx.preloader", OpenAutomakerPreloader.class.getName());
 		launch(args);
 		// Sometimes a thread stops the application from terminating. The
 		// problem is difficult to reproduce, and so far it has not been
@@ -300,9 +339,8 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 	public void stop() throws Exception {
 		interAppCommsListener.shutdown();
 
-		if (localWebInterface != null) {
+		if (localWebInterface != null)
 			localWebInterface.stop();
-		}
 
 		int timeoutStrikes = 3;
 		while (waitingForCancelFrom.size() > 0 && timeoutStrikes > 0) {
@@ -310,23 +348,26 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 			timeoutStrikes--;
 		}
 
-		if (commsManager != null) {
+		if (commsManager != null)
 			commsManager.shutdown();
-		}
+
 		//		if (autoUpdater != null) {
 		//			autoUpdater.shutdown();
 		//		}
-		if (displayManager != null) {
+
+		if (displayManager != null)
 			displayManager.shutdown();
-		}
-		BaseConfiguration.shutdown();
 
-		if (LOGGER.isDebugEnabled()) {
+		//Does nothing ,commented
+		//baseConfiguration.shutdown();
+
+		if (LOGGER.isDebugEnabled())
 			outputRunningThreads();
-		}
 
+		//TODO: This thread sleep looks like a hack
 		Thread.sleep(5000);
-		BaseLookup.setShuttingDown(true);
+
+		baseLookup.setShuttingDown(true);
 	}
 
 	//    private void setAppUserIDForWindows()
@@ -399,14 +440,13 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 			//autoUpdater = new AutoUpdate(BaseConfiguration.getApplicationShortName(), ApplicationConfiguration.getDownloadModifier(BaseConfiguration.getApplicationName()), completeListener);
 			//autoUpdater.start();
 
-			I18N i18n = new I18N();
-
-			if (fOpenAutomakerEnv.has3DSupport()) {
-				WelcomeToApplicationManager.displayWelcomeIfRequired();
+			// TODO: Possibly test this dialog first?  Just force this to false.
+			if (environment.has3DSupport()) {
+				welcomeToApplicationManager.displayWelcomeIfRequired();
 				commsManager.start();
 			}
 			else {
-				BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+				taskExecutor.runOnGUIThread(() -> {
 					ChoiceLinkDialogBox threeDProblemBox = new ChoiceLinkDialogBox(false);
 					threeDProblemBox.setTitle(i18n.t("dialogs.fatalErrorNo3DSupport"));
 					threeDProblemBox.setMessage(i18n.t("dialogs.automakerErrorNo3DSupport"));
@@ -435,17 +475,17 @@ public class OpenAutomaker extends Application implements /* AutoUpdateCompletio
 		mainStage.setWidth(primaryScreenBounds.getWidth());
 		mainStage.setHeight(primaryScreenBounds.getHeight());
 
-		mainStage.initModality(Modality.WINDOW_MODAL);
+		//mainStage.initModality(Modality.WINDOW_MODAL);
 
 		mainStage.show();
 	}
 
 	@Override
-	public void incomingComms(InterAppRequest interAppRequest) {
+	public void incomingComms(AbstractInterAppRequest interAppRequest) {
 		LOGGER.info("Received an InterApp comms request: " + interAppRequest.toString());
 
-		if (interAppRequest instanceof AutoMakerInterAppRequest) {
-			AutoMakerInterAppRequest amRequest = (AutoMakerInterAppRequest) interAppRequest;
+		if (interAppRequest instanceof InterAppRequest) {
+			InterAppRequest amRequest = (InterAppRequest) interAppRequest;
 			switch (amRequest.getCommand()) {
 				case LOAD_MESH_INTO_LAYOUT_VIEW:
 					String projectName = "Import";

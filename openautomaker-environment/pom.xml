@@ -35,16 +35,48 @@
 			<artifactId>log4j-core</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.openautomaker</groupId>
-			<artifactId>openautomaker-i18n</artifactId>
-		</dependency>
-		<dependency>
 			<groupId>org.openjfx</groupId>
 			<artifactId>javafx-controls</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-fxml</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.openautomaker</groupId>
 			<artifactId>openautomaker-test-environment</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.vdurmont</groupId>
+			<artifactId>semver4j</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.google.inject</groupId>
+			<artifactId>guice</artifactId>
+		</dependency>
+
+
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-guice</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-i18n</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-library</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-params</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testfx</groupId>
+			<artifactId>testfx-junit5</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

@@ -1,88 +1,55 @@
 package celtech.roboxbase.comms.remote.rx;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import celtech.roboxbase.comms.rx.AckResponse;
 import celtech.roboxbase.comms.rx.FirmwareError;
 import celtech.roboxbase.comms.rx.RoboxRxPacket;
 
-import java.util.ArrayList;
-import java.util.List;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
+public class AckResponseTest {
 
-/**
- *
- * @author ianhudson
- */
-public class AckResponseTest
-{
+	private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.AckResponse\",\"packetType\":\"ACK_WITH_ERRORS\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"firmwareErrors\":[\"USB_RX\"]}";
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"@class\":\"celtech.roboxbase.comms.rx.AckResponse\",\"packetType\":\"ACK_WITH_ERRORS\",\"messagePayload\":null,\"sequenceNumber\":44,\"includeSequenceNumber\":false,\"includeCharsOfDataInOutput\":false,\"firmwareErrors\":[\"USB_RX\"]}";
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    public AckResponseTest()
-    {
-    }
+	@Test
+	public void serializesToJSON() throws Exception {
+		final AckResponse packet = getTestPacket();
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final AckResponse packet = getTestPacket();
 
-    @Before
-    public void setUp()
-    {
-    }
+		try {
+			RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-    @After
-    public void tearDown()
-    {
-    }
+	private AckResponse getTestPacket() {
+		AckResponse packet = new AckResponse();
 
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final AckResponse packet = getTestPacket();
+		packet.setSequenceNumber(44);
+		List<FirmwareError> firmwareErrors = new ArrayList<>();
+		firmwareErrors.add(FirmwareError.USB_RX);
+		packet.setFirmwareErrors(firmwareErrors);
 
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
-
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final AckResponse packet = getTestPacket();
-
-        try
-        {
-            RoboxRxPacket packetRec = mapper.readValue(jsonifiedClass, RoboxRxPacket.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
-
-    private AckResponse getTestPacket()
-    {
-        AckResponse packet = new AckResponse();
-
-        packet.setSequenceNumber(44);
-        List<FirmwareError> firmwareErrors = new ArrayList<>();
-        firmwareErrors.add(FirmwareError.USB_RX);
-        packet.setFirmwareErrors(firmwareErrors);
-
-        return packet;
-    }
+		return packet;
+	}
 }

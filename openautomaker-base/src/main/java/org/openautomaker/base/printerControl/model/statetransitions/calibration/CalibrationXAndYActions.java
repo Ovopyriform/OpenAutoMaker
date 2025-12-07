@@ -1,24 +1,27 @@
 
 package org.openautomaker.base.printerControl.model.statetransitions.calibration;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.MODELS;
-
 import java.io.FileNotFoundException;
+import java.nio.file.Path;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.base.inject.printer_control.CalibrationPrinterErrorHandlerFactory;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.comms.commands.GCodeMacros;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionActions;
+import org.openautomaker.base.task_executor.Cancellable;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.modeling.ModelsPathPreference;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.rx.HeadEEPROMDataResponse;
+import jakarta.inject.Inject;
 
 /**
  *
@@ -38,16 +41,34 @@ public class CalibrationXAndYActions extends StateTransitionActions
     
     private final boolean safetyFeaturesRequired;
 
-    public CalibrationXAndYActions(Printer printer, Cancellable userCancellable,
-            Cancellable errorCancellable, boolean safetyFeaturesRequired)
+	private final PrinterUtils printerUtils;
+	private final GCodeMacros gCodeMacros;
+	private final ModelsPathPreference modelsPathPreference;
+
+	@Inject
+	protected CalibrationXAndYActions(
+			CalibrationPrinterErrorHandlerFactory calibrationPrinterErrorHandlerFactory,
+			CalibrationUtils calibrationUtils,
+			PrinterUtils printerUtils,
+			GCodeMacros gCodeMacros,
+			ModelsPathPreference modelsPathPreference,
+			@Assisted Printer printer,
+			@Assisted("userCancellable") Cancellable userCancellable,
+			@Assisted("errorCancellable") Cancellable errorCancellable,
+			@Assisted boolean safetyFeaturesRequired)
     {
         super(userCancellable, errorCancellable);
+
+		this.printerUtils = printerUtils;
+		this.gCodeMacros = gCodeMacros;
+		this.modelsPathPreference = modelsPathPreference;
+
         this.safetyFeaturesRequired = safetyFeaturesRequired;
         this.printer = printer;
 
-        printerErrorHandler = new CalibrationPrinterErrorHandler(printer, errorCancellable);
+		printerErrorHandler = calibrationPrinterErrorHandlerFactory.create(printer, errorCancellable);
         printerErrorHandler.registerForPrinterErrors();
-        CalibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
+		calibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
     }
 
     @Override
@@ -68,14 +89,15 @@ public class CalibrationXAndYActions extends StateTransitionActions
 
     public void doPrintPattern() throws PrinterException, RoboxCommsException, InterruptedException, CalibrationException
     {
+		Path modelPath = modelsPathPreference.getAppValue();
+
         if (printer.headProperty().get().headTypeProperty().get() == Head.HeadType.SINGLE_MATERIAL_HEAD)
-        {
-			printer.executeGCodeFile(OpenAutomakerEnv.get().getApplicationPath(MODELS).resolve("rbx_test_xy-offset-1_roboxised.gcode"), false);
-        } else
-        {
-			printer.executeGCodeFile(OpenAutomakerEnv.get().getApplicationPath(MODELS).resolve("rbx_test_xy-offset-1_dm_roboxised.gcode"), false);
-        }
-        PrinterUtils.waitOnPrintFinished(printer, userOrErrorCancellable);
+			modelPath.resolve("rbx_test_xy-offset-1_roboxised.gcode");
+		else
+			modelPath.resolve("rbx_test_xy-offset-1_dm_roboxised.gcode");
+
+		printer.executeGCodeFile(modelPath, false);
+		printerUtils.waitOnPrintFinished(printer, userOrErrorCancellable);
     }
 
     public void doSaveSettingsAndPrintCircle() throws PrinterException, InterruptedException, CalibrationException
@@ -83,14 +105,13 @@ public class CalibrationXAndYActions extends StateTransitionActions
         saveSettings();
 //        Thread.sleep(3000);
         //TODO needs to be changed for DM head
-        try
-        {
-            printer.executeGCodeFile(GCodeMacros.getFilename("rbx_test_xy-offset-2_roboxised",
+		try {
+			printer.executeGCodeFile(gCodeMacros.getFilename("rbx_test_xy-offset-2_roboxised",
                     null, null, GCodeMacros.NozzleUseIndicator.DONT_CARE,
                     GCodeMacros.SafetyIndicator.DONT_CARE), false);
-            PrinterUtils.waitOnMacroFinished(printer, userOrErrorCancellable);
-        } catch (FileNotFoundException ex)
-        {
+			printerUtils.waitOnMacroFinished(printer, userOrErrorCancellable);
+		}
+		catch (FileNotFoundException ex) {
             throw new PrinterException("Failed to access calibration macro");
         }
     }
@@ -184,6 +205,7 @@ public class CalibrationXAndYActions extends StateTransitionActions
 
     public void setXOffset(String xStr)
     {
+		//TODO: Why is this a switch statement rather than a lookup table?
         switch (xStr)
         {
             case "A":

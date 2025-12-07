@@ -1,29 +1,24 @@
 package celtech.configuration.fileRepresentation;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.core.Version;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 
-import celtech.ConfiguredTest;
-
 /**
  *
  * @author Ian
  */
-public class ProjectFileTest extends ConfiguredTest {
+public class ProjectFileTest {
 
 	private static final String jsonifiedClass = "{\"projectType\":\"MODEL\",\"version\":5,\"projectName\":null,\"lastModifiedDate\":null,\"lastPrintJobID\":\"\",\"projectNameModified\":false,\"timelapseTriggerEnabled\":false,\"timelapseProfileName\":\"\",\"timelapseCameraID\":\"\",\"subVersion\":1,\"brimOverride\":0,\"fillDensityOverride\":0.0,\"fillDensityOverridenByUser\":false,\"printSupportOverride\":false,\"printSupportTypeOverride\":\"MATERIAL_2\",\"printRaft\":false,\"spiralPrint\":false,\"extruder0FilamentID\":null,\"extruder1FilamentID\":null,\"settingsName\":\"Draft\",\"printQuality\":\"NORMAL\",\"groupStructure\":{},\"groupState\":{}}";
 	private static final String jsonifiedClass_2_03_01 = "{\"version\":3,\"projectName\":null,\"lastModifiedDate\":null,\"lastPrintJobID\":\"\",\"subVersion\":3,\"brimOverride\":0,\"fillDensityOverride\":0.0,\"printSupportOverride\":false,\"printSupportTypeOverride\":\"MATERIAL_2\",\"printRaft\":false,\"spiralPrint\":false,\"extruder0FilamentID\":null,\"extruder1FilamentID\":null,\"settingsName\":\"Draft\",\"printQuality\":\"DRAFT\",\"groupStructure\":{},\"groupState\":{}}";
-
-	public ProjectFileTest() {
-	}
 
 	@Test
 	public void serializesToJSON() throws Exception {

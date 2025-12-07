@@ -1,7 +1,5 @@
 package org.openautomaker.base.utils.cura;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_PROFILES;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -12,8 +10,8 @@ import java.util.Map.Entry;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.printer.PrintProfilesPathPreference;
 
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonFactory;
@@ -21,6 +19,9 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.inject.assistedinject.Assisted;
+
+import jakarta.inject.Inject;
 
 /**
  * A class to allow editing of the Cura 4 default settings file.
@@ -66,13 +67,16 @@ public class CuraDefaultSettingsEditor {
 	private JsonNode settingsRootNode = null;
 	private Map<String, JsonNode> extruderRootNodes;
 
-	public CuraDefaultSettingsEditor(boolean singleNozzleHead, Slicer slicerType) {
+	@Inject
+	public CuraDefaultSettingsEditor(
+			PrintProfilesPathPreference printProfilesPathPreference,
+			@Assisted boolean singleNozzleHead,
+			@Assisted Slicer slicerType) {
+
 		this.singleNozzleHead = singleNozzleHead;
 		this.slicerType = slicerType;
 
-		Path slicerPrintProfilePath = OpenAutomakerEnv.get()
-				.getApplicationPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier());
+		Path slicerPrintProfilePath = printProfilesPathPreference.getAppPathForSlicer(slicerType);
 
 		// File Paths.
 		jsonPrinterSettingsFile = slicerPrintProfilePath.resolve(FDMPRINTER_DEF_JSON);

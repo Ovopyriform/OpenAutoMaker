@@ -1,68 +1,64 @@
 
 package celtech.coreUI.components.Notifications;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.appManager.GCodeGeneratorManager;
 import celtech.appManager.ModelContainerProject;
 import celtech.appManager.Project;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
-import javafx.fxml.Initializable;
 
-/**
- *
- * @author tony
- */
-public class PrintPreparationStatusBar extends AppearingProgressBar implements Initializable {
+public class PrintPreparationStatusBar extends AppearingProgressBar {
 	private Printer printer = null;
 	private Project project;
 
 	private GCodeGeneratorManager gCodeGenManager = null;
 
-	private final ChangeListener<Boolean> serviceStatusListener = (ObservableValue<? extends Boolean> ov, Boolean lastState, Boolean newState) -> {
+	@Inject
+	private SafetyFeaturesPreference safetyFeaturesPreference;
+
+	@Inject
+	private I18N i18n;
+
+	private final ChangeListener<Boolean> serviceStatusListener = (observable, newValue, oldValue) -> {
 		reassessStatus();
 	};
 
-	private final ChangeListener<Number> serviceProgressListener = (ObservableValue<? extends Number> ov, Number lastState, Number newState) -> {
+	private final ChangeListener<Number> serviceProgressListener = (observable, newValue, oldValue) -> {
 		reassessStatus();
 	};
 
-	private final EventHandler<ActionEvent> cancelEventHandler = new EventHandler<>() {
-		@Override
-		public void handle(ActionEvent t) {
-			try {
-				if (gCodeGenManager != null)
-					gCodeGenManager.cancelPrintOrSaveTask();
-				if (printer.canCancelProperty().get())
-					printer.cancel(null, new SafetyFeaturesPreference().get());
-			}
-			catch (PrinterException ex) {
-				System.out.println("Couldn't resume print");
-			}
-		}
-	};
 
 	public PrintPreparationStatusBar() {
 		super();
 
+		GuiceContext.get().injectMembers(this);
+
 		getStyleClass().add("secondaryStatusBar");
 	}
+
 
 	public void bindToPrinter(Printer printer) {
 		this.printer = printer;
 		printer.getPrintEngine().transferGCodeToPrinterService.runningProperty().addListener(serviceStatusListener);
 		printer.getPrintEngine().transferGCodeToPrinterService.progressProperty().addListener(serviceProgressListener);
 
-		cancelButton.setOnAction(cancelEventHandler);
+		cancelButton.setOnAction((t) -> {
+			try {
+				if (gCodeGenManager != null)
+					gCodeGenManager.cancelPrintOrSaveTask();
+				if (printer.canCancelProperty().get())
+					printer.cancel(null, safetyFeaturesPreference.getValue());
+			}
+			catch (PrinterException ex) {
+				System.out.println("Couldn't resume print");
+			}
+		});
 
 		if (project != null) {
 			reassessStatus();
@@ -73,7 +69,7 @@ public class PrintPreparationStatusBar extends AppearingProgressBar implements I
 		this.project = project;
 
 		if (project instanceof ModelContainerProject) {
-			gCodeGenManager = ((ModelContainerProject) project).getGCodeGenManager();
+			gCodeGenManager = project.getGCodeGenManager();
 			if (gCodeGenManager != null) {
 				gCodeGenManager.selectedTaskRunningProperty().addListener(serviceStatusListener);
 				gCodeGenManager.selectedTaskProgressProperty().addListener(serviceProgressListener);
@@ -86,8 +82,8 @@ public class PrintPreparationStatusBar extends AppearingProgressBar implements I
 	}
 
 	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-		super.initialize(location, resources);
+	public void initialize() {
+		super.initialize();
 		targetLegendRequired(false);
 		targetValueRequired(false);
 		currentValueRequired(false);
@@ -109,7 +105,7 @@ public class PrintPreparationStatusBar extends AppearingProgressBar implements I
 		}
 
 		if (printer != null && printer.getPrintEngine().transferGCodeToPrinterService.runningProperty().get()) {
-			largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.sendingToPrinter"));
+			largeProgressDescription.setText(i18n.t("printerStatus.sendingToPrinter"));
 			progressBar.setProgress(printer.getPrintEngine().transferGCodeToPrinterService.getProgress());
 			//Cancel is provided from the print bar in this mode
 			cancelButton.visibleProperty().set(false);
@@ -141,7 +137,7 @@ public class PrintPreparationStatusBar extends AppearingProgressBar implements I
 
 	public void unbindFromProject() {
 		if (project != null) {
-			gCodeGenManager = ((ModelContainerProject) project).getGCodeGenManager();
+			gCodeGenManager = project.getGCodeGenManager();
 			if (gCodeGenManager != null) {
 				gCodeGenManager.selectedTaskRunningProperty().removeListener(serviceStatusListener);
 				gCodeGenManager.selectedTaskProgressProperty().removeListener(serviceProgressListener);

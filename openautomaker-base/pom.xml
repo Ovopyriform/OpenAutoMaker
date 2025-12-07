@@ -28,11 +28,6 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.junit.vintage</groupId>
-			<artifactId>junit-vintage-engine</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-api</artifactId>
 		</dependency>
@@ -107,11 +102,53 @@
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>com.google.inject.extensions</groupId>
+			<artifactId>guice-assistedinject</artifactId>
+		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/com.jcraft/jsch -->
 		<dependency>
 			<groupId>com.jcraft</groupId>
 			<artifactId>jsch</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.vdurmont</groupId>
+			<artifactId>semver4j</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.google.inject</groupId>
+			<artifactId>guice</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-javafx</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-environment</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-params</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-library</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.platform</groupId>
+			<artifactId>jakarta.jakartaee-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-guice</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-i18n</artifactId>
 		</dependency>
 	</dependencies>
 

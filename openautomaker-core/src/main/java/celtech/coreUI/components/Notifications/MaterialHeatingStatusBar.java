@@ -1,22 +1,15 @@
 
 package celtech.coreUI.components.Notifications;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.openautomaker.base.printerControl.model.HeaterMode;
 import org.openautomaker.base.printerControl.model.NozzleHeater;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.fxml.Initializable;
 
-/**
- *
- * @author tony
- */
-public class MaterialHeatingStatusBar extends AppearingProgressBar implements Initializable {
+public class MaterialHeatingStatusBar extends AppearingProgressBar {
 
 	private static final double EJECT_TEMPERATURE = 140.0;
 
@@ -25,16 +18,22 @@ public class MaterialHeatingStatusBar extends AppearingProgressBar implements In
 	private final boolean thisIsTheOnlyNozzle;
 	private static final double showBarIfMoreThanXDegreesOut = 3;
 
-	private ChangeListener<Number> numberChangeListener = (ObservableValue<? extends Number> ov, Number lastState, Number newState) -> {
+	private ChangeListener<Number> numberChangeListener = (observable, oldValue, newValue) -> {
 		reassessStatus();
 	};
 
-	private ChangeListener<HeaterMode> heaterModeChangeListener = (ObservableValue<? extends HeaterMode> ov, HeaterMode lastState, HeaterMode newState) -> {
+	private ChangeListener<HeaterMode> heaterModeChangeListener = (observable, oldValue, newValue) -> {
 		reassessStatus();
 	};
+
+	@Inject
+	private I18N i18n;
 
 	public MaterialHeatingStatusBar(NozzleHeater heater, int materialNumber, boolean thisIsTheOnlyNozzle) {
 		super();
+
+		GuiceContext.get().injectMembers(this);
+
 		this.heater = heater;
 		this.materialNumber = materialNumber;
 		this.thisIsTheOnlyNozzle = thisIsTheOnlyNozzle;
@@ -53,8 +52,8 @@ public class MaterialHeatingStatusBar extends AppearingProgressBar implements In
 	}
 
 	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-		super.initialize(location, resources);
+	public void initialize() {
+		super.initialize();
 		targetLegendRequired(true);
 		targetValueRequired(true);
 		currentValueRequired(true);
@@ -72,40 +71,40 @@ public class MaterialHeatingStatusBar extends AppearingProgressBar implements In
 				if (Math.abs(heater.nozzleTemperatureProperty().get() - heater.nozzleFirstLayerTargetTemperatureProperty().get()) > showBarIfMoreThanXDegreesOut) {
 					if (heater.nozzleFirstLayerTargetTemperatureProperty().get() > heater.nozzleTemperatureProperty().get()) {
 						if (thisIsTheOnlyNozzle) {
-							largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heatingNozzle"));
+							largeProgressDescription.setText(i18n.t("printerStatus.heatingNozzle"));
 						}
 						else {
 							switch (materialNumber) {
 								case 1:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material1Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material1Label"));
 									break;
 								case 2:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material2Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material2Label"));
 									break;
 							}
 						}
 					}
 					else {
 						if (thisIsTheOnlyNozzle) {
-							largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.coolingNozzle"));
+							largeProgressDescription.setText(i18n.t("printerStatus.coolingNozzle"));
 						}
 						else {
 							switch (materialNumber) {
 								case 1:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.cooling") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material1Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.cooling") + " " + i18n.t("printerStatus.Material1Label"));
 									break;
 								case 2:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.cooling") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material2Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.cooling") + " " + i18n.t("printerStatus.Material2Label"));
 									break;
 							}
 						}
 					}
 
-					largeTargetLegend.textProperty().set(OpenAutomakerEnv.getI18N().t("progressBar.targetTemperature"));
+					largeTargetLegend.textProperty().set(i18n.t("progressBar.targetTemperature"));
 					largeTargetValue.textProperty().set(heater.nozzleFirstLayerTargetTemperatureProperty().asString("%d").get()
-							.concat(OpenAutomakerEnv.getI18N().t("misc.degreesC")));
+							.concat(i18n.t("misc.degreesC")));
 					currentValue.textProperty().set(heater.nozzleTemperatureProperty().asString("%d").get()
-							.concat(OpenAutomakerEnv.getI18N().t("misc.degreesC")));
+							.concat(i18n.t("misc.degreesC")));
 
 					if (heater.nozzleFirstLayerTargetTemperatureProperty().doubleValue() > 0) {
 						double normalisedProgress = 0;
@@ -126,40 +125,40 @@ public class MaterialHeatingStatusBar extends AppearingProgressBar implements In
 				if (Math.abs(heater.nozzleTemperatureProperty().get() - heater.nozzleTargetTemperatureProperty().get()) > showBarIfMoreThanXDegreesOut) {
 					if (heater.nozzleTargetTemperatureProperty().get() > heater.nozzleTemperatureProperty().get()) {
 						if (thisIsTheOnlyNozzle) {
-							largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heatingNozzle"));
+							largeProgressDescription.setText(i18n.t("printerStatus.heatingNozzle"));
 						}
 						else {
 							switch (materialNumber) {
 								case 1:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material1Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material1Label"));
 									break;
 								case 2:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material2Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material2Label"));
 									break;
 							}
 						}
 					}
 					else {
 						if (thisIsTheOnlyNozzle) {
-							largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.coolingNozzle"));
+							largeProgressDescription.setText(i18n.t("printerStatus.coolingNozzle"));
 						}
 						else {
 							switch (materialNumber) {
 								case 1:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.cooling") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material1Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.cooling") + " " + i18n.t("printerStatus.Material1Label"));
 									break;
 								case 2:
-									largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.cooling") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material2Label"));
+									largeProgressDescription.setText(i18n.t("printerStatus.cooling") + " " + i18n.t("printerStatus.Material2Label"));
 									break;
 							}
 						}
 					}
 
-					largeTargetLegend.textProperty().set(OpenAutomakerEnv.getI18N().t("progressBar.targetTemperature"));
+					largeTargetLegend.textProperty().set(i18n.t("progressBar.targetTemperature"));
 					largeTargetValue.textProperty().set(heater.nozzleTargetTemperatureProperty().asString("%d").get()
-							.concat(OpenAutomakerEnv.getI18N().t("misc.degreesC")));
+							.concat(i18n.t("misc.degreesC")));
 					currentValue.textProperty().set(heater.nozzleTemperatureProperty().asString("%d").get()
-							.concat(OpenAutomakerEnv.getI18N().t("misc.degreesC")));
+							.concat(i18n.t("misc.degreesC")));
 
 					if (heater.nozzleFirstLayerTargetTemperatureProperty().doubleValue() > 0) {
 						double normalisedProgress = 0;
@@ -178,24 +177,24 @@ public class MaterialHeatingStatusBar extends AppearingProgressBar implements In
 			case FILAMENT_EJECT:
 				if (Math.abs(heater.nozzleTemperatureProperty().get() - EJECT_TEMPERATURE) > showBarIfMoreThanXDegreesOut) {
 					if (thisIsTheOnlyNozzle) {
-						largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heatingNozzle"));
+						largeProgressDescription.setText(i18n.t("printerStatus.heatingNozzle"));
 					}
 					else {
 						switch (materialNumber) {
 							case 1:
-								largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material1Label"));
+								largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material1Label"));
 								break;
 							case 2:
-								largeProgressDescription.setText(OpenAutomakerEnv.getI18N().t("printerStatus.heating") + " " + OpenAutomakerEnv.getI18N().t("printerStatus.Material2Label"));
+								largeProgressDescription.setText(i18n.t("printerStatus.heating") + " " + i18n.t("printerStatus.Material2Label"));
 								break;
 						}
 					}
 
-					largeTargetLegend.textProperty().set(OpenAutomakerEnv.getI18N().t("progressBar.targetTemperature"));
+					largeTargetLegend.textProperty().set(i18n.t("progressBar.targetTemperature"));
 					largeTargetValue.textProperty().set(String.format("%.0f", EJECT_TEMPERATURE)
-							+ OpenAutomakerEnv.getI18N().t("misc.degreesC"));
+							+ i18n.t("misc.degreesC"));
 					currentValue.textProperty().set(heater.nozzleTemperatureProperty().asString("%d").get()
-							.concat(OpenAutomakerEnv.getI18N().t("misc.degreesC")));
+							.concat(i18n.t("misc.degreesC")));
 
 					double normalisedProgress = 0;
 					normalisedProgress = heater.nozzleTemperatureProperty().doubleValue() / EJECT_TEMPERATURE;

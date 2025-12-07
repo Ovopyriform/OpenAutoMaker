@@ -2,35 +2,34 @@ package celtech.coreUI.controllers.utilityPanels;
 
 import static celtech.coreUI.controllers.panels.FXMLUtilities.addColonsToLabels;
 
-import java.net.URL;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.controlsfx.validation.ValidationSupport;
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
 import org.openautomaker.base.printerControl.model.Reel;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.component.modal_dialog.ModalDialog;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.CoreTest;
-import celtech.Lookup;
 import celtech.configuration.ApplicationConfiguration;
-import celtech.coreUI.components.ModalDialog;
 import celtech.coreUI.components.RestrictedTextField;
 import celtech.coreUI.controllers.panels.MenuInnerPanel;
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.remote.EEPROMState;
 import celtech.roboxbase.comms.rx.HeadEEPROMDataResponse;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -38,7 +37,6 @@ import javafx.beans.value.ObservableBooleanValue;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
@@ -49,10 +47,9 @@ import javafx.scene.layout.VBox;
  *
  * @author Ian
  */
-public class HeadEEPROMController implements Initializable, PrinterListChangesListener,
-		MenuInnerPanel {
+public class HeadEEPROMController implements PrinterListChangesListener, MenuInnerPanel {
 
-	private static final Logger LOGGER = LogManager.getLogger(HeadEEPROMController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	@FXML
 	private RestrictedTextField rightNozzleZOverrun;
@@ -140,16 +137,39 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 	private final BooleanProperty offsetFieldsDirty = new SimpleBooleanProperty();
 	private final BooleanProperty canSave = new SimpleBooleanProperty();
 
-	private Printer selectedPrinter;
-
 	private final BooleanProperty canResetHeadProperty = new SimpleBooleanProperty(false);
 
 	private ValidationSupport serialNumberValidation = new ValidationSupport();
 	private BooleanProperty serialValidProperty = new SimpleBooleanProperty(false);
 	private BooleanProperty ignoreSerialValidationProperty = new SimpleBooleanProperty(false);
 
+	private final I18N i18n;
+	private final SystemNotificationManager systemNotificationManager;
+	private final PrinterManager printerManager;
+	private final SelectedPrinter selectedPrinter;
+	private final PrinterUtils printerUtils;
+	private final AdvancedModePreference advancedModePreference;
+
+	@Inject
+	protected HeadEEPROMController(
+			I18N i18n,
+			SystemNotificationManager systemNotificationManager,
+			SelectedPrinter selectedPrinter,
+			PrinterManager printerManager,
+			PrinterUtils printerUtils,
+			AdvancedModePreference advancedModePreference) {
+
+		this.i18n = i18n;
+		this.systemNotificationManager = systemNotificationManager;
+
+		this.selectedPrinter = selectedPrinter;
+		this.printerManager = printerManager;
+		this.printerUtils = printerUtils;
+		this.advancedModePreference = advancedModePreference;
+	}
+
 	void whenResetToDefaultsPressed() {
-		BaseLookup.getSystemNotificationHandler().showProgramInvalidHeadDialog(null);
+		systemNotificationManager.showProgramInvalidHeadDialog(null);
 	}
 
 	/**
@@ -186,13 +206,14 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 			}
 			float headHourCounterVal = headHourCounter.getFloatValue();
 
-			float nozzle1ZOffsetCalculated = PrinterUtils.deriveNozzle1ZOffsetsFromOverrun(leftNozzleZOverrunVal, rightNozzleZOverrunVal);
-			float nozzle2ZOffsetCalculated = PrinterUtils.deriveNozzle2ZOffsetsFromOverrun(leftNozzleZOverrunVal, rightNozzleZOverrunVal);
+			float nozzle1ZOffsetCalculated = printerUtils.deriveNozzle1ZOffsetsFromOverrun(leftNozzleZOverrunVal, rightNozzleZOverrunVal);
+			float nozzle2ZOffsetCalculated = printerUtils.deriveNozzle2ZOffsetsFromOverrun(leftNozzleZOverrunVal, rightNozzleZOverrunVal);
 
+			Printer selPrinter = selectedPrinter.get();
 			// N.B. this call must come after reading the data in the fields because
 			// reading the head eeprom results in the fields being updated with current head
 			// data (i.e. fields will lose edited values)
-			HeadEEPROMDataResponse headDataResponse = selectedPrinter.readHeadEEPROM(true);
+			HeadEEPROMDataResponse headDataResponse = selPrinter.readHeadEEPROM(true);
 
 			String idToCreate = headTypeCodeEntry.getText()
 					+ printerWeek.getText()
@@ -201,7 +222,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 					+ printerSerialNumber.getText()
 					+ printerChecksum.getText();
 
-			selectedPrinter.transmitWriteHeadEEPROM(
+			selPrinter.transmitWriteHeadEEPROM(
 					headTypeCodeText, idToCreate, headMaxTemperatureVal, headThermistorBetaVal,
 					headThermistorTCalVal, leftNozzleXOffsetVal, leftNozzleYOffsetVal,
 					nozzle1ZOffsetCalculated, leftNozzleBOffsetVal,
@@ -216,7 +237,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 			ignoreSerialValidationProperty.set(true);
 
 			try {
-				selectedPrinter.readHeadEEPROM(false);
+				selPrinter.readHeadEEPROM(false);
 			}
 			catch (RoboxCommsException ex) {
 				LOGGER.error("Error reading head EEPROM");
@@ -224,8 +245,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 		}
 		catch (RoboxCommsException ex) {
 			LOGGER.error("Error writing head EEPROM");
-			eepromCommsError.setMessage(OpenAutomakerEnv.getI18N().t(
-					"eeprom.headWriteError"));
+			eepromCommsError.setMessage(i18n.t("eeprom.headWriteError"));
 			eepromCommsError.show();
 		}
 		catch (ParseException ex) {
@@ -235,7 +255,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 
 	void readPrinterID(ActionEvent event) {
 		try {
-			selectedPrinter.readPrinterID();
+			selectedPrinter.get().readPrinterID();
 		}
 		catch (PrinterException ex) {
 			LOGGER.error("Error reading printer ID");
@@ -245,14 +265,13 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 	/**
 	 * Initialises the controller class.
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		try {
-			eepromCommsError = new ModalDialog();
-			eepromCommsError.setTitle(OpenAutomakerEnv.getI18N().t("eeprom.error"));
-			eepromCommsError.addButton(OpenAutomakerEnv.getI18N().t("dialogs.OK"));
+			eepromCommsError = new ModalDialog(i18n.t("eeprom.error"));
+			//eepromCommsError.setTitle(i18n.t("eeprom.error"));
+			eepromCommsError.addButton(i18n.t("dialogs.OK"));
 
-			ChangeListener offsetsChangedListener = (ChangeListener<String>) (ObservableValue<? extends String> observable, String oldValue, String newValue) -> {
+			ChangeListener<String> offsetsChangedListener = (observable, oldValue, newValue) -> {
 				offsetFieldsDirty.set(true);
 			};
 
@@ -265,20 +284,17 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 			rightNozzleYOffset.textProperty().addListener(offsetsChangedListener);
 			rightNozzleZOverrun.textProperty().addListener(offsetsChangedListener);
 
-			serialInvalidImage.setImage(new Image(CoreTest.class.getResource(
+			serialInvalidImage.setImage(new Image(getClass().getResource(
 					ApplicationConfiguration.imageResourcePath + "CrossIcon.png").toExternalForm()));
-			serialValidImage.setImage(new Image(CoreTest.class.getResource(
+			serialValidImage.setImage(new Image(getClass().getResource(
 					ApplicationConfiguration.imageResourcePath + "TickIcon.png").toExternalForm()));
 
-			serialValidProperty.addListener(new ChangeListener<Boolean>() {
-				@Override
-				public void changed(ObservableValue<? extends Boolean> ov, Boolean t, Boolean t1) {
-					serialValidImage.setVisible(t1);
-					serialInvalidImage.setVisible(!t1);
-				}
+			serialValidProperty.addListener((observable, oldValue, newValue) -> {
+				serialValidImage.setVisible(newValue);
+				serialInvalidImage.setVisible(!newValue);
 			});
 
-			ChangeListener serialPartChangeListener = (ChangeListener<String>) (ObservableValue<? extends String> observable, String oldValue, String newValue) -> {
+			ChangeListener<String> serialPartChangeListener = (observable, oldValue, newValue) -> {
 				validateHeadSerial();
 				offsetFieldsDirty.set(true);
 			};
@@ -293,20 +309,15 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 
 			canSave.bind(offsetFieldsDirty.and(ignoreSerialValidationProperty.or(serialValidProperty)));
 
-			Lookup.getSelectedPrinterProperty().addListener(
-					(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
-						if (newValue != oldValue) {
-							setSelectedPrinter(newValue);
+			selectedPrinter.addListener((observable, oldValue, newValue) -> {
+				if (newValue != oldValue)
+					selectedPrinterChanged(oldValue, newValue); // This is probably not the right name.
+			});
 
-						}
-					});
+			printerManager.getPrinterChangeNotifier().addListener(this);
 
-			BaseLookup.getPrinterListChangesNotifier().addListener(this);
-
-			if (Lookup.getSelectedPrinterProperty().get() != null) {
-				setSelectedPrinter(
-						Lookup.getSelectedPrinterProperty().get());
-			}
+			if (selectedPrinter.get() != null)
+				selectedPrinterChanged(null, selectedPrinter.get());
 
 			addColonsToLabels(headFullContainer);
 
@@ -402,12 +413,12 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 
 			float leftNozzleZOffset = head.getNozzles().get(0).zOffsetProperty().get();
 			float rightNozzleZOffset = head.getNozzles().get(1).zOffsetProperty().get();
-			float leftNozzleZOverrunValue = PrinterUtils.deriveNozzle1OverrunFromOffsets(leftNozzleZOffset,
+			float leftNozzleZOverrunValue = printerUtils.deriveNozzle1OverrunFromOffsets(leftNozzleZOffset,
 					rightNozzleZOffset);
 			leftNozzleZOverrun.setVisible(true);
 			leftNozzleZOverrun.setText(String.format("%.2f", leftNozzleZOverrunValue));
 
-			float rightNozzleZOverrunValue = PrinterUtils.deriveNozzle2OverrunFromOffsets(leftNozzleZOffset,
+			float rightNozzleZOverrunValue = printerUtils.deriveNozzle2OverrunFromOffsets(leftNozzleZOffset,
 					rightNozzleZOffset);
 			rightNozzleZOverrun.setVisible(true);
 			rightNozzleZOverrun.setText(String.format("%.2f", rightNozzleZOverrunValue));
@@ -428,7 +439,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 			rightNozzleYOffset.setText(String.format("%.2f",
 					head.getNozzles().get(0).yOffsetProperty().get()));
 			float rightNozzleZOffset = head.getNozzles().get(0).zOffsetProperty().get();
-			float rightNozzleZOverrunValue = PrinterUtils.deriveNozzle1OverrunFromOffsets(rightNozzleZOffset,
+			float rightNozzleZOverrunValue = printerUtils.deriveNozzle1OverrunFromOffsets(rightNozzleZOffset,
 					rightNozzleZOffset);
 			rightNozzleZOverrun.setVisible(true);
 			rightNozzleZOverrun.setText(String.format("%.2f", rightNozzleZOverrunValue));
@@ -478,26 +489,26 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 		offsetFieldsDirty.set(false);
 	}
 
-	private void setSelectedPrinter(Printer printer) {
+	private void selectedPrinterChanged(Printer oldValue, Printer newValue) {
 		updateFieldsForNoHead();
-		if (selectedPrinter != null && selectedPrinter.headProperty().get() != null) {
-			removeHeadChangeListeners(selectedPrinter.headProperty().get());
-			selectedPrinter.getHeadEEPROMStateProperty().removeListener(headEEPROMStateChangeListener);
-		}
-		selectedPrinter = printer;
 
-		if (printer != null) {
-			selectedPrinter.getHeadEEPROMStateProperty().addListener(headEEPROMStateChangeListener);
+		if (oldValue != null && oldValue.headProperty().get() != null) {
+			removeHeadChangeListeners(oldValue.headProperty().get());
+			oldValue.getHeadEEPROMStateProperty().removeListener(headEEPROMStateChangeListener);
 		}
 
-		if (printer != null && printer.headProperty().get() != null) {
-			Head head = printer.headProperty().get();
+		if (newValue != null) {
+			newValue.getHeadEEPROMStateProperty().addListener(headEEPROMStateChangeListener);
+		}
+
+		//TODO:  Probably worth changing to a return early
+		if (newValue != null && newValue.headProperty().get() != null) {
+			Head head = newValue.headProperty().get();
 			updateFieldsFromAttachedHead(head);
 			listenForHeadChanges(head);
 			canResetHeadProperty.set(true);
 		}
-		else if (printer != null
-				&& printer.getHeadEEPROMStateProperty().get() == EEPROMState.NOT_PROGRAMMED) {
+		else if (newValue != null && newValue.getHeadEEPROMStateProperty().get() == EEPROMState.NOT_PROGRAMMED) {
 			canResetHeadProperty.set(true);
 		}
 		else {
@@ -508,7 +519,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 	@Override
 	public void whenPrinterAdded(Printer printer) {
 		headEEPROMOffsets.disableProperty().bind(
-				FXProperty.bind(new AdvancedModePreference()).not());
+				FXProperty.bind(advancedModePreference).not());
 	}
 
 	@Override
@@ -518,7 +529,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 
 	@Override
 	public void whenHeadAdded(Printer printer) {
-		if (printer == selectedPrinter) {
+		if (printer == selectedPrinter.get()) {
 			Head head = printer.headProperty().get();
 			updateFieldsFromAttachedHead(head);
 			listenForHeadChanges(head);
@@ -528,7 +539,7 @@ public class HeadEEPROMController implements Initializable, PrinterListChangesLi
 
 	@Override
 	public void whenHeadRemoved(Printer printer, Head head) {
-		if (printer == selectedPrinter) {
+		if (printer == selectedPrinter.get()) {
 			updateFieldsForNoHead();
 			removeHeadChangeListeners(head);
 			canResetHeadProperty.set(false);

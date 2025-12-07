@@ -8,7 +8,10 @@ import java.util.Map.Entry;
 
 import org.openautomaker.base.MaterialType;
 import org.openautomaker.base.configuration.Filament;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.layout.FlowPane;
@@ -33,11 +36,15 @@ public class FilamentCategory extends VBox {
 	private final FilamentSelectionListener materialSelectionListener;
 	private Map<String, Map<MaterialType, List<Filament>>> filamentCategoryMap = null;
 
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
 	public FilamentCategory(FilamentSelectionListener materialSelectionListener) {
+		GuiceContext.get().injectMembers(this);
+
 		this.materialSelectionListener = materialSelectionListener;
 
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/material/filamentCategory.fxml"));
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/components/material/filamentCategory.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

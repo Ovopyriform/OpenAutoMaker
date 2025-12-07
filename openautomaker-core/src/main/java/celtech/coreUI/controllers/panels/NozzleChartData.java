@@ -2,8 +2,10 @@ package celtech.coreUI.controllers.panels;
 
 import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.printerControl.model.HeaterMode;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.value.ChangeListener;
@@ -40,11 +42,17 @@ public class NozzleChartData {
 		updateNozzleTargetPoint();
 	};
 
+	@Inject
+	private I18N i18n;
+
 	public NozzleChartData(int nozzleNumber, XYChart.Series<Number, Number> nozzleTemperatureData,
 			ReadOnlyObjectProperty<HeaterMode> nozzleHeaterModeProperty,
 			ReadOnlyIntegerProperty nozzleTargetTemperatureProperty,
 			ReadOnlyIntegerProperty nozzleFirstLayerTargetTemperatureProperty,
 			ReadOnlyIntegerProperty nozzleTemperatureProperty) {
+
+		GuiceContext.get().injectMembers(this);
+
 		this.nozzleTemperatureData = nozzleTemperatureData;
 
 		this.nozzleHeaterModeProperty = nozzleHeaterModeProperty;
@@ -61,7 +69,7 @@ public class NozzleChartData {
 
 		nozzleTargetTemperatureSeries.getData().add(nozzleTargetPoint);
 
-		degreesC = OpenAutomakerEnv.getI18N().t("misc.degreesC");
+		degreesC = i18n.t("misc.degreesC");
 
 		updateNozzleTargetPoint();
 	}

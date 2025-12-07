@@ -20,6 +20,7 @@ import java.util.Set;
 import org.apache.commons.math3.geometry.euclidean.threed.Vector3D;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.ui.inject.model.ModelContainerFactory;
 
 import celtech.coreUI.visualisation.ApplicationMaterials;
 import celtech.coreUI.visualisation.metaparts.FloatArrayList;
@@ -27,6 +28,7 @@ import celtech.coreUI.visualisation.metaparts.ModelLoadResult;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResultType;
 import celtech.modelcontrol.ModelContainer;
 import celtech.services.modelLoader.ModelLoaderTask;
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.MeshView;
@@ -38,12 +40,19 @@ import javafx.scene.shape.TriangleMesh;
  */
 public class STLImporter {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			STLImporter.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private TriangleMesh meshToOutput = null;
 	private ModelLoaderTask parentTask = null;
 	private DoubleProperty percentProgressProperty = null;
 	private final String spacePattern = "[ ]+";
+
+	private final ModelContainerFactory modelContainerFactory;
+
+	@Inject
+	protected STLImporter(ModelContainerFactory modelContainerFactory) {
+		this.modelContainerFactory = modelContainerFactory;
+	}
 
 	public ModelLoadResult loadFile(ModelLoaderTask parentTask, File modelFile,
 			DoubleProperty percentProgressProperty) {
@@ -104,7 +113,7 @@ public class STLImporter {
 			meshView.setId(modelFile.getName() + "_mesh");
 
 			Set<ModelContainer> modelContainers = new HashSet<>();
-			ModelContainer modelContainer = new ModelContainer(modelFile, meshView);
+			ModelContainer modelContainer = modelContainerFactory.create(modelFile, meshView);
 			modelContainers.add(modelContainer);
 
 			ModelLoadResult result = new ModelLoadResult(

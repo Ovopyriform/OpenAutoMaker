@@ -237,11 +237,6 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.junit.vintage</groupId>
-			<artifactId>junit-vintage-engine</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.openautomaker</groupId>
 			<artifactId>openautomaker-environment</artifactId>
 		</dependency>
@@ -263,8 +258,7 @@
 			<artifactId>javafx-controls</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>
-				org.openjfx</groupId>
+			<groupId>org.openjfx</groupId>
 			<artifactId>javafx-fxml</artifactId>
 		</dependency>
 		<dependency>
@@ -276,6 +270,14 @@
 			<artifactId>nsmenufx</artifactId>
 			<version>3.1.0</version>
 		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-javafx</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-i18n</artifactId>
+		</dependency>
 	</dependencies>
 
 	<profiles>
@@ -286,6 +288,13 @@
 					<family>mac</family>
 				</os>
 			</activation>
+			<properties>
+				<application.slicer.kill_command><![CDATA[KillCuraEngine.mac.sh]]></application.slicer.kill_command>
+				<application.slicer.set_working_directory>true</application.slicer.set_working_directory>
+				<application.slicer.executable>CuraEngine</application.slicer.executable>
+				<!-- 0: vendorId, 1: productId, 2: deviceName -->
+				<application.printer.detector><![CDATA[RoboxDetector.mac.sh {2}]]></application.printer.detector>
+			</properties>
 			<build>
 				<plugins>
 					<plugin>
@@ -363,6 +372,13 @@
 					<family>windows</family>
 				</os>
 			</activation>
+			<properties>
+				<application.slicer.kill_command><![CDATA[cmd.exe /S /C taskkill /IM "CuraEngine.exe" /F]]></application.slicer.kill_command>
+				<application.slicer.set_working_directory>false</application.slicer.set_working_directory>
+				<application.slicer.executable>CuraEngine.exe</application.slicer.executable>
+				<!-- 0: vendorId, 1: productId, 2: deviceName -->
+				<application.printer.detector><![CDATA[RoboxDetector.exe {0} {1}]]></application.printer.detector>
+			</properties>
 		</profile>
 		<profile>
 			<id>linux-specific</id>
@@ -372,6 +388,13 @@
 					<name>Linux</name>
 				</os>
 			</activation>
+			<properties>
+				<application.slicer.kill_command><![CDATA[KillCuraEngine.linux.sh]]></application.slicer.kill_command>
+				<application.slicer.set_working_directory>true</application.slicer.set_working_directory>
+				<application.slicer.executable>CuraEngine</application.slicer.executable>
+				<!-- 0: vendorId, 1: productId, 2: deviceName -->
+				<application.printer.detector><![CDATA[RoboxDetector.linux.sh {2} {0}]]></application.printer.detector>
+			</properties>
 		</profile>
 		
 	</profiles>

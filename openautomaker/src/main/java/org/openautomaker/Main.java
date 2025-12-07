@@ -10,6 +10,7 @@ public class Main {
 
 	// Stub main class required to allow JavaFX 11 to run in NetBeans 9+.
 	public static void main(String[] args) {
+		System.setProperty("javafx.preloader", OpenAutomakerPreloader.class.getName());
 		Application.launch(OpenAutomaker.class, args);
 	}
 }

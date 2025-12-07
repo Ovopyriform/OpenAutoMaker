@@ -8,6 +8,7 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Control;
@@ -22,9 +23,8 @@ import javafx.util.Callback;
  */
 public class CustomPrinterHeadPreferenceController implements PreferencesInnerPanelController.Preference {
 
-	private final ComboBox<String> fControl;
+	private final ComboBox<String> control;
 
-	private final VirtualPrinterHeadPreference fVirtualPrinterHeadPreference;
 
 	private final BiMap<String, String> fHeadDisplayNameMap;
 
@@ -43,10 +43,17 @@ public class CustomPrinterHeadPreferenceController implements PreferencesInnerPa
 		}
 	}
 
-	//TODO: These shouldn't be defined in the combo box.  Should be a separate head loader module which sort out all this stuff.
-	public CustomPrinterHeadPreferenceController() {
-		fVirtualPrinterHeadPreference = new VirtualPrinterHeadPreference();
+	private final I18N i18n;
 
+	@Inject
+	public CustomPrinterHeadPreferenceController(
+			I18N i18n,
+			VirtualPrinterHeadPreference virtualPrinterHeadPreference,
+			HeadContainer headContainer) {
+
+		this.i18n = i18n;
+
+		//TODO: These shouldn't be defined in the combo box.  Should be a separate head loader module which sort out all this stuff.
 		//TODO: Known heads.  Shouldn't be defined here
 		fHeadDisplayNameMap = HashBiMap.create();
 		fHeadDisplayNameMap.put("RBX01-SM", "QuickFill\u2122");
@@ -55,27 +62,27 @@ public class CustomPrinterHeadPreferenceController implements PreferencesInnerPa
 		fHeadDisplayNameMap.put("RBXDV-S1", "SingleX\u2122 Experimental\u2122");
 		fHeadDisplayNameMap.put("RBXDV-S3", "SingleLite\u2122");
 
-		fControl = new ComboBox<>();
-		fControl.getStyleClass().add("cmbCleanCombo");
-		fControl.setMinWidth(200);
-		fControl.autosize();
+		control = new ComboBox<>();
+		control.getStyleClass().add("cmbCleanCombo");
+		control.setMinWidth(200);
+		control.autosize();
 
-		HeadContainer.getCompleteHeadList().forEach(headFile -> fControl.getItems().add(headFile.getTypeCode()));
+		headContainer.getCompleteHeadList().forEach(headFile -> control.getItems().add(headFile.getTypeCode()));
 
 		// Setup display
 		Callback<ListView<String>, ListCell<String>> cellFactory = (listView) -> new CustomerPrinterHeadListCell();
-		fControl.setButtonCell(cellFactory.call(null));
-		fControl.setCellFactory(cellFactory);
+		control.setButtonCell(cellFactory.call(null));
+		control.setCellFactory(cellFactory);
 
-		SelectionModel<String> selectionModel = fControl.getSelectionModel();
+		SelectionModel<String> selectionModel = control.getSelectionModel();
 
 		// Set up initial value
-		selectionModel.select(fVirtualPrinterHeadPreference.get());
+		selectionModel.select(virtualPrinterHeadPreference.getValue());
 
 		// Listen for changes
 		selectionModel.selectedItemProperty()
 				.addListener((observable, oldValue, newValue) -> {
-					fVirtualPrinterHeadPreference.set(newValue);
+					virtualPrinterHeadPreference.setValue(newValue);
 				});
 	}
 
@@ -89,18 +96,18 @@ public class CustomPrinterHeadPreferenceController implements PreferencesInnerPa
 
 	@Override
 	public Control getControl() {
-		return fControl;
+		return control;
 	}
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.printerHead");
+		return i18n.t("preferences.printerHead");
 	}
 
 	@Override
 	public void disableProperty(ObservableValue<Boolean> disableProperty) {
-		fControl.disableProperty().unbind();
-		fControl.disableProperty().bind(disableProperty);
+		control.disableProperty().unbind();
+		control.disableProperty().bind(disableProperty);
 	}
 
 }

@@ -1,21 +1,29 @@
 package celtech.coreUI.components.material;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
+import org.openautomaker.test_library.GuiceExtension;
+import org.testfx.framework.junit5.ApplicationExtension;
+import org.testfx.framework.junit5.Start;
 
-import celtech.FXTest;
-import celtech.JavaFXConfiguredTest;
+import jakarta.inject.Inject;
+import javafx.stage.Stage;
 
-/**
- *
- * @author Ian
- */
-@Category(FXTest.class)
-public class FilamentMenuButtonTest extends JavaFXConfiguredTest {
+
+@ExtendWith({ GuiceExtension.class, ApplicationExtension.class })
+public class FilamentMenuButtonTest {
+
+	@Inject
+	FilamentContainer filamentContainer;
+
+	@Start
+	public void start(Stage stage) {
+
+	}
 
 	@Test
 	public void testCategoryComparator() {
@@ -72,5 +80,4 @@ public class FilamentMenuButtonTest extends JavaFXConfiguredTest {
 		assertTrue(FilamentMenuButton.byBrandName.compare(aCategory, customCategory) < 0);
 		assertTrue(FilamentMenuButton.byBrandName.compare(customCategory, customCategory) == 0);
 	}
-
 }

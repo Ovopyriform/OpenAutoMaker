@@ -2,6 +2,10 @@ package celtech.coreUI.components;
 
 import java.io.IOException;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -55,8 +59,13 @@ public class NudgeControlVertical extends VBox {
 		return limitedValue;
 	}
 
+	@Inject
+	public FXMLLoaderFactory fxmlLoaderFactory;
+
 	public NudgeControlVertical() {
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/celtech/resources/fxml/nudgeControlVertical.fxml"));
+		GuiceContext.get().injectMembers(this);
+
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/nudgeControlVertical.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

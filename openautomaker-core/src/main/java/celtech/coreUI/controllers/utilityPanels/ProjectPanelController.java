@@ -1,23 +1,21 @@
 package celtech.coreUI.controllers.utilityPanels;
 
 import java.io.IOException;
-import java.net.URL;
 import java.text.NumberFormat;
 import java.util.Locale;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.PrintJob;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.coreUI.controllers.StatusInsetController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
 
@@ -26,10 +24,9 @@ import javafx.scene.layout.VBox;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class ProjectPanelController implements Initializable, StatusInsetController {
+public class ProjectPanelController implements StatusInsetController {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			ProjectPanelController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	@FXML
 	private VBox projectPanel;
@@ -47,6 +44,16 @@ public class ProjectPanelController implements Initializable, StatusInsetControl
 	private ChangeListener<PrintJob> printJobChangeListener = (ObservableValue<? extends PrintJob> ov, PrintJob t, PrintJob printJob) -> {
 		updateDisplay(printJob);
 	};
+
+	private final SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected ProjectPanelController(
+			SelectedPrinter selectedPrinter) {
+
+		this.selectedPrinter = selectedPrinter;
+
+	}
 
 	private void updateDisplay(PrintJob printJob) {
 		if (printJob != null) {
@@ -80,9 +87,8 @@ public class ProjectPanelController implements Initializable, StatusInsetControl
 	/**
 	 * Initialises the controller class.
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
-		Lookup.getSelectedPrinterProperty().addListener((ObservableValue<? extends Printer> ov, Printer lastPrinter, Printer newPrinter) -> {
+	public void initialize() {
+		selectedPrinter.addListener((ObservableValue<? extends Printer> ov, Printer lastPrinter, Printer newPrinter) -> {
 			if (currentPrinter != null) {
 				currentPrinter.getPrintEngine().printJobProperty().removeListener(printJobChangeListener);
 			}

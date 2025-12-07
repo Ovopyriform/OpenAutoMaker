@@ -1,7 +1,8 @@
 package celtech.coreUI.components;
 
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
+
 import celtech.configuration.ApplicationConfiguration;
-import celtech.roboxbase.comms.DetectedServer;
 import javafx.geometry.Pos;
 import javafx.scene.control.TableCell;
 import javafx.scene.image.Image;
@@ -11,7 +12,7 @@ import javafx.scene.image.ImageView;
  *
  * @author George Salter
  */
-public class RootCameraTableCell extends TableCell<DetectedServer, Boolean> {
+public class RootCameraTableCell extends TableCell<PrintServerConnection, Boolean> {
 	private final ImageView imageContainer;
 	private final Image connectedImage;
 	private final Image disconnectedImage;

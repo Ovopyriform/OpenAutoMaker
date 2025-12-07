@@ -1,9 +1,12 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.property.FloatProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.Control;
@@ -18,11 +21,19 @@ public class FloatingPointPreference implements PreferencesInnerPanelController.
 	private final FloatProperty floatProperty;
 	private final String caption;
 
-	public FloatingPointPreference(FloatProperty floatProperty,
-			int decimalPlaces,
-			int digits,
-			boolean negativeAllowed,
-			String caption) {
+	private final I18N i18n;
+
+	@Inject
+	public FloatingPointPreference(
+			I18N i18n,
+			@Assisted FloatProperty floatProperty,
+			@Assisted("decimalPlaces") int decimalPlaces,
+			@Assisted("digits") int digits,
+			@Assisted boolean negativeAllowed,
+			@Assisted String caption) {
+
+		this.i18n = i18n;
+
 		this.floatProperty = floatProperty;
 		this.caption = caption;
 
@@ -58,7 +69,7 @@ public class FloatingPointPreference implements PreferencesInnerPanelController.
 
 	@Override
 	public String getDescription() {
-		return OpenAutomakerEnv.getI18N().t(caption);
+		return i18n.t(caption);
 	}
 
 	@Override

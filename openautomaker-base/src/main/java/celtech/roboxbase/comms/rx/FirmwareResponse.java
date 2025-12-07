@@ -2,6 +2,8 @@ package celtech.roboxbase.comms.rx;
 
 import java.io.UnsupportedEncodingException;
 
+import com.vdurmont.semver4j.Semver;
+
 /**
  *
  * @author ianhudson
@@ -14,6 +16,10 @@ public class FirmwareResponse extends RoboxRxPacket
     private final int firmwareRevisionBytes = 8;
     private float firmwareRevisionFloat = 0;
     private String firmwareRevisionString = "";
+
+	public Semver getFirmwareVersion() {
+		return new Semver(getFirmwareRevision().substring(1) + ".0.0");
+	}
 
     /**
      *

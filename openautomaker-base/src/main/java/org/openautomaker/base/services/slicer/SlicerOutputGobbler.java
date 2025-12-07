@@ -49,7 +49,9 @@ class SlicerOutputGobbler extends Thread {
 						int progressInt = 0;
 
 						float workDone = Float.valueOf(lineParts[2]);
-						float totalWork = slicerType != Slicer.CURA ? parseTotalWork(lineParts[3]) : Float.valueOf(lineParts[3]);
+						//Removed old Cura
+						//float totalWork = slicerType != Slicer.CURA ? parseTotalWork(lineParts[3]) : Float.valueOf(lineParts[3]);
+						float totalWork = parseTotalWork(lineParts[3]);
 
 						if (workDone == 1f || workDone == totalWork || printCounter >= 40) {
 							printCounter = 0;
@@ -71,6 +73,9 @@ class SlicerOutputGobbler extends Thread {
 						setLoadProgress(task, progressInt);
 					}
 				}
+				//				else {
+				//					LOGGER.info("Slicer output: " + line);
+				//				}
 			}
 		}
 		catch (IOException ioe) {

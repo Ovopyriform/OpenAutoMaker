@@ -18,10 +18,9 @@ import celtech.modelcontrol.ItemState;
  *
  * @author tony
  */
-class TransformCommand extends Command {
+class TransformCommand implements Command {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			TransformCommand.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final UndoableProject.NoArgsVoidFunc func;
 	private Set<ItemState> originalStates;

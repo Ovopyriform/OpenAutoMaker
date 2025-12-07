@@ -10,128 +10,110 @@ import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- *
- * @author Ian
- */
-public class GCodeValidator
-{
+public class GCodeValidator {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private final String gcodeFileToValidate;
-    private final String nozzleControlPatternString = ".*B([\\.\\d]+).*";
-    private final String extrusionPatternString = ".*G[01].* E[\\.\\d]+.*";
-    private final Pattern nozzleControlPattern;
-    private final Pattern extrusionPattern;
+	private final String gcodeFileToValidate;
+	private final String nozzleControlPatternString = ".*B([\\.\\d]+).*";
+	private final String extrusionPatternString = ".*G[01].* E[\\.\\d]+.*";
+	private final Pattern nozzleControlPattern;
+	private final Pattern extrusionPattern;
 
-    public GCodeValidator(String gcodeFileToValidate)
-    {
-        this.gcodeFileToValidate = gcodeFileToValidate;
+	public GCodeValidator(String gcodeFileToValidate) {
+		this.gcodeFileToValidate = gcodeFileToValidate;
 
-        nozzleControlPattern = Pattern.compile(nozzleControlPatternString);
-        extrusionPattern = Pattern.compile(extrusionPatternString);
-    }
+		nozzleControlPattern = Pattern.compile(nozzleControlPatternString);
+		extrusionPattern = Pattern.compile(extrusionPatternString);
+	}
 
-    public boolean validate()
-    {
-        boolean fileIsValid = false;
+	public boolean validate() {
+		boolean fileIsValid = false;
 
 		LOGGER.info("Validating GCode " + gcodeFileToValidate);
 
-        File inputFile = new File(gcodeFileToValidate);
+		File inputFile = new File(gcodeFileToValidate);
 
-        try
-        {
+		try {
 			BufferedReader fileReader = new BufferedReader(new FileReader(inputFile));
 
-            boolean nozzleOpen = false;
+			boolean nozzleOpen = false;
 
-            String line;
-            int lineNumber = 1;
-            boolean safeToStartChecking = false;
+			String line;
+			int lineNumber = 1;
+			boolean safeToStartChecking = false;
 
-            double lastNozzleControlValue = 0;
+			double lastNozzleControlValue = 0;
 
-            while ((line = fileReader.readLine()) != null)
-            {
-                if (safeToStartChecking)
-                {
+			while ((line = fileReader.readLine()) != null) {
+				if (safeToStartChecking) {
 
-                    Matcher nozzleControlMatcher = nozzleControlPattern.matcher(line);
-                    Matcher extrusionMatcher = extrusionPattern.matcher(line);
+					Matcher nozzleControlMatcher = nozzleControlPattern.matcher(line);
+					Matcher extrusionMatcher = extrusionPattern.matcher(line);
 
-                    double nozzleControlValue = 0;
-                    boolean nozzleControlFound = false;
-                    boolean extrusionFound = false;
+					double nozzleControlValue = 0;
+					boolean nozzleControlFound = false;
+					boolean extrusionFound = false;
 
-                    if (nozzleControlMatcher.find())
-                    {
-                        nozzleControlFound = true;
-                        nozzleControlValue = Float.valueOf(nozzleControlMatcher.group(1));
-                    }
+					if (nozzleControlMatcher.find()) {
+						nozzleControlFound = true;
+						nozzleControlValue = Float.valueOf(nozzleControlMatcher.group(1));
+					}
 
-                    extrusionFound = extrusionMatcher.find();
+					extrusionFound = extrusionMatcher.find();
 
-                    if (nozzleControlFound)
-                    {
-                        if (nozzleOpen && nozzleControlValue > lastNozzleControlValue)
-                        {
+					if (nozzleControlFound) {
+						if (nozzleOpen && nozzleControlValue > lastNozzleControlValue) {
 							LOGGER.error("Nozzle opened when it hadn't been closed on line " + lineNumber + " - " + line);
-                            fileIsValid = false;
-                        }
+							fileIsValid = false;
+						}
 
-                        if (nozzleControlValue > 0)
-                        {
+						if (nozzleControlValue > 0) {
 							LOGGER.trace("Nozzle open on line " + lineNumber + " - " + line);
-                            nozzleOpen = true;
-                        } else
-                        {
+							nozzleOpen = true;
+						}
+						else {
 							LOGGER.trace("Nozzle closed on line " + lineNumber + " - " + line);
-                            nozzleOpen = false;
-                        }
+							nozzleOpen = false;
+						}
 
-                        lastNozzleControlValue = nozzleControlValue;
-                    }
+						lastNozzleControlValue = nozzleControlValue;
+					}
 
-                    if (extrusionFound)
-                    {
+					if (extrusionFound) {
 						LOGGER.trace("Extrusion on line " + lineNumber + " - " + line);
-                    }
+					}
 
-                    if (extrusionFound && !nozzleOpen)
-                    {
+					if (extrusionFound && !nozzleOpen) {
 						LOGGER.error("Extrusion with closed nozzle on line " + lineNumber + " - " + line);
-                        fileIsValid = false;
-                    }
-                } else
-                {
-                    if (line.contains("; End of Pre print gcode"))
-                    {
+						fileIsValid = false;
+					}
+				}
+				else {
+					if (line.contains("; End of Pre print gcode")) {
 						LOGGER.info("Commencing validation from line " + lineNumber + " - " + line);
-                        safeToStartChecking = true;
-                        fileIsValid = true;
-                    }
-                }
+						safeToStartChecking = true;
+						fileIsValid = true;
+					}
+				}
 
-                lineNumber++;
-            }
+				lineNumber++;
+			}
 
 			fileReader.close();
 
-        } catch (IOException ex)
-        {
+		}
+		catch (IOException ex) {
 			LOGGER.error("Failure to validate GCode file");
-        }
+		}
 
-        if (fileIsValid)
-        {
+		if (fileIsValid) {
 			LOGGER.info("GCode file " + gcodeFileToValidate + " is valid");
-        } else
-        {
+		}
+		else {
 			LOGGER.warn("GCode file " + gcodeFileToValidate + " is invalid");
-        }
+		}
 
-        return fileIsValid;
-    }
+		return fileIsValid;
+	}
 }

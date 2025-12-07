@@ -15,15 +15,13 @@ import org.openautomaker.base.MaterialType;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 
-/**
- *
- * @author Ian
- */
 public class FilamentMenuButton extends MenuButton implements FilamentSelectionListener, FilamentContainer.FilamentDatabaseChangesListener {
 
 	private SelectedFilamentDisplayNode filamentDisplayNode = new SelectedFilamentDisplayNode();
@@ -78,13 +76,22 @@ public class FilamentMenuButton extends MenuButton implements FilamentSelectionL
 		return comparisonStatus;
 	});
 
-	private Comparator<Entry<MaterialType, List<Filament>>> byMaterialName = (Entry<MaterialType, List<Filament>> o1, Entry<MaterialType, List<Filament>> o2) -> o1.getKey().getFriendlyName().compareTo(o2.getKey().getFriendlyName());
+	//private Comparator<Entry<MaterialType, List<Filament>>> byMaterialName = (Entry<MaterialType, List<Filament>> o1, Entry<MaterialType, List<Filament>> o2) -> o1.getKey().getFriendlyName().compareTo(o2.getKey().getFriendlyName());
+
+	@Inject
+	private AdvancedModePreference advancedModePreference;
+
+	@Inject
+	private FilamentContainer filamentContainer;
+
 
 	public FilamentMenuButton() {
+		GuiceContext.get().injectMembers(this);
+
 		setGraphic(filamentDisplayNode);
 		getStyleClass().add("filament-menu-button");
 
-		new AdvancedModePreference().addChangeListener(new PreferenceChangeListener() {
+		advancedModePreference.addChangeListener(new PreferenceChangeListener() {
 			@Override
 			public void preferenceChange(PreferenceChangeEvent evt) {
 				repopulateFilaments();
@@ -92,7 +99,7 @@ public class FilamentMenuButton extends MenuButton implements FilamentSelectionL
 
 		});
 
-		FilamentContainer.getInstance().addFilamentDatabaseChangesListener(this);
+		filamentContainer.addFilamentDatabaseChangesListener(this);
 	}
 
 	/**
@@ -122,7 +129,7 @@ public class FilamentMenuButton extends MenuButton implements FilamentSelectionL
 		Map<String, Map<String, Map<MaterialType, List<Filament>>>> filamentsByBrand = new TreeMap<>(byBrandName);
 		List<String> allTheFilamentNamesIHaveEverLoaded = new ArrayList<>();
 
-		FilamentContainer.getInstance().getCompleteFilamentList().forEach(filament -> {
+		filamentContainer.getCompleteFilamentList().forEach(filament -> {
 			String uniqueFilamentRef = filament.getFriendlyFilamentName() + filament.getBrand() + filament.getCategory() + filament.getMaterial().getFriendlyName();
 			if (!allTheFilamentNamesIHaveEverLoaded.contains(uniqueFilamentRef)) {
 				String brand = filament.getBrand();

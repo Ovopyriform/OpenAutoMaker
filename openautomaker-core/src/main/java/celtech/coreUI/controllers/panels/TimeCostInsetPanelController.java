@@ -1,10 +1,8 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.ResourceBundle;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.prefs.PreferenceChangeEvent;
@@ -12,19 +10,19 @@ import java.util.prefs.PreferenceChangeListener;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
-import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
 import org.openautomaker.base.configuration.utils.RoboxProfileUtils;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.base.utils.tasks.SimpleCancellable;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.SimpleCancellable;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.GCodeGeneratorManager;
@@ -33,10 +31,10 @@ import celtech.appManager.Project;
 import celtech.coreUI.controllers.ProjectAwareController;
 import celtech.modelcontrol.ModelContainer;
 import celtech.modelcontrol.ProjectifiableThing;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Toggle;
@@ -48,11 +46,11 @@ import javafx.scene.layout.HBox;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class TimeCostInsetPanelController implements Initializable, ProjectAwareController {
+public class TimeCostInsetPanelController implements ProjectAwareController {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private final SlicerPreference fSlicerPreference = new SlicerPreference();
+	private final SlicerPreference slicerPreference;
 
 	@FXML
 	private HBox timeCostInsetRoot;
@@ -109,19 +107,41 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 	private final TimeCostThreadManager timeCostThreadManager = TimeCostThreadManager.getInstance();
 	//private final ExecutorService executorService = Executors.newFixedThreadPool(4);
 
-	private final ChangeListener<Boolean> gCodePrepChangeListener = (ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) -> {
-		currentPrinter = Lookup.getSelectedPrinterProperty().get();
-		updateHeadType(currentPrinter);
-		updateFields(currentProject);
-	};
+	private final ChangeListener<Boolean> gCodePrepChangeListener;
 
-	private final ChangeListener<ApplicationMode> applicationModeChangeListener = new ChangeListener<>() {
-		@Override
-		public void changed(ObservableValue<? extends ApplicationMode> observable, ApplicationMode oldValue, ApplicationMode newValue) {
+	private final ChangeListener<ApplicationMode> applicationModeChangeListener;
+
+	private final I18N i18n;
+	private final TaskExecutor taskExecutor;
+	private final ApplicationStatus applicationStatus;
+	private final SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected TimeCostInsetPanelController(
+			I18N i18n,
+			TaskExecutor taskExecutor,
+			ApplicationStatus applicationStatus,
+			SelectedPrinter selectedPrinter,
+			SelectedProject selectedProject,
+			SlicerPreference slicerPreference) {
+
+		this.i18n = i18n;
+		this.taskExecutor = taskExecutor;
+		this.applicationStatus = applicationStatus;
+		this.selectedPrinter = selectedPrinter;
+		this.slicerPreference = slicerPreference;
+
+		gCodePrepChangeListener = (ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) -> {
+			currentPrinter = selectedPrinter.get();
+			updateHeadType(currentPrinter);
+			updateFields(currentProject);
+		};
+
+		applicationModeChangeListener = (observable, oldValue, newValue) -> {
 			if (newValue == ApplicationMode.SETTINGS) {
 				timeCostInsetRoot.setVisible(true);
 				timeCostInsetRoot.setMouseTransparent(false);
-				if (Lookup.getSelectedProjectProperty().get() == currentProject) {
+				if (selectedProject.get() == currentProject) {
 					updateFields(currentProject);
 				}
 			}
@@ -130,27 +150,23 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 				timeCostInsetRoot.setMouseTransparent(true);
 				timeCostThreadManager.cancelRunningTimeCostTasks();
 			}
-		}
-	};
+		};
+	}
 
 	/**
 	 * Initialises the controller class.
 	 *
-	 * @param url
-	 * @param rb
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		try {
-			currentPrinter = Lookup.getSelectedPrinterProperty().get();
-			updateHeadType(Lookup.getSelectedPrinterProperty().get());
+			currentPrinter = selectedPrinter.get();
+			updateHeadType(selectedPrinter.get());
 
-			ApplicationStatus.getInstance()
-					.modeProperty().addListener(applicationModeChangeListener);
+			applicationStatus.modeProperty().addListener(applicationModeChangeListener);
 
 			setupQualityRadioButtons();
 
-			new SlicerPreference().addChangeListener(new PreferenceChangeListener() {
+			slicerPreference.addChangeListener(new PreferenceChangeListener() {
 				@Override
 				public void preferenceChange(PreferenceChangeEvent evt) {
 					updateHeadAndSlicerType();
@@ -171,18 +187,18 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 			currentHeadType = HeadContainer.defaultHeadID;
 		}
 		if (!headTypeBefore.equals(currentHeadType)) {
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+			taskExecutor.runOnGUIThread(() -> {
 				updateHeadAndSlicerType();
 			});
 		}
 	}
 
 	private void updateHeadAndSlicerType() {
-		headAndSlicerType.setText(OpenAutomakerEnv.getI18N().t("Estimates for head type: "
+		headAndSlicerType.setText(i18n.t("Estimates for head type: "
 				+ currentHeadType
 				+ "   -   "
 				+ "Slicing with: "
-				+ fSlicerPreference.get()));
+				+ slicerPreference.getValue()));
 	}
 
 	private void setupQualityRadioButtons() {
@@ -198,7 +214,7 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 		qualityToggleGroup.selectedToggleProperty().addListener(
 				(ObservableValue<? extends Toggle> observable, Toggle oldValue, Toggle newValue) -> {
 					settingPrintQuality = true;
-					GCodeGeneratorManager gCodeGeneratorManager = ((ModelContainerProject) currentProject).getGCodeGenManager();
+					GCodeGeneratorManager gCodeGeneratorManager = currentProject.getGCodeGenManager();
 					changeSlicingOrder((PrintQualityEnumeration) newValue.getUserData(), gCodeGeneratorManager);
 
 					if (currentProject != null && currentProject instanceof ModelContainerProject) {
@@ -231,7 +247,7 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 	@Override
 	public void setProject(Project project) {
 		if (currentProject != null && currentProject instanceof ModelContainerProject)
-			((ModelContainerProject) currentProject).getGCodeGenManager().getDataChangedProperty().removeListener(this.gCodePrepChangeListener);
+			currentProject.getGCodeGenManager().getDataChangedProperty().removeListener(this.gCodePrepChangeListener);
 
 		currentProject = project;
 		if (currentProject != null) {
@@ -239,7 +255,7 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 		}
 
 		if (currentProject != null && currentProject instanceof ModelContainerProject)
-			((ModelContainerProject) currentProject).getGCodeGenManager().getDataChangedProperty().addListener(this.gCodePrepChangeListener);
+			currentProject.getGCodeGenManager().getDataChangedProperty().addListener(this.gCodePrepChangeListener);
 	}
 
 	private void selectPrintProfile(PrintQualityEnumeration printQuality) {
@@ -263,11 +279,11 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 	 * Update the time, cost and weight fields. Long running calculations must be performed in a background thread. Run draft, normal and fine sequentially to avoid flooding the CPU(s).
 	 */
 	private void updateFields(Project project) {
-		if (settingPrintQuality || ApplicationStatus.getInstance().modeProperty().get() != ApplicationMode.SETTINGS) {
+		if (settingPrintQuality || applicationStatus.modeProperty().get() != ApplicationMode.SETTINGS) {
 			return;
 		}
 
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		taskExecutor.runOnGUIThread(() -> {
 			lblDraftTime.setText("...");
 			lblNormalTime.setText("...");
 			lblFineTime.setText("...");
@@ -342,8 +358,8 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 			Label lblTime, Label lblWeight, Label lblCost, Cancellable cancellable) {
 		if (!modelOutOfBounds(project, printQuality)) {
 			if (project instanceof ModelContainerProject) {
-				String working = OpenAutomakerEnv.getI18N().t("timeCost.working");
-				BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+				String working = i18n.t("timeCost.working");
+				taskExecutor.runOnGUIThread(() -> {
 					lblTime.setText(working);
 					lblWeight.setText(working);
 					lblCost.setText(working);
@@ -366,7 +382,7 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 
 		RoboxProfile profileSettings = null;
 		if (project != null && project.getNumberOfProjectifiableElements() > 0) {
-			profileSettings = project.getPrinterSettings().getSettings(headTypeToUse, fSlicerPreference.get(), printQuality);
+			profileSettings = project.getPrinterSettings().getSettings(headTypeToUse, slicerPreference.getValue(), printQuality);
 		}
 
 		double zReduction = 0.0;
@@ -374,7 +390,7 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 			zReduction = currentPrinter.headProperty().get().getZReductionProperty().get();
 		}
 
-		double raftOffset = profileSettings == null ? 0.0 : RoboxProfileUtils.calculateRaftOffset(profileSettings, fSlicerPreference.get());
+		double raftOffset = profileSettings == null ? 0.0 : RoboxProfileUtils.calculateRaftOffset(profileSettings, slicerPreference.getValue());
 
 		boolean aModelIsOffTheBed = false;
 		if (project != null && project.getTopLevelThings() != null) {
@@ -398,31 +414,31 @@ public class TimeCostInsetPanelController implements Initializable, ProjectAware
 		return aModelIsOffTheBed;
 	}
 
-	private void updatePrintQuality(PrinterSettingsOverrides printerSettings) {
-		switch (printerSettings.getPrintQuality()) {
-			case DRAFT:
-				rbDraft.setSelected(true);
-				break;
-			case NORMAL:
-				rbNormal.setSelected(true);
-				break;
-			case FINE:
-				rbFine.setSelected(true);
-				break;
-			case CUSTOM:
-				rbCustom.setSelected(true);
-				break;
-		}
-	}
+	//TODO: Tidy up
+	//	private void updatePrintQuality(PrinterSettingsOverrides printerSettings) {
+	//		switch (printerSettings.getPrintQuality()) {
+	//			case DRAFT:
+	//				rbDraft.setSelected(true);
+	//				break;
+	//			case NORMAL:
+	//				rbNormal.setSelected(true);
+	//				break;
+	//			case FINE:
+	//				rbFine.setSelected(true);
+	//				break;
+	//			case CUSTOM:
+	//				rbCustom.setSelected(true);
+	//				break;
+	//		}
+	//	}
 
 	@Override
 	public void shutdownController() {
 
 		if (currentProject != null && currentProject instanceof ModelContainerProject)
-			((ModelContainerProject) currentProject).getGCodeGenManager().getDataChangedProperty().removeListener(this.gCodePrepChangeListener);
+			currentProject.getGCodeGenManager().getDataChangedProperty().removeListener(this.gCodePrepChangeListener);
 		currentProject = null;
 
-		ApplicationStatus.getInstance()
-				.modeProperty().removeListener(applicationModeChangeListener);
+		applicationStatus.modeProperty().removeListener(applicationModeChangeListener);
 	}
 }

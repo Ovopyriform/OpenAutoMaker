@@ -7,8 +7,10 @@ import java.util.Set;
 
 import org.openautomaker.base.utils.TimeUtils;
 import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.SelectedSpinnerControl;
 
-import celtech.Lookup;
 import celtech.appManager.ModelContainerProject;
 import celtech.appManager.undo.UndoableProject;
 import celtech.coreUI.LayoutSubmode;
@@ -18,6 +20,7 @@ import celtech.coreUI.visualisation.ScreenExtentsProvider.ScreenExtentsListener;
 import celtech.coreUI.visualisation.ThreeDViewManager;
 import celtech.modelcontrol.ModelContainer;
 import celtech.modelcontrol.ProjectifiableThing;
+import jakarta.inject.Inject;
 import javafx.application.Platform;
 import javafx.beans.property.ObjectProperty;
 import javafx.concurrent.Task;
@@ -31,10 +34,6 @@ import javafx.geometry.Point2D;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 
-/**
- *
- * @author Ian
- */
 public class ZCutEntryBox extends HBox implements ScreenExtentsListener {
 
 	private final Pane paneInWhichControlResides;
@@ -58,7 +57,7 @@ public class ZCutEntryBox extends HBox implements ScreenExtentsListener {
 			Task cutTask = new Task<Void>() {
 				@Override
 				protected Void call() throws Exception {
-					Lookup.getSpinnerControl().startSpinning(paneInWhichControlResides);
+					selectedSpinnerControl.get().startSpinning(paneInWhichControlResides);
 					timeUtils.timerStart(this, "Cut");
 					List<ModelContainer> resultingModels = viewManager.cutModelAt(currentModel, cutHeight.getAsDouble());
 					timeUtils.timerStop(this, "Cut");
@@ -82,7 +81,7 @@ public class ZCutEntryBox extends HBox implements ScreenExtentsListener {
 
 							//                            Set<ModelContainer> modelContainers = Lookup.getProjectGUIState(project).getProjectSelection().getSelectedModelsSnapshot();
 							//                            undoableProject.cut(modelContainers, (float) -cutHeight.doubleValueProperty().get());
-							Lookup.getSpinnerControl().stopSpinning();
+							selectedSpinnerControl.get().stopSpinning();
 
 						}
 					});
@@ -124,7 +123,21 @@ public class ZCutEntryBox extends HBox implements ScreenExtentsListener {
 		currentModel.removeScreenExtentsChangeListener(this);
 	}
 
+	@Inject
+	private SelectedSpinnerControl selectedSpinnerControl;
+
+	@Inject
+	private UndoableProjectFactory undoableProjectFactory;
+
+	@Inject
+	I18N i18n;
+
+	@Inject
+	FXMLLoader fxmlLoader;
+
 	public ZCutEntryBox() {
+		GuiceContext.get().injectMembers(this);
+
 		paneInWhichControlResides = null;
 		layoutSubmodeProperty = null;
 		viewManager = null;
@@ -133,23 +146,23 @@ public class ZCutEntryBox extends HBox implements ScreenExtentsListener {
 		loadContent();
 	}
 
-	public ZCutEntryBox(Pane paneInWhichControlResides,
-			ObjectProperty<LayoutSubmode> layoutSubmodeProperty,
-			ThreeDViewManager viewManager,
-			ModelContainerProject project) {
+	public ZCutEntryBox(Pane paneInWhichControlResides, ObjectProperty<LayoutSubmode> layoutSubmodeProperty, ThreeDViewManager viewManager, ModelContainerProject project) {
+		GuiceContext.get().injectMembers(this);
+
 		this.paneInWhichControlResides = paneInWhichControlResides;
 		this.layoutSubmodeProperty = layoutSubmodeProperty;
 		this.viewManager = viewManager;
 		this.project = project;
-		undoableProject = new UndoableProject(project);
+		undoableProject = undoableProjectFactory.create(project);
 		loadContent();
 	}
 
 	private void loadContent() {
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/celtech/resources/fxml/components/ZCutEntryBox.fxml"), new I18N().getResourceBundle());
+		fxmlLoader.setLocation(getClass().getResource("/celtech/resources/fxml/components/ZCutEntryBox.fxml"));
 		fxmlLoader.setController(this);
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setClassLoader(this.getClass().getClassLoader());
+		fxmlLoader.setResources(i18n.getResourceBundle());
 
 		try {
 			fxmlLoader.load();

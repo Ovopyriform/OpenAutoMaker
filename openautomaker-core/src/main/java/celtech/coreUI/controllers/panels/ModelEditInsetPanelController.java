@@ -3,25 +3,24 @@
  */
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.text.DecimalFormat;
 import java.util.HashSet;
-import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.Math.MathUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.Project;
 import celtech.appManager.undo.UndoableProject;
 import celtech.coreUI.LayoutSubmode;
-import celtech.coreUI.ProjectGUIRules;
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.controllers.ProjectAwareController;
 import celtech.coreUI.visualisation.ProjectSelection;
@@ -39,6 +38,7 @@ import celtech.modelcontrol.ScaleableTwoD;
 import celtech.modelcontrol.Translateable;
 import celtech.modelcontrol.TranslateableThreeD;
 import celtech.modelcontrol.TranslateableTwoD;
+import jakarta.inject.Inject;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -46,7 +46,6 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.Group;
 import javafx.scene.control.Label;
 import javafx.scene.control.Toggle;
@@ -61,9 +60,9 @@ import jfxtras.styles.jmetro8.ToggleSwitch;
  *
  * @author tony
  */
-public class ModelEditInsetPanelController implements Initializable, ProjectAwareController {
+public class ModelEditInsetPanelController implements ProjectAwareController {
 
-	private static final Logger LOGGER = LogManager.getLogger(ModelEditInsetPanelController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	public interface NoArgsVoidFunc {
 
@@ -204,12 +203,34 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 
 	private IntegerProperty numSelectedModels = new SimpleIntegerProperty(0);
 	private ProjectSelection projectSelection;
-	private ProjectGUIRules projectGUIRules;
+	//private ProjectGUIRules projectGUIRules;
 	private ObjectProperty<LayoutSubmode> layoutSubmode;
+
+	private final ApplicationStatus applicationStatus;
+	private final I18N i18n;
+	private final ProjectGUIStates projectGUIStates;
+	private final SelectedProject selectedProject;
+	private final UndoableProjectFactory undoableProjectFactory;
+
+	@Inject
+	protected ModelEditInsetPanelController(
+			ApplicationStatus applicationStatus,
+			I18N i18n,
+			ProjectGUIStates projectGUIStates,
+			SelectedProject selectedProject,
+			UndoableProjectFactory undoableProjectFactory) {
+
+		this.applicationStatus = applicationStatus;
+		this.i18n = i18n;
+		this.projectGUIStates = projectGUIStates;
+		this.selectedProject = selectedProject;
+		this.undoableProjectFactory = undoableProjectFactory;
+
+	}
 
 	@FXML
 	private void flipMaterials(ActionEvent event) {
-		Set<ProjectifiableThing> selectedModelContainers = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ProjectifiableThing> selectedModelContainers = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		Set<ModelContainer> modelContainersToFlipToFilament0 = new HashSet<>();
 		Set<ModelContainer> modelContainersToFlipToFilament1 = new HashSet<>();
 
@@ -273,8 +294,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 		widthCaption.setVisible(!proportionalOn);
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	public void initialize() {
 		unlinkIcon.setVisible(false);
 		linkIcon.visibleProperty().bind(preserveAspectRatio.selectedProperty());
 		unlinkIcon.visibleProperty().bind(preserveAspectRatio.selectedProperty().not());
@@ -287,11 +307,11 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 		setUpNumSelectedModelsListener();
 		preserveAspectRatio.setSelected(true);
 
-		Lookup.getSelectedProjectProperty().addListener((ObservableValue<? extends Project> observable, Project oldValue, Project newValue) -> {
+		selectedProject.addListener((ObservableValue<? extends Project> observable, Project oldValue, Project newValue) -> {
 			whenProjectChanged(newValue);
 		});
 
-		ApplicationStatus.getInstance().modeProperty().addListener(
+		applicationStatus.modeProperty().addListener(
 				(ObservableValue<? extends ApplicationMode> observable, ApplicationMode oldValue, ApplicationMode newValue) -> {
 					if (newValue == ApplicationMode.SETTINGS) {
 						modelEditInsetRoot.setVisible(false);
@@ -350,15 +370,15 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 		boolean showDisplay = false;
 
 		if (currentProject != null) {
-			Set<ProjectifiableThing> selectedModels = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+			Set<ProjectifiableThing> selectedModels = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 
 			if (selectedModels.size() > 1) {
-				modelName.setText(OpenAutomakerEnv.getI18N().t("modelEdit.MultipleModelsSelected"));
+				modelName.setText(i18n.t("modelEdit.MultipleModelsSelected"));
 				modelName.setTooltip(null);
 				showDisplay = true;
 			}
 			else if (selectedModels.size() == 1) {
-				String name = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot().iterator().next().getModelName();
+				String name = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot().iterator().next().getModelName();
 				modelName.setText(name);
 				modelName.setTooltip(new Tooltip(name));
 				showDisplay = true;
@@ -369,8 +389,8 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 				boolean foundMaterial1 = false;
 				boolean displayMaterialButtons = false;
 
-				if (Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot().size() > 0) {
-					for (ProjectifiableThing container : Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot()) {
+				if (projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot().size() > 0) {
+					for (ProjectifiableThing container : projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot()) {
 						if (container instanceof ModelGroup) {
 							Set<ModelContainer> childModels = ((ModelGroup) container).getDescendentModelContainers();
 							for (ModelContainer childModel : childModels) {
@@ -394,7 +414,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 						}
 					}
 
-					ProjectifiableThing firstModel = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot().iterator().next();
+					ProjectifiableThing firstModel = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot().iterator().next();
 
 					boolean isTwoDTranslateable = TranslateableTwoD.class.isInstance(firstModel);
 					boolean isThreeDTranslateable = TranslateableThreeD.class.isInstance(firstModel);
@@ -477,13 +497,13 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 		}
 
 		if (project != null) {
-			undoableProject = new UndoableProject(project);
+			undoableProject = undoableProjectFactory.create(project);
 
-			projectSelection = Lookup.getProjectGUIState(project).getProjectSelection();
-			projectGUIRules = Lookup.getProjectGUIState(project).getProjectGUIRules();
+			projectSelection = projectGUIStates.get(project).getProjectSelection();
+			//projectGUIRules = projectGUIStates.get(project).getProjectGUIRules();
 			numSelectedModels.bind(projectSelection.getNumModelsSelectedProperty());
 
-			layoutSubmode = Lookup.getProjectGUIState(project).getLayoutSubmodeProperty();
+			layoutSubmode = projectGUIStates.get(project).getLayoutSubmodeProperty();
 			layoutSubmode.addListener(layoutSubmodeListener);
 
 			ProjectSelection.PrimarySelectedModelDetails selectedModelDetails = projectSelection.getPrimarySelectedModelDetails();
@@ -519,21 +539,21 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 	void doGroup(ActionEvent event) {
 		Set<ModelContainer> modelGroups = currentProject.getAllModels().stream().map(ModelContainer.class::cast).filter(
 				mc -> mc instanceof ModelGroup).collect(Collectors.toSet());
-		Set<Groupable> modelContainers = (Set) Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<Groupable> modelContainers = (Set) projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		undoableProject.group(modelContainers);
 		Set<ModelContainer> changedModelGroups = currentProject.getAllModels().stream().map(ModelContainer.class::cast).filter(
 				mc -> mc instanceof ModelGroup).collect(Collectors.toSet());
 		changedModelGroups.removeAll(modelGroups);
-		Lookup.getProjectGUIState(currentProject).getProjectSelection().deselectAllModels();
+		projectGUIStates.get(currentProject).getProjectSelection().deselectAllModels();
 		if (changedModelGroups.size() == 1) {
-			Lookup.getProjectGUIState(currentProject).getProjectSelection().addSelectedItem(
+			projectGUIStates.get(currentProject).getProjectSelection().addSelectedItem(
 					changedModelGroups.iterator().next());
 		}
 	}
 
 	@FXML
 	void doSelectSameMaterial(ActionEvent event) {
-		Set<ModelContainer> modelContainers = (Set) Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ModelContainer> modelContainers = (Set) projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		if (modelContainers.size() > 0) {
 			ModelContainer firstModelContainer = modelContainers.iterator().next();
 			int associatedExtruder = firstModelContainer.getAssociateWithExtruderNumberProperty().get();
@@ -541,7 +561,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 
 			allModels.stream().map(ModelContainer.class::cast).forEach(candidateModel -> {
 				if (candidateModel.getAssociateWithExtruderNumberProperty().get() == associatedExtruder) {
-					Lookup.getProjectGUIState(currentProject).getProjectSelection().addSelectedItem(candidateModel);
+					projectGUIStates.get(currentProject).getProjectSelection().addSelectedItem(candidateModel);
 				}
 			});
 		}
@@ -557,7 +577,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 
 	@FXML
 	void setMaterial0(ActionEvent event) {
-		Set<ProjectifiableThing> selectedModelContainers = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ProjectifiableThing> selectedModelContainers = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		Set<ModelContainer> modelContainersToFlipToFilament0 = new HashSet<>();
 		Set<ModelContainer> modelContainersToFlipToFilament1 = null;
 
@@ -586,7 +606,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 
 	@FXML
 	void setMaterial1(ActionEvent event) {
-		Set<ProjectifiableThing> selectedModelContainers = Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ProjectifiableThing> selectedModelContainers = projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		Set<ModelContainer> modelContainersToFlipToFilament0 = null;
 		Set<ModelContainer> modelContainersToFlipToFilament1 = new HashSet<>();
 
@@ -614,7 +634,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 
 	@FXML
 	void doDropToBed(ActionEvent event) {
-		Set<ModelContainer> modelContainers = (Set) Lookup.getProjectGUIState(currentProject).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ModelContainer> modelContainers = (Set) projectGUIStates.get(currentProject).getProjectSelection().getSelectedModelsSnapshot();
 		undoableProject.dropToBed(modelContainers);
 	}
 
@@ -668,7 +688,7 @@ public class ModelEditInsetPanelController implements Initializable, ProjectAwar
 	}
 
 	private void setupProjectSelectedListener() {
-		Lookup.getSelectedProjectProperty().addListener((ObservableValue<? extends Project> observable, Project oldValue, Project newValue) -> {
+		selectedProject.addListener((ObservableValue<? extends Project> observable, Project oldValue, Project newValue) -> {
 			whenProjectChanged(newValue);
 		});
 	}

@@ -10,19 +10,23 @@ import javax.print.PrintException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.Filament;
+import org.openautomaker.base.inject.printer_control.PurgePrinterErrorHandlerFactory;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionActions;
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.CalibrationUtils;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.base.utils.tasks.Cancellable;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.rx.HeadEEPROMDataResponse;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ReadOnlyIntegerProperty;
@@ -36,6 +40,8 @@ import javafx.beans.property.SimpleIntegerProperty;
 public class PurgeActions extends StateTransitionActions {
 
 	public class PurgeException extends Exception {
+
+		private static final long serialVersionUID = -2207384100914160178L;
 
 		public PurgeException(String message) {
 			super(message);
@@ -68,11 +74,30 @@ public class PurgeActions extends StateTransitionActions {
 
 	private final boolean safetyFeaturesRequired;
 
-	public PurgeActions(Printer printer, Cancellable userCancellable, Cancellable errorCancellable, boolean requireSafetyFeatures) {
+	private final TaskExecutor taskExecutor;
+	private final PrinterUtils printerUtils;
+	private final PurgePrinterErrorHandlerFactory purgePrinterErrorHandlerFactory;
+
+	@Inject
+	protected PurgeActions(
+			TaskExecutor taskExecutor,
+			PrinterUtils printerUtils,
+			PurgePrinterErrorHandlerFactory purgePrinterErrorHandlerFactory,
+			CalibrationUtils calibrationUtils,
+			@Assisted Printer printer,
+			@Assisted("userCancellable") Cancellable userCancellable,
+			@Assisted("errorCancellable") Cancellable errorCancellable,
+			@Assisted boolean requireSafetyFeatures) {
+
 		super(userCancellable, errorCancellable);
+
+		this.taskExecutor = taskExecutor;
+		this.printerUtils = printerUtils;
+		this.purgePrinterErrorHandlerFactory = purgePrinterErrorHandlerFactory;
+
 		this.safetyFeaturesRequired = requireSafetyFeatures;
 		this.printer = printer;
-		CalibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
+		calibrationUtils.setCancelledIfPrinterDisconnected(printer, errorCancellable);
 
 		purgeTemperature = new ArrayList<>();
 		lastDisplayTemperature = new ArrayList<>();
@@ -83,7 +108,7 @@ public class PurgeActions extends StateTransitionActions {
 			purgeTemperature.add(new SimpleIntegerProperty(0));
 			lastDisplayTemperature.add(new SimpleIntegerProperty(0));
 			currentDisplayTemperature.add(new SimpleIntegerProperty(0));
-			nozzleFilamentTemperature.add(new Float(0));
+			nozzleFilamentTemperature.add(Float.valueOf(0));
 			purgeFilament.add(null);
 		}
 
@@ -110,7 +135,7 @@ public class PurgeActions extends StateTransitionActions {
 		printer.switchBedHeaterOff();
 		switchHeatersAndHeadLightOff();
 
-		PrinterUtils.waitOnBusy(printer, (Cancellable) null);
+		printerUtils.waitOnBusy(printer, (Cancellable) null);
 		try {
 			// wait for above actions to complete so that AutoMaker does not return
 			// to Status page until cancel/reset is complete
@@ -122,7 +147,7 @@ public class PurgeActions extends StateTransitionActions {
 	}
 
 	public void doInitialiseAction() throws RoboxCommsException, PrintException {
-		printerErrorHandler = new PurgePrinterErrorHandler(printer, errorCancellable);
+		printerErrorHandler = purgePrinterErrorHandlerFactory.create(printer, errorCancellable);
 		printerErrorHandler.registerForPrinterErrors();
 
 		// put the write after the purge routine once the firmware no longer raises an error whilst connected to the host computer
@@ -142,7 +167,7 @@ public class PurgeActions extends StateTransitionActions {
 		int desiredBedTemperature = 90;
 		printer.setBedTargetTemperature(desiredBedTemperature);
 		printer.goToTargetBedTemperature();
-		boolean bedHeatFailed = PrinterUtils.waitUntilTemperatureIsReached(printer.getPrinterAncillarySystems().bedTemperatureProperty(), null, desiredBedTemperature, 5, 600, userOrErrorCancellable);
+		boolean bedHeatFailed = printerUtils.waitUntilTemperatureIsReached(printer.getPrinterAncillarySystems().bedTemperatureProperty(), null, desiredBedTemperature, 5, 600, userOrErrorCancellable);
 
 		if (bedHeatFailed) {
 			throw new PurgeException("Bed heat failed");
@@ -159,7 +184,7 @@ public class PurgeActions extends StateTransitionActions {
 		}
 
 		if (purgeNozzleHeater0.get()) {
-			boolean nozzleHeatFailed = PrinterUtils.waitUntilTemperatureIsReached(printer.headProperty().get().getNozzleHeaters().get(0).nozzleTemperatureProperty(), null, purgeTemperature.get(0).get(), 5, 300, userOrErrorCancellable);
+			boolean nozzleHeatFailed = printerUtils.waitUntilTemperatureIsReached(printer.headProperty().get().getNozzleHeaters().get(0).nozzleTemperatureProperty(), null, purgeTemperature.get(0).get(), 5, 300, userOrErrorCancellable);
 
 			if (nozzleHeatFailed) {
 				throw new PurgeException("Left nozzle heat failed");
@@ -167,7 +192,7 @@ public class PurgeActions extends StateTransitionActions {
 		}
 
 		if (purgeNozzleHeater1.get()) {
-			boolean nozzleHeatFailed = PrinterUtils.waitUntilTemperatureIsReached(printer.headProperty().get().getNozzleHeaters().get(1).nozzleTemperatureProperty(), null, purgeTemperature.get(1).get(), 5, 300, userOrErrorCancellable);
+			boolean nozzleHeatFailed = printerUtils.waitUntilTemperatureIsReached(printer.headProperty().get().getNozzleHeaters().get(1).nozzleTemperatureProperty(), null, purgeTemperature.get(1).get(), 5, 300, userOrErrorCancellable);
 
 			if (nozzleHeatFailed) {
 				throw new PurgeException("Right nozzle heat failed");
@@ -212,7 +237,7 @@ public class PurgeActions extends StateTransitionActions {
 
 	private void openDoor() {
 		// needs to run on gui thread to make sure it is called after status set to idle
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		taskExecutor.runOnGUIThread(() -> {
 			try {
 				printer.goToOpenDoorPosition(null, requireSafetyFeatures);
 			} catch (PrinterException ex) {

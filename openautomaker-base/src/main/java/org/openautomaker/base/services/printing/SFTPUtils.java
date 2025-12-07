@@ -1,7 +1,5 @@
 package org.openautomaker.base.services.printing;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.KEY;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -9,8 +7,9 @@ import java.nio.file.Paths;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.application.KeyPathPreference;
 
+import com.google.inject.assistedinject.Assisted;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
@@ -18,23 +17,34 @@ import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 import com.jcraft.jsch.SftpProgressMonitor;
 
+import jakarta.inject.Inject;
+
 /**
  *
  * @author Tony Aldhous
  */
+//TODO: Look at a better way to package this.  Plus, best way to generate keys and push to root?
 public class SFTPUtils {
 
-	private static final String PRIVATE_KEY = "automaker-root.ssh";
+	//TODO: Look as use of personal ssh keys rather than one size fits all.
 	private static final int[] pp1 = { 81, 86, 10, 93, 51, 78, 87, 120, 117 };
 	private static final int[] pp2 = { -14, 155, 66, 138, 31, 189, 11, 231, 3 };
 	private static final String USER = "pi";
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private String hostAddress = null;
+	private final String hostAddress;
 
-	public SFTPUtils(String hostAddress) {
+	private final KeyPathPreference keyPathPreference;
+
+	@Inject
+	public SFTPUtils(
+			KeyPathPreference keyPathPreference,
+			@Assisted String hostAddress) {
+
+		this.keyPathPreference = keyPathPreference;
 		this.hostAddress = hostAddress;
+
 	}
 
 	/**
@@ -92,7 +102,7 @@ public class SFTPUtils {
 				pp += Character.toString((char) ((i % 2) == 0 ? pp1[i] + pp2[i] : pp2[i] - pp1[i]));
 
 
-			jsch.addIdentity(OpenAutomakerEnv.get().getApplicationPath(KEY).resolve(PRIVATE_KEY).toString(), pp);
+			jsch.addIdentity(keyPathPreference.getValue().toString(), pp);
 			Session session = jsch.getSession(USER, hostAddress, 22);
 			java.util.Properties config = new java.util.Properties();
 			config.put("StrictHostKeyChecking", "no");

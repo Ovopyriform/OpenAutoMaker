@@ -5,63 +5,72 @@ import java.io.IOException;
 import java.util.Locale;
 
 import org.openautomaker.base.configuration.RoboxProfile;
+import org.openautomaker.base.configuration.datafileaccessors.PrintProfileSettingsContainer;
+import org.openautomaker.base.slicer.SlicerManager;
 import org.openautomaker.environment.Slicer;
+
+import jakarta.inject.Inject;
 
 /**
  *
  * @author George Salter
  */
-public class Cura4ConfigWriter extends SlicerConfigWriter {
+public class Cura4ConfigWriter extends AbstractSlicerConfigWriter {
 
-	public Cura4ConfigWriter(Slicer slicerType) {
-		super(slicerType);
-		PRINT_PROFILE_SETTINGS_CONTAINER
-				.getDefaultPrintProfileSettingsForSlicer(slicerType)
+	@Inject
+	public Cura4ConfigWriter(
+			SlicerManager slicerManager,
+			PrintProfileSettingsContainer printProfileSettingsContainer) {
+
+		super(slicerManager);
+
+		printProfileSettingsContainer
+				.getDefaultPrintProfileSettingsForSlicer(slicerManager.getSlicer())
 				.getAllSettings()
 				.forEach(setting -> printProfileSettingsMap.put(setting.getId(), setting));
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, boolean value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, boolean value) throws IOException {
 		writer.append(variableName + "=" + value + "\n");
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, int value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, int value) throws IOException {
 		writer.append(variableName + "=" + value + "\n");
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, float value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, float value) throws IOException {
 		writer.append(variableName + "=" + threeDPformatter.format(value) + "\n");
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, String value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, String value) throws IOException {
 		writer.append(variableName + "=" + value + "\n");
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, Slicer value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, Slicer value) throws IOException {
 		writer.append(variableName + "=" + value + "\n");
 	}
 
 	@Override
-	protected void outputLine(FileWriter writer, String variableName, Enum value) throws IOException {
+	public void outputLine(FileWriter writer, String variableName, Enum value) throws IOException {
 		writer.append(variableName + "=" + value.name().toLowerCase() + "\n");
 	}
 
 	@Override
-	protected void outputPrintCentre(FileWriter writer, float centreX, float centreY) throws IOException {
+	public void outputPrintCentre(FileWriter writer, float centreX, float centreY) throws IOException {
 	}
 
 	@Override
-	protected void outputFilamentDiameter(FileWriter writer, float diameter) throws IOException {
+	public void outputFilamentDiameter(FileWriter writer, float diameter) throws IOException {
 		outputLine(writer, "material_diameter", String.format(Locale.UK, "%f", diameter));
 	}
 
 	@Override
-	void bringDataInBounds(RoboxProfile profileData) {
+	public void bringDataInBounds(RoboxProfile profileData) {
 	}
 
 }

@@ -3,10 +3,13 @@ package celtech.coreUI.controllers.panels;
 
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.coreUI.components.VerticalMenu;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -28,11 +31,37 @@ public class CalibrationMenuConfiguration {
 	private final boolean displayHeight;
 	private final boolean displayAlignment;
 
+
 	public Printer currentlySelectedPrinter;
 
-	public CalibrationMenuConfiguration(boolean displayOpening,
-			boolean displayHeight,
-			boolean displayAlignment) {
+	private final SelectedPrinter selectedPrinter;
+
+	private final I18N i18n;
+
+	@Inject
+	protected CalibrationMenuConfiguration(
+			I18N i18n,
+			SelectedPrinter selectedPrinter) {
+
+		this.selectedPrinter = selectedPrinter;
+		this.i18n = i18n;
+
+		this.displayOpening = true;
+		this.displayHeight = true;
+		this.displayAlignment = true;
+	}
+
+
+	//TODO: Why is this here?
+	protected CalibrationMenuConfiguration(
+			I18N i18n,
+			SelectedPrinter selectedPrinter,
+			@Assisted("displayOpening") boolean displayOpening,
+			@Assisted("displayHeight") boolean displayHeight,
+			@Assisted("displayAlignment") boolean displayAlignment) {
+
+		this.i18n = i18n;
+		this.selectedPrinter = selectedPrinter;
 		this.displayOpening = displayOpening;
 		this.displayHeight = displayHeight;
 		this.displayAlignment = displayAlignment;
@@ -59,14 +88,14 @@ public class CalibrationMenuConfiguration {
 					currentlySelectedPrinter.canCalibrateXYAlignmentProperty());
 		}
 
-		calibrationMenu.setTitle(OpenAutomakerEnv.getI18N().t("calibrationPanel.title"));
+		calibrationMenu.setTitle(i18n.t("calibrationPanel.title"));
 
 		if (displayOpening) {
 			VerticalMenu.NoArgsVoidFunc doOpeningCalibration = () -> {
 				calibrationInsetPanelController.setCalibrationMode(
 						CalibrationMode.NOZZLE_OPENING);
 			};
-			calibrationMenu.addItem(OpenAutomakerEnv.getI18N().t("calibrationMenu.nozzleOpening"),
+			calibrationMenu.addItem(i18n.t("calibrationMenu.nozzleOpening"),
 					doOpeningCalibration, nozzleOpeningCalibrationEnabled);
 		}
 
@@ -75,7 +104,7 @@ public class CalibrationMenuConfiguration {
 				calibrationInsetPanelController.setCalibrationMode(
 						CalibrationMode.NOZZLE_HEIGHT);
 			};
-			calibrationMenu.addItem(OpenAutomakerEnv.getI18N().t("calibrationMenu.nozzleHeight"),
+			calibrationMenu.addItem(i18n.t("calibrationMenu.nozzleHeight"),
 					doHeightCalibration, nozzleHeightCalibrationEnabled);
 		}
 
@@ -84,11 +113,11 @@ public class CalibrationMenuConfiguration {
 				calibrationInsetPanelController.setCalibrationMode(
 						CalibrationMode.X_AND_Y_OFFSET);
 			};
-			calibrationMenu.addItem(OpenAutomakerEnv.getI18N().t("calibrationMenu.nozzleAlignment"),
+			calibrationMenu.addItem(i18n.t("calibrationMenu.nozzleAlignment"),
 					doXYAlignmentCalibration, xyAlignmentCalibrationEnabled);
 		}
 
-		Lookup.getSelectedPrinterProperty().addListener(selectedPrinterListener);
+		selectedPrinter.addListener(selectedPrinterListener);
 	}
 
 	private ChangeListener<Printer> selectedPrinterListener = (ObservableValue<? extends Printer> observable, Printer oldValue, Printer newPrinter) -> {

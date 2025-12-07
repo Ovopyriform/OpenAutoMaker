@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
+import jakarta.inject.Inject;
 import javafx.animation.AnimationTimer;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
@@ -29,10 +33,13 @@ public class Spinner extends StackPane implements Initializable {
 
 	private AnimationTimer timer = null;
 
-	public Spinner() {
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
 
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/spinner.fxml"));
+	public Spinner() {
+		GuiceContext.get().injectMembers(this);
+
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/components/spinner.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

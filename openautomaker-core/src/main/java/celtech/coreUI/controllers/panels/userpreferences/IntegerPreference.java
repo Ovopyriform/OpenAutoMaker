@@ -1,9 +1,11 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.Control;
@@ -18,8 +20,15 @@ public class IntegerPreference implements PreferencesInnerPanelController.Prefer
 	private final IntegerProperty integerProperty;
 	private final String caption;
 
+	@Inject
+	private I18N i18n;
+
 	public IntegerPreference(IntegerProperty integerProperty,
 			String caption) {
+
+		//TODO: GuiceContext here seems wrong.
+		GuiceContext.get().injectMembers(this);
+
 		this.integerProperty = integerProperty;
 		this.caption = caption;
 
@@ -55,7 +64,7 @@ public class IntegerPreference implements PreferencesInnerPanelController.Prefer
 
 	@Override
 	public String getDescription() {
-		return OpenAutomakerEnv.getI18N().t(caption);
+		return i18n.t(caption);
 	}
 
 	@Override

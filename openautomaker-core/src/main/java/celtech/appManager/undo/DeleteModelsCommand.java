@@ -1,6 +1,3 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.appManager.undo;
 
 import java.util.Set;
@@ -15,7 +12,7 @@ import celtech.modelcontrol.ProjectifiableThing;
  *
  * @author tony
  */
-public class DeleteModelsCommand extends Command {
+public class DeleteModelsCommand implements Command {
 	private static final Logger LOGGER = LogManager.getLogger(DeleteModelsCommand.class.getName());
 
 	Project project;

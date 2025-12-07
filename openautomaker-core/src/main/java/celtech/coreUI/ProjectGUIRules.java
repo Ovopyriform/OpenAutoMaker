@@ -3,8 +3,11 @@
  */
 package celtech.coreUI;
 
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.coreUI.visualisation.ProjectSelection;
 import celtech.modelcontrol.ModelContainer;
+import jakarta.inject.Inject;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
 import javafx.collections.ObservableSet;
@@ -18,8 +21,11 @@ public class ProjectGUIRules {
 
 	private final ProjectSelection projectSelection;
 
-	public ProjectGUIRules(ProjectSelection projectSelection,
-			ObservableSet<ModelContainer> excludedFromSelection) {
+	@Inject
+	public ProjectGUIRules(
+			@Assisted ProjectSelection projectSelection,
+			@Assisted ObservableSet<ModelContainer> excludedFromSelection) {
+
 		this.projectSelection = projectSelection;
 		this.excludedFromSelection = excludedFromSelection;
 	}

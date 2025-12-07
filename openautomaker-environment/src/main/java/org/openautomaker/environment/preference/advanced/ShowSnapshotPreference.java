@@ -1,15 +1,30 @@
 package org.openautomaker.environment.preference.advanced;
 
-import org.openautomaker.environment.preference.AbsBooleanPreference;
+import java.util.prefs.Preferences;
+
+import org.openautomaker.environment.preference.ASimpleBooleanPreference;
+
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 /**
  * Preference to determine is we show the snapshot panel in advanced mode
  */
-public class ShowSnapshotPreference extends AbsBooleanPreference {
+@Singleton
+public class ShowSnapshotPreference extends ASimpleBooleanPreference {
+
+	@Inject
+	protected ShowSnapshotPreference() {
+		super();
+	}
 
 	@Override
-	protected Boolean getDefault() {
+	public Boolean getDefault() {
 		return Boolean.FALSE;
 	}
 
+	@Override
+	protected Preferences getNode() {
+		return getUserNode();
+	}
 }

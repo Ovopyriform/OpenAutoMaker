@@ -3,19 +3,19 @@ package celtech.coreUI.components.Notifications;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ResourceBundle;
 
-import org.openautomaker.base.appManager.NotificationType;
+import org.openautomaker.base.notification_manager.NotificationType;
 import org.openautomaker.base.utils.Math.MathUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.coreUI.components.HyperlinkedLabel;
+import jakarta.inject.Inject;
 import javafx.animation.Animation;
 import javafx.animation.Transition;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.fxml.Initializable;
 import javafx.scene.Group;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -24,11 +24,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
-/**
- *
- * @author tony
- */
-public abstract class AppearingNotificationBar extends StackPane implements Initializable {
+public abstract class AppearingNotificationBar extends StackPane {
 
 	@FXML
 	private StackPane notificationBar;
@@ -87,15 +83,23 @@ public abstract class AppearingNotificationBar extends StackPane implements Init
 	private double panelHeight = 0;
 	private final Rectangle clippingRectangle = new Rectangle();
 
+	@Inject
+	private FXMLLoader fxmlLoader;
+
+	@Inject
+	private I18N i18n;
+
 	public AppearingNotificationBar() {
 		super();
 
-		URL fxml = getClass().getResource(
-				"/celtech/resources/fxml/components/notifications/appearingNotificationBar.fxml");
-		FXMLLoader fxmlLoader = new FXMLLoader(fxml);
+		GuiceContext.get().injectMembers(this);
+
+		URL fxml = getClass().getResource("/celtech/resources/fxml/components/notifications/appearingNotificationBar.fxml");
+		fxmlLoader.setLocation(fxml);
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 		fxmlLoader.setClassLoader(getClass().getClassLoader());
+		fxmlLoader.setResources(i18n.getResourceBundle());
 
 		try {
 			fxmlLoader.load();
@@ -120,6 +124,7 @@ public abstract class AppearingNotificationBar extends StackPane implements Init
 
 		notificationStepXofY.setVisible(false);
 		actionButton.setVisible(false);
+
 	}
 
 	/**
@@ -199,8 +204,7 @@ public abstract class AppearingNotificationBar extends StackPane implements Init
 		}
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	public void initialize() {
 		panelHeight = notificationBar.getPrefHeight();
 
 		notificationBar.setMinHeight(0);
@@ -268,7 +272,7 @@ public abstract class AppearingNotificationBar extends StackPane implements Init
 	}
 
 	public void setXOfY(int step, int ofSteps) {
-		notificationStepXofY.setText(step + " " + OpenAutomakerEnv.getI18N().t("misc.of") + " " + ofSteps);
+		notificationStepXofY.setText(step + " " + i18n.t("misc.of") + " " + ofSteps);
 		notificationStepXofY.setVisible(true);
 	}
 

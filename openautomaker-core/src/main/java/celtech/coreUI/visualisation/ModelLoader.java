@@ -11,27 +11,31 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.utils.RectangularBounds;
-import org.openautomaker.environment.preference.SplitLoosePartsOnLoadPreference;
+import org.openautomaker.environment.preference.modeling.SplitLoosePartsOnLoadPreference;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
+import org.openautomaker.ui.inject.project.ModelContainerProjectFactory;
+import org.openautomaker.ui.inject.project.ShapeContainerProjectFactory;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ModelContainerProject;
 import celtech.appManager.Project;
 import celtech.appManager.ProjectCallback;
 import celtech.appManager.ProjectMode;
-import celtech.appManager.ShapeContainerProject;
 import celtech.appManager.undo.UndoableProject;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResult;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResultType;
 import celtech.modelcontrol.Groupable;
 import celtech.modelcontrol.ModelContainer;
-import celtech.modelcontrol.ModelGroup;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.services.modelLoader.ModelLoadResults;
 import celtech.services.modelLoader.ModelLoaderService;
 import celtech.utils.threed.MeshUtils;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.concurrent.WorkerStateEvent;
 import javafx.scene.shape.TriangleMesh;
@@ -41,15 +45,48 @@ import javafx.scene.shape.TriangleMesh;
  *
  * @author tony
  */
-//TODO: Look into model loading.
+@Singleton
 public class ModelLoader {
+	//TODO: Look into model loading.  Perhaps a service?  Should this be a singleton?
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			ModelLoader.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 	/*
 	 * Mesh Model loading
 	 */
-	public static final ModelLoaderService modelLoaderService = new ModelLoaderService();
+	private final ModelLoaderService modelLoaderService;
+
+	private final SystemNotificationManager systemNotificationManager;
+	private final SelectedPrinter selectedPrinter;
+	private final ModelContainerProjectFactory modelContainerProjectFactory;
+	private final ShapeContainerProjectFactory shapeContainerProjectFactory;
+	private final UndoableProjectFactory undoableProjectFactory;
+	private final ModelGroupFactory modelGroupFactory;
+	private final SplitLoosePartsOnLoadPreference splitLoosePartsOnLoadPreference;
+
+	@Inject
+	protected ModelLoader(
+			SystemNotificationManager systemNotificationManager,
+			ModelLoaderService modelLoaderService,
+			SelectedPrinter selectedPrinter,
+			ModelContainerProjectFactory modelContainerProjectFactory,
+			ShapeContainerProjectFactory shapeContainerProjectFactory,
+			UndoableProjectFactory undoableProjectFactory,
+			ModelGroupFactory modelGroupFactory,
+			SplitLoosePartsOnLoadPreference splitLoosePartsOnLoadPreference) {
+
+		this.systemNotificationManager = systemNotificationManager;
+		this.modelLoaderService = modelLoaderService;
+		this.selectedPrinter = selectedPrinter;
+		this.modelContainerProjectFactory = modelContainerProjectFactory;
+		this.shapeContainerProjectFactory = shapeContainerProjectFactory;
+		this.undoableProjectFactory = undoableProjectFactory;
+		this.modelGroupFactory = modelGroupFactory;
+		this.splitLoosePartsOnLoadPreference = splitLoosePartsOnLoadPreference;
+	}
+
+	public ModelLoaderService getModelLoaderService() {
+		return modelLoaderService;
+	}
 
 	private void offerShrinkAndAddToProject(Project project, boolean relayout, ProjectCallback callMeBack,
 			boolean dontGroupModelsOverride,
@@ -65,9 +102,9 @@ public class ModelLoader {
 			// Associate the loaded meshes with extruders in turn, respecting the original groups / model files
 			int numExtruders = 1;
 
-			Printer selectedPrinter = Lookup.getSelectedPrinterProperty().get();
+			Printer selPrinter = selectedPrinter.get();
 			if (selectedPrinter != null) {
-				numExtruders = selectedPrinter.extrudersProperty().size();
+				numExtruders = selPrinter.extrudersProperty().size();
 			}
 
 			int currentExtruder = 0;
@@ -95,7 +132,7 @@ public class ModelLoader {
 				}
 
 				if (!invalidModelNames.isEmpty()) {
-					boolean load = BaseLookup.getSystemNotificationHandler().showModelIsInvalidDialog(invalidModelNames);
+					boolean load = systemNotificationManager.showModelIsInvalidDialog(invalidModelNames);
 					if (!load) {
 						return;
 					}
@@ -113,8 +150,8 @@ public class ModelLoader {
 				}
 
 				Set<ModelContainer> modelContainersToOperateOn = (Set) loadResult.getProjectifiableThings();
-				if (new SplitLoosePartsOnLoadPreference().get()) {
-						allModelContainers.add(makeGroup(modelContainersToOperateOn));
+				if (splitLoosePartsOnLoadPreference.getValue()) {
+					allModelContainers.add(makeGroup(modelContainersToOperateOn));
 					continue;
 				}
 
@@ -181,10 +218,10 @@ public class ModelLoader {
 				if (!loadResults.getResults().isEmpty()) {
 					switch (loadResults.getType()) {
 						case Mesh:
-							projectToUse = new ModelContainerProject();
+							projectToUse = modelContainerProjectFactory.create();
 							break;
 						case SVG:
-							projectToUse = new ShapeContainerProject();
+							projectToUse = shapeContainerProjectFactory.create();
 							break;
 					}
 				}
@@ -192,7 +229,7 @@ public class ModelLoader {
 			else {
 				projectToUse = project;
 			}
-			offerShrinkAndAddToProject(projectToUse, relayout, callMeBack, dontGroupModelsOverride, Lookup.getSelectedPrinterProperty().get());
+			offerShrinkAndAddToProject(projectToUse, relayout, callMeBack, dontGroupModelsOverride, selectedPrinter.get());
 		});
 		modelLoaderService.start();
 	}
@@ -204,7 +241,7 @@ public class ModelLoader {
 			boolean shouldCentre,
 			boolean dontGroupModelsOverride,
 			Printer printer) {
-		UndoableProject undoableProject = new UndoableProject(project);
+		UndoableProject undoableProject = undoableProjectFactory.create(project);
 
 		if (project instanceof ModelContainerProject) {
 			ModelContainer modelContainer;
@@ -251,7 +288,7 @@ public class ModelLoader {
 		if (printer != null) {
 			boolean modelIsTooLarge = printer.isBiggerThanPrintVolume(originalBounds);
 			if (modelIsTooLarge) {
-				shrinkModel = BaseLookup.getSystemNotificationHandler().showModelTooBigDialog(projectifiableThing.getModelName());
+				shrinkModel = systemNotificationManager.showModelTooBigDialog(projectifiableThing.getModelName());
 			}
 			if (shrinkModel) {
 				projectifiableThing.shrinkToFitBed();
@@ -274,7 +311,7 @@ public class ModelLoader {
 			return splitModelContainers.iterator().next();
 		}
 		else {
-			return new ModelGroup(splitModelContainers);
+			return modelGroupFactory.create(splitModelContainers);
 		}
 	}
 

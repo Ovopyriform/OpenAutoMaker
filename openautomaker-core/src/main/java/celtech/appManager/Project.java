@@ -1,7 +1,5 @@
 package celtech.appManager;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
@@ -16,25 +14,22 @@ import java.util.prefs.PreferenceChangeListener;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.camera.CameraInfo;
 import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.base.inject.configuration.file_representation.PrinterSettingsOverridesFactory;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.core.Version;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.module.SimpleModule;
 
 import celtech.configuration.ApplicationConfiguration;
-import celtech.configuration.fileRepresentation.ModelContainerProjectFile;
 import celtech.configuration.fileRepresentation.ProjectFile;
-import celtech.configuration.fileRepresentation.ProjectFileDeserialiser;
-import celtech.configuration.fileRepresentation.ShapeContainerProjectFile;
 import celtech.modelcontrol.Groupable;
 import celtech.modelcontrol.ItemState;
 import celtech.modelcontrol.ModelContainer;
@@ -61,9 +56,14 @@ import javafx.collections.ObservableList;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
+//TODO: Look into the raw types in this class.
 public abstract class Project {
 
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	public static class ProjectLoadException extends Exception {
+
+		private static final long serialVersionUID = -8924678649000819002L;
 
 		public ProjectLoadException(String message) {
 			super(message);
@@ -72,7 +72,7 @@ public abstract class Project {
 
 	private int version = -1;
 
-	private static final Logger LOGGER = LogManager.getLogger(Project.class.getName());
+
 
 	protected Set<ProjectChangesListener> projectChangesListeners;
 
@@ -97,25 +97,48 @@ public abstract class Project {
 
 	protected boolean projectNameModified = false;
 
-	private GCodeGeneratorManager gCodeGenManager;
+	private final GCodeGeneratorManager gCodeGenManager;
 
-	public Project() {
+	//Injected, don't persiste
+	private transient final CameraManager cameraManager;
+	private transient final ModelGroupFactory modelGroupFactory;
+	protected transient final ProjectsPathPreference projectsPathPreference;
+	private transient final PrinterSettingsOverridesFactory printerSettingsOverridesFactory;
+
+	private final CameraProfileContainer cameraProfileContainer;
+
+	public Project(
+			ProjectsPathPreference projectsPathPreference,
+			SlicerPreference slicerPreference,
+			I18N i18n,
+			CameraManager cameraManager,
+			GCodeGeneratorManager gCodeGeneratorManager,
+			ModelGroupFactory modelGroupFactory,
+			CameraProfileContainer cameraProfileContainer,
+			PrinterSettingsOverridesFactory printerSettingsOverridesFactory) {
+
+		this.cameraManager = cameraManager;
+		this.modelGroupFactory = modelGroupFactory;
+		this.cameraProfileContainer = cameraProfileContainer;
+		this.printerSettingsOverridesFactory = printerSettingsOverridesFactory;
+
 		topLevelThings = FXCollections.observableArrayList();
-
-		initialise();
 
 		canPrint = new SimpleBooleanProperty(true);
 		customSettingsNotChosen = new SimpleBooleanProperty(true);
 		lastModifiedDate = new SimpleObjectProperty<>();
 		projectChangesListeners = new HashSet<>();
 
-		printerSettings = new PrinterSettingsOverrides();
+		this.projectsPathPreference = projectsPathPreference;
+
+		printerSettings = printerSettingsOverridesFactory.create();
 		Date now = new Date();
 		SimpleDateFormat formatter = new SimpleDateFormat("-hhmmss-ddMMYY");
-		projectNameProperty = new SimpleStringProperty(OpenAutomakerEnv.getI18N().t("projectLoader.untitled") + formatter.format(now));
+		projectNameProperty = new SimpleStringProperty(i18n.t("projectLoader.untitled") + formatter.format(now));
 		lastModifiedDate.set(now);
 
-		gCodeGenManager = new GCodeGeneratorManager(this);
+		this.gCodeGenManager = gCodeGeneratorManager;
+		gCodeGeneratorManager.setProject(this);
 
 		customSettingsNotChosen.bind(printerSettings.printQualityProperty().isEqualTo(PrintQualityEnumeration.CUSTOM).and(printerSettings.getSettingsNameProperty().isEmpty()));
 		// Cannot print if quality is CUSTOM and no custom settings have been chosen
@@ -132,7 +155,7 @@ public abstract class Project {
 			fireWhenTimelapseSettingsChanged(timelapseSettings);
 		});
 
-		new SlicerPreference().addChangeListener(new PreferenceChangeListener() {
+		slicerPreference.addChangeListener(new PreferenceChangeListener() {
 			@Override
 			public void preferenceChange(PreferenceChangeEvent evt) {
 				projectModified();
@@ -157,55 +180,51 @@ public abstract class Project {
 	public final Path getAbsolutePath() {
 		//TODO: It looks like this should just enumerate all the .robox files in the project directory and load those.  Not sure of the point of the open projects data.
 		//return AutoMakerEnvironment.get().getUserPath(PROJECTS).resolve(getProjectName()).resolve(projectNameProperty.get() + ApplicationConfiguration.projectFileExtension);
-		return OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(getProjectName() + ApplicationConfiguration.projectFileExtension);
+		return projectsPathPreference.getValue().resolve(getProjectName() + ApplicationConfiguration.projectFileExtension);
 	}
 
-	protected abstract void load(ProjectFile projectFile, String basePath) throws ProjectLoadException;
+	protected abstract void load(ProjectFile projectFile, Path filePath) throws ProjectLoadException;
 
-	public static final Project loadProject(String basePath) {
-		Project project = null;
-		File file = new File(basePath + ApplicationConfiguration.projectFileExtension);
+	//	public static final Project loadProject(String basePath) {
+	//		Project project = null;
+	//		File file = new File(basePath + ApplicationConfiguration.projectFileExtension);
+	//
+	//		try {
+	//			ProjectFileDeserialiser deserializer = new ProjectFileDeserialiser();
+	//			SimpleModule module = new SimpleModule("LegacyProjectFileDeserialiserModule", new Version(1, 0, 0, null));
+	//			module.addDeserializer(ProjectFile.class, deserializer);
+	//
+	//			ObjectMapper mapper = new ObjectMapper();
+	//			mapper.registerModule(module);
+	//			ProjectFile projectFile = mapper.readValue(file, ProjectFile.class);
+	//
+	//			if (projectFile instanceof ModelContainerProjectFile) {
+	//				project = new ModelContainerProject();
+	//				project.load(projectFile, basePath);
+	//			}
+	//			else if (projectFile instanceof ShapeContainerProjectFile) {
+	//				project = new ShapeContainerProject();
+	//				project.load(projectFile, basePath);
+	//			}
+	//		}
+	//		catch (Exception ex) {
+	//			LOGGER.error("Unable to load project file at " + file.toString(), ex);
+	//		}
+	//		return project;
+	//	}
 
-		try {
-			ProjectFileDeserialiser deserializer = new ProjectFileDeserialiser();
-			SimpleModule module = new SimpleModule("LegacyProjectFileDeserialiserModule", new Version(1, 0, 0, null));
-			module.addDeserializer(ProjectFile.class, deserializer);
+	public void save() {
+		Path basePath = projectsPathPreference.getValue().resolve(getProjectName());
 
-			ObjectMapper mapper = new ObjectMapper();
-			mapper.registerModule(module);
-			ProjectFile projectFile = mapper.readValue(file, ProjectFile.class);
+		File dirHandle = basePath.toFile();
+		if (dirHandle.exists())
+			dirHandle.mkdirs();
 
-			if (projectFile instanceof ModelContainerProjectFile) {
-				project = new ModelContainerProject();
-				project.load(projectFile, basePath);
-			}
-			else if (projectFile instanceof ShapeContainerProjectFile) {
-				project = new ShapeContainerProject();
-				project.load(projectFile, basePath);
-			}
-		}
-		catch (Exception ex) {
-			LOGGER.error("Unable to load project file at " + file.toString(), ex);
-		}
-		return project;
+		save(basePath);
+		setProjectSaved(true);
 	}
 
 	protected abstract void save(Path basePath);
-
-	public static final void saveProject(Project project) {
-		if (project == null)
-			return;
-
-		Path basePath = OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(project.getProjectName());
-
-		File dirHandle = basePath.toFile();
-		if (!dirHandle.exists()) {
-			dirHandle.mkdirs();
-		}
-
-		project.save(basePath);
-		project.setProjectSaved(true);
-	}
 
 	@Override
 	public String toString() {
@@ -269,7 +288,7 @@ public abstract class Project {
 		if (profileName.isBlank())
 			timelapseSettings.setTimelapseProfile(Optional.empty());
 		else {
-			timelapseSettings.setTimelapseProfile(Optional.ofNullable(CameraProfileContainer.getInstance().getProfileByName(profileName)));
+			timelapseSettings.setTimelapseProfile(Optional.ofNullable(cameraProfileContainer.getProfileByName(profileName)));
 		}
 		String cameraID = pFile.getTimelapseCameraID();
 		Optional<CameraInfo> camera = Optional.empty();
@@ -279,7 +298,7 @@ public abstract class Project {
 				String cameraName = fields[0];
 				try {
 					int cameraNumber = Integer.parseInt(fields[1]);
-					camera = BaseLookup.getConnectedCameras().stream().filter(c -> c.getCameraName().equals(cameraName) && c.getCameraNumber() == cameraNumber).findFirst();
+					camera = cameraManager.getConnectedCameras().stream().filter(c -> c.getCameraName().equals(cameraName) && c.getCameraNumber() == cameraNumber).findFirst();
 				}
 				catch (NumberFormatException ex) {
 				}
@@ -610,7 +629,7 @@ public abstract class Project {
 	 */
 	public ModelGroup createNewGroup(Set<Groupable> modelContainers, int groupModelId) {
 		checkNotAlreadyInGroup(modelContainers);
-		ModelGroup modelGroup = new ModelGroup((Set) modelContainers, groupModelId);
+		ModelGroup modelGroup = modelGroupFactory.create((Set) modelContainers, groupModelId);
 		modelGroup.checkOffBed();
 		modelGroup.notifyScreenExtentsChange();
 		return modelGroup;
@@ -625,7 +644,7 @@ public abstract class Project {
 	public ModelGroup createNewGroup(Set<Groupable> modelContainers) {
 		checkNotAlreadyInGroup(modelContainers);
 
-		ModelGroup modelGroup = new ModelGroup((Set) modelContainers);
+		ModelGroup modelGroup = modelGroupFactory.create((Set) modelContainers);
 		modelGroup.checkOffBed();
 		modelGroup.notifyScreenExtentsChange();
 		return modelGroup;

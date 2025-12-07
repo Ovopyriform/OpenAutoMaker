@@ -1,6 +1,3 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.appManager.undo;
 
 import java.util.HashSet;
@@ -16,7 +13,7 @@ import celtech.modelcontrol.ProjectifiableThing;
  *
  * @author tony
  */
-public class GroupCommand extends Command {
+public class GroupCommand implements Command {
 
 	Project project;
 	Set<Groupable> modelContainers;

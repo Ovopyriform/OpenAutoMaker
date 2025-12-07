@@ -3,7 +3,6 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-
 	<artifactId>openautomaker-core</artifactId>
 	<version>1.0-SNAPSHOT</version>
 	<packaging>jar</packaging>
@@ -18,7 +17,7 @@
 	</parent>
 
 	<profiles>
-		<profile>
+		<!-- profile>
 			<id>jenkins</id>
 			<build>
 				<plugins>
@@ -38,7 +37,7 @@
 					</plugin>
 				</plugins>
 			</build>
-		</profile>
+		</profile -->
 
 		<profile>
 			<id>default</id>
@@ -47,21 +46,23 @@
 			</activation>
 			<build>
 				<plugins>
+					<!--
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
 						<version>2.22.2</version>
 						<configuration>
-							<!--
+							
                             <systemProperties>
 							<property>
                                   <name>prism.order</name>
 							<value>sw</value>
                                 </property>
 							</systemProperties>
-                            -->
+                            
 						</configuration>
 					</plugin>
+					-->
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-compiler-plugin</artifactId>
@@ -72,6 +73,30 @@
 									java.base/sun.net.www.protocol.http=ALL-UNNAMED</arg>
 							</compilerArgs>
 						</configuration>
+					</plugin>
+					<plugin>
+						<artifactId>maven-resources-plugin</artifactId>
+						<executions>
+                			<execution>
+                   				<id>copy-fxml</id>
+                    			<phase>process-classes</phase>
+                    			<goals>
+                        			<goal>copy-resources</goal>
+                    			</goals>
+                   				<configuration>
+                        			<outputDirectory>${basedir}/target/classes</outputDirectory>
+                        			<encoding>UTF-8</encoding>
+                        			<resources>
+                           				<resource>
+                                			<directory>${basedir}/src/main/java</directory>
+                                			<includes>
+                                    			<include>**/*.fxml</include>
+                                			</includes>
+                            			</resource>
+                        			</resources>
+                    			</configuration>
+                			</execution>
+                		</executions>
 					</plugin>
 				</plugins>
 			</build>
@@ -87,11 +112,6 @@
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-engine</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.junit.vintage</groupId>
-			<artifactId>junit-vintage-engine</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -197,8 +217,64 @@
 			<version>7.5.4</version>
 		</dependency>
 		<dependency>
+			<groupId>com.vdurmont</groupId>
+			<artifactId>semver4j</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.openautomaker</groupId>
 			<artifactId>openautomaker-environment</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.google.inject</groupId>
+			<artifactId>guice</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.google.inject.extensions</groupId>
+			<artifactId>guice-assistedinject</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.platform</groupId>
+			<artifactId>jakarta.jakartaee-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-environment</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-guice</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-javafx</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-i18n</artifactId>
+		</dependency>
+		<dependency>
+    		<groupId>org.testfx</groupId>
+    		<artifactId>testfx-junit5</artifactId>
+    		<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+    		<groupId>org.assertj</groupId>
+   			<artifactId>assertj-core</artifactId>
+   	 		<scope>test</scope>
 		</dependency>
 	</dependencies>
 

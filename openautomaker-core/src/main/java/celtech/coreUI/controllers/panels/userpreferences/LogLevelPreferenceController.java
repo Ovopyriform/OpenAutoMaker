@@ -2,9 +2,10 @@ package celtech.coreUI.controllers.panels.userpreferences;
 
 import org.apache.logging.log4j.Level;
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.preference.LogLevelPreference;
+import org.openautomaker.environment.preference.application.LogLevelPreference;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.scene.control.ComboBox;
@@ -16,28 +17,31 @@ import javafx.scene.control.SelectionModel;
  */
 public class LogLevelPreferenceController implements PreferencesInnerPanelController.Preference {
 
+	private final ComboBox<Level> control;
 
-	private final ComboBox<Level> fControl;
-	private final LogLevelPreference fLogLevel;
+	private final I18N i18n;
 
-	public LogLevelPreferenceController() {
-		fLogLevel = new LogLevelPreference();
+	@Inject
+	public LogLevelPreferenceController(
+			I18N i18n,
+			LogLevelPreference logLevelPreference) {
 
-		fControl = new ComboBox<>();
-		fControl.getStyleClass().add("cmbCleanCombo");
-		fControl.setMinWidth(200);
-		fControl.autosize();
-		fControl.setItems(FXCollections.observableList(fLogLevel.values()));
+		this.i18n = i18n;
+		control = new ComboBox<>();
+		control.getStyleClass().add("cmbCleanCombo");
+		control.setMinWidth(200);
+		control.autosize();
+		control.setItems(FXCollections.observableList(logLevelPreference.values()));
 
-		SelectionModel<Level> selectionModel = fControl.getSelectionModel();
+		SelectionModel<Level> selectionModel = control.getSelectionModel();
 
 		// Set initial value
-		selectionModel.select(fLogLevel.get());
+		selectionModel.select(logLevelPreference.getValue());
 
 		//Listen for changes
 		selectionModel.selectedItemProperty()
 				.addListener((ObservableValue<? extends Level> observable, Level oldValue, Level newValue) -> {
-					fLogLevel.set(newValue);
+					logLevelPreference.setValue(newValue);
 				});
 
 	}
@@ -52,17 +56,17 @@ public class LogLevelPreferenceController implements PreferencesInnerPanelContro
 
 	@Override
 	public Control getControl() {
-		return fControl;
+		return control;
 	}
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.logLevel");
+		return i18n.t("preferences.logLevel");
 	}
 
 	@Override
 	public void disableProperty(ObservableValue<Boolean> disableProperty) {
-		fControl.disableProperty().unbind();
-		fControl.disableProperty().bind(disableProperty);
+		control.disableProperty().unbind();
+		control.disableProperty().bind(disableProperty);
 	}
 }

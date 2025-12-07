@@ -1,73 +1,53 @@
 package org.openautomaker.base.services.slicer;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.SCRIPT;
-
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.MachineType;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.slicer.KillCommandPreference;
+import org.openautomaker.environment.preference.slicer.SetWorkingDirectoryPreference;
+
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 /**
  *
- * @author George Salter
  */
+//TODO: Roll this into slicer manager?
+@Singleton
 public class SlicerUtils {
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	//TODO: Not really needed.  Maven should build the dist with the appropriate files.
-	public static void killSlicing(Slicer slicerType) {
-		String windowsKillCommand = "taskkill /IM \"CuraEngine.exe\" /F";
-		String macKillCommand = "KillCuraEngine.mac.sh";
-		String linuxKillCommand = "KillCuraEngine.linux.sh";
+	private final KillCommandPreference killCommandPreference;
+	private final SetWorkingDirectoryPreference setWorkingDirectoryPreference;
 
-		List<String> commands = new ArrayList<>();
+	@Inject
+	protected SlicerUtils(
+			KillCommandPreference killCommandPreference,
+			SetWorkingDirectoryPreference setWorkingDirectoryPreference) {
 
-		OpenAutomakerEnv env = OpenAutomakerEnv.get();
-		Path scriptPath = env.getApplicationPath(SCRIPT);
+		this.killCommandPreference = killCommandPreference;
+		this.setWorkingDirectoryPreference = setWorkingDirectoryPreference;
+	}
 
-		switch (env.getMachineType()) {
-			//			case WINDOWS_95:
-			//				commands.add("command.com");
-			//				commands.add("/S");
-			//				commands.add("/C");
-			//				commands.add(windowsKillCommand);
-			//				break;
-			case WINDOWS:
-				commands.add("cmd.exe");
-				commands.add("/S");
-				commands.add("/C");
-				commands.add(windowsKillCommand);
-				break;
-			case MAC:
-				commands.add(scriptPath.resolve(macKillCommand).toString());
-				break;
-			case LINUX:
-				commands.add(scriptPath.resolve(linuxKillCommand).toString());
-				break;
-			default:
-				break;
+	//TODO: This should probably only kill the processes that have been created by this program.  Potentially this will kill any cura instances this user has created
+	public void killSlicing() {
+		Path killCmdPath = killCommandPreference.getValue();
+
+		// Setup the process builder to call the kill command.  Commands are defined at build time
+		ProcessBuilder killProcessBuilder = new ProcessBuilder(List.of(killCmdPath.toString()));
+
+		boolean setWorkingDirectory = setWorkingDirectoryPreference.getValue().booleanValue();
+		if (setWorkingDirectory)
+			killProcessBuilder.directory(killCmdPath.getParent().toFile());
+
+		try {
+			killProcessBuilder.start().waitFor();
 		}
-
-		if (!commands.isEmpty()) {
-			ProcessBuilder killSlicerProcessBuilder = new ProcessBuilder(commands);
-			if (env.getMachineType() != MachineType.WINDOWS) {
-				Path binDir = env.getApplicationPath(SCRIPT);
-				LOGGER.debug("Set working directory (Non-Windows) to " + binDir);
-				killSlicerProcessBuilder.directory(binDir.toFile());
-			}
-			try {
-				Process slicerKillProcess = killSlicerProcessBuilder.start();
-				slicerKillProcess.waitFor();
-			}
-			catch (IOException | InterruptedException ex) {
-				LOGGER.error("Exception whilst killing slicer", ex);
-			}
+		catch (IOException | InterruptedException ex) {
+			LOGGER.error("Exception whilst killing slicer", ex);
 		}
 	}
 }

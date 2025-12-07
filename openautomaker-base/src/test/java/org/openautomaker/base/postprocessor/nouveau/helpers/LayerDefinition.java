@@ -4,6 +4,7 @@ package org.openautomaker.base.postprocessor.nouveau.helpers;
  *
  * @author Ian
  */
+//TODO: Revisit this class
 public class LayerDefinition
 {
     private final int layerNumber;

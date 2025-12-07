@@ -3,8 +3,8 @@
  */
 package org.openautomaker.base.printerControl.model.statetransitions;
 
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.base.utils.tasks.OredCancellable;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.OredCancellable;
 
 import javafx.beans.value.ObservableValue;
 

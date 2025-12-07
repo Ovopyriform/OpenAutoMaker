@@ -1,7 +1,5 @@
 package org.openautomaker.base.configuration.fileRepresentation;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
-
 public enum SupportType {
     /**
      * Use material 1 as support. Implies all objects printed with material 2.
@@ -16,17 +14,16 @@ public enum SupportType {
      */
     AS_PROFILE("supportType.profile", 0);
 
-    private final String description;
+	private final String key;
     private final int extruderNumber;
 
-    SupportType(String description, int extruderNumber) {
-        this.description = OpenAutomakerEnv.getI18N().t(description);
+	SupportType(String key, int extruderNumber) {
+		this.key = key;
         this.extruderNumber = extruderNumber;
     }
 
-    @Override
-    public String toString() {
-        return description;
+	public String getKey() {
+		return key;
     }
 
     public int getExtruderNumber() {

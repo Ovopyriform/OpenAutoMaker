@@ -1,10 +1,11 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController.Preference;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.CheckBox;
@@ -12,32 +13,38 @@ import javafx.scene.control.Control;
 
 public class AdvancedModePreferenceController implements Preference {
 
-	private final AdvancedModePreference fAdvancedModePreference;
 	private final CheckBox fControl;
 
-	public AdvancedModePreferenceController() {
-		fAdvancedModePreference = new AdvancedModePreference();
+	private final I18N i18n;
+
+	@Inject
+	protected AdvancedModePreferenceController(
+			I18N i18n,
+			AdvancedModePreference advancedModePreference,
+			SystemNotificationManager systemNotificationManager) {
+
+		this.i18n = i18n;
 
 		fControl = new CheckBox();
 		fControl.setPrefWidth(150);
 		fControl.setMinWidth(fControl.getPrefWidth());
 
 		BooleanProperty booleanProperty = fControl.selectedProperty();
-		booleanProperty.setValue(fAdvancedModePreference.get());
+		booleanProperty.setValue(advancedModePreference.getValue());
 
 		// Confirm if they user wants to go to advanced mode.
 		booleanProperty.addListener((observable, oldValue, newValue) -> {
 			if (!newValue) {
-				fAdvancedModePreference.set(newValue);
+				advancedModePreference.setValue(newValue);
 				return;
 			}
 
 			// Ask the user whether they really want to do this..
-			boolean confirmAdvancedMode = BaseLookup.getSystemNotificationHandler().confirmAdvancedMode();
+			boolean confirmAdvancedMode = systemNotificationManager.confirmAdvancedMode();
 
 			// If we're switching, set the preference
 			if (confirmAdvancedMode)
-				fAdvancedModePreference.set(confirmAdvancedMode);
+				advancedModePreference.setValue(confirmAdvancedMode);
 
 			// If we're cancelling, set the control back to false
 			if (!confirmAdvancedMode)
@@ -60,7 +67,7 @@ public class AdvancedModePreferenceController implements Preference {
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.advancedMode");
+		return i18n.t("preferences.advancedMode");
 	}
 
 	@Override

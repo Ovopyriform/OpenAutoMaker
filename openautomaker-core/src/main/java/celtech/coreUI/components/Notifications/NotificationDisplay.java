@@ -1,14 +1,12 @@
 package celtech.coreUI.components.Notifications;
 
-import org.openautomaker.base.appManager.NotificationType;
+import org.openautomaker.base.notification_manager.NotificationType;
 
+import jakarta.inject.Singleton;
 import javafx.scene.Node;
 import javafx.scene.layout.VBox;
 
-/**
- *
- * @author Ian
- */
+@Singleton
 public class NotificationDisplay extends VBox {
 
 	private final VBox stepCountedNotifications = new VBox();
@@ -16,7 +14,8 @@ public class NotificationDisplay extends VBox {
 	private final VBox cautionNotifications = new VBox();
 	private final VBox warningNotifications = new VBox();
 
-	public NotificationDisplay() {
+	protected NotificationDisplay() {
+
 		setFillWidth(true);
 		stepCountedNotifications.setFillWidth(true);
 
@@ -29,7 +28,7 @@ public class NotificationDisplay extends VBox {
 
 	public void displayTimedNotification(String title, String message, NotificationType notificationType) {
 		//Check to see if any other identical notifications are on display
-		TimedNotificationBar notificationBar = new TimedNotificationBar();
+		TimedNotificationBar notificationBar = new TimedNotificationBar(this);
 		if (title != null
 				&& !title.equals("")) {
 			notificationBar.setMessage(title + " - " + message);
@@ -60,7 +59,7 @@ public class NotificationDisplay extends VBox {
 	}
 
 	public void displayDismissableNotification(String message, String buttonText, NotificationType notificationType) {
-		DismissableNotificationBar notificationBar = new DismissableNotificationBar(buttonText);
+		DismissableNotificationBar notificationBar = new DismissableNotificationBar(this, buttonText);
 		notificationBar.setMessage(message);
 		notificationBar.setType(notificationType);
 		if (!isThisADuplicateBar(notificationBar)) {

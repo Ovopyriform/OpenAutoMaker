@@ -2,14 +2,7 @@ package org.openautomaker.base.printerControl.model.statetransitions.calibration
 
 import java.util.Optional;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
-
-/**
- *
- * @author Ian
- */
-public enum CalibrationXAndYState
-{
+public enum CalibrationXAndYState {
 
     IDLE("calibrationPanel.xAndYIntroduction", "Nozzle Alignment Illustrations_Step 1.fxml"),
     //    HEATING("calibrationPanel.heating"),
@@ -26,12 +19,11 @@ public enum CalibrationXAndYState
     DONE("", ""),
     FAILED("calibrationPanel.nozzleCalibrationFailed", "Nozzle Height Illustrations_Failure.fxml");
 
-    private final String stepTitleResource;
+	private final String key;
     private final String diagramName;
 
-    private CalibrationXAndYState(String stepTitleResource, String diagramName)
-    {
-        this.stepTitleResource = stepTitleResource;
+	private CalibrationXAndYState(String stepTitleResource, String diagramName) {
+		this.key = stepTitleResource;
         this.diagramName = diagramName;
     }
     
@@ -42,24 +34,14 @@ public enum CalibrationXAndYState
         return (this != IDLE && this != FAILED && this != FINISHED && this != CANCELLING && this != DONE);
     }
 
-    public Optional<String> getDiagramName()
-    {
+	public Optional<String> getDiagramName() {
         if (diagramName.equals(""))
-        {
             return Optional.empty();
-        }
-        return Optional.of(diagramName);
 
+        return Optional.of(diagramName);
     }
 
-    public String getStepTitle()
-    {
-        if (stepTitleResource == null || stepTitleResource.equals(""))
-        {
-            return "";
-        } else
-        {
-            return OpenAutomakerEnv.getI18N().t(stepTitleResource);
-        }
+	public String key() {
+		return key == null ? "" : key;
     }
 }

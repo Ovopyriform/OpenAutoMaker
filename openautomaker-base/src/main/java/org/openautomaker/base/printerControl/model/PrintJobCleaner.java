@@ -3,8 +3,6 @@
  */
 package org.openautomaker.base.printerControl.model;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_JOBS;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,13 +16,15 @@ import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.configuration.BaseConfiguration;
+import org.openautomaker.base.inject.printing.PrintJobFactory;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.PrintJob;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.environment.preference.root.PrintJobsPathPreference;
+import org.openautomaker.environment.preference.root.TimelapsePathPreference;
 
 import celtech.roboxbase.comms.remote.clear.SuitablePrintJob;
+import jakarta.inject.Inject;
 
 /**
  *
@@ -39,11 +39,26 @@ public class PrintJobCleaner {
 
 	private Map<File, Long> fileToSizeMap = new HashMap<>();
 
-	public PrintJobCleaner() {
+	private final TaskExecutor taskExecutor;
+	private final PrintJobsPathPreference printJobsPathPreference;
+	private final TimelapsePathPreference timelapsePathPreference;
+	private final PrintJobFactory printJobFactory;
+
+	@Inject
+	protected PrintJobCleaner(
+			TaskExecutor taskExecutor,
+			PrintJobsPathPreference printJobsPathPreference,
+			TimelapsePathPreference timelapsePathPreference,
+			PrintJobFactory printJobFactory) {
+
+		this.taskExecutor = taskExecutor;
+		this.printJobsPathPreference = printJobsPathPreference;
+		this.timelapsePathPreference = timelapsePathPreference;
+		this.printJobFactory = printJobFactory;
 	}
 
 	public void tidyDirectories() {
-		BaseLookup.getTaskExecutor().runOnBackgroundThread(() -> {
+		taskExecutor.runOnBackgroundThread(() -> {
 			tidyPrintJobDirectories();
 			tidyTimelapseDirectories();
 		});
@@ -54,10 +69,10 @@ public class PrintJobCleaner {
 		List<SuitablePrintJob> suitablePrintJobs = new ArrayList<>();
 		SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss dd-MM-yyyy");
 
-		File printSpoolDir = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).toFile();
+		File printSpoolDir = printJobsPathPreference.getValue().toFile();
 		for (File printJobDir : printSpoolDir.listFiles()) {
 			if (printJobDir.isDirectory()) {
-				PrintJob pj = new PrintJob(printJobDir.getName());
+				PrintJob pj = printJobFactory.create(printJobDir.getName());
 				File roboxisedGCode = pj.getRoboxisedFileLocation().toFile();
 				File statistics = pj.getStatisticsFileLocation().toFile();
 
@@ -90,7 +105,7 @@ public class PrintJobCleaner {
 		if (orderedStats.size() > MAX_RETAINED_PRINT_JOBS) {
 			// Delete the older projects as there are more than the max number to retain.
 			for (int index = MAX_RETAINED_PRINT_JOBS; index < orderedStats.size(); ++index) {
-				File printJobDir = OpenAutomakerEnv.get().getUserPath(orderedStats.get(index).getPrintJobID()).toFile();
+				File printJobDir = printJobsPathPreference.getValue().resolve(orderedStats.get(index).getPrintJobID()).toFile();
 				try {
 					FileUtils.deleteDirectory(printJobDir);
 				} catch (IOException ex) {
@@ -110,7 +125,7 @@ public class PrintJobCleaner {
 	}
 
 	public void tidyTimelapseDirectories() {
-		File timelapseDir = BaseConfiguration.getTimelapseDirectory().toFile();
+		File timelapseDir = timelapsePathPreference.getValue().toFile();
 		List<File> fileList = new ArrayList<>();
 		long totalSize = 0;
 		for (File timelapsePrinterDir : timelapseDir.listFiles()) {

@@ -11,10 +11,11 @@ import java.util.prefs.PreferenceChangeListener;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.PrinterColourMap;
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
+import org.openautomaker.base.device.PrinterManager;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
@@ -22,25 +23,27 @@ import org.openautomaker.base.printerControl.model.PrinterConnection;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
 import org.openautomaker.base.printerControl.model.Reel;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
 import org.openautomaker.environment.preference.advanced.ShowAdjustmentsPreference;
 import org.openautomaker.environment.preference.advanced.ShowDiagnosticsPreference;
 import org.openautomaker.environment.preference.advanced.ShowGCodeConsolePreference;
 import org.openautomaker.environment.preference.advanced.ShowSnapshotPreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.component.gcode_panel.GCodePanel;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.configuration.ApplicationConfiguration;
 import celtech.coreUI.DisplayManager;
 import celtech.coreUI.components.HyperlinkedLabel;
 import celtech.coreUI.components.JogButton;
 import celtech.coreUI.controllers.utilityPanels.OuterPanelController;
-import celtech.roboxbase.comms.DetectedServer;
 import celtech.roboxbase.comms.RemoteDetectedPrinter;
 import celtech.roboxbase.comms.remote.PauseStatus;
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
@@ -68,22 +71,25 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
+	private final I18N i18n;
+
 	// Setting this up for if I ever get to dependency injection
-	private final AdvancedModePreference fAdvancedModePreference = new AdvancedModePreference();
-	private final ShowDiagnosticsPreference fShowDiagnosticsPreference = new ShowDiagnosticsPreference();
-	private final ShowGCodeConsolePreference fShowGCodeConsolePreference = new ShowGCodeConsolePreference();
-	private final ShowAdjustmentsPreference fShowAdjustmentsPreference = new ShowAdjustmentsPreference();
-	private final ShowSnapshotPreference fShowSnapshotPreference = new ShowSnapshotPreference();
+	private final AdvancedModePreference advancedModePreference;
+	private final ShowDiagnosticsPreference showDiagnosticsPreference;
+	private final ShowGCodeConsolePreference showGCodeConsolePreference;
+	private final ShowAdjustmentsPreference showAdjustmentsPreference;
+	private final ShowSnapshotPreference showSnapshotPreference;
+	private final DisplayManager displayManager;
 
 	private Printer printerToUse = null;
-	private DetectedServer serverToUse = null;
+	private PrintServerConnection serverToUse = null;
 	private ChangeListener<Color> printerColourChangeListener = null;
 	private ChangeListener<PrinterStatus> printerStatusChangeListener = null;
 	private ChangeListener<PauseStatus> pauseStatusChangeListener = null;
 
 	private String transferringDataString = null;
 
-	private PrinterColourMap colourMap = PrinterColourMap.getInstance();
+	private final PrinterColourMap colourMap;
 
 	private NumberFormat threeDPformatter;
 	private NumberFormat fiveDPformatter;
@@ -162,6 +168,40 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 
 	private final BooleanProperty printerConnectionOffline = new SimpleBooleanProperty(false);
 
+	private final PrinterManager printerManager;
+	private final SelectedPrinter selectedPrinter;
+	private final TaskExecutor taskExecutor;
+	private final FXMLLoaderFactory fxmlLoaderFactory;
+	@Inject
+	protected PrinterStatusPageController(
+			I18N i18n,
+			AdvancedModePreference advancedModePreference,
+			ShowDiagnosticsPreference showDiagnosticsPreference,
+			ShowGCodeConsolePreference showGCodeConsolePreference,
+			ShowAdjustmentsPreference showAdjustmentsPreference,
+			ShowSnapshotPreference showSnapshotPreference,
+			FXMLLoaderFactory fxmlLoaderFactory,
+			DisplayManager displayManager,
+			PrinterColourMap printerColourMap,
+			PrinterManager printerManager,
+			SelectedPrinter selectedPrinter,
+			TaskExecutor taskExecutor) {
+
+		this.i18n = i18n;
+		this.colourMap = printerColourMap;
+		this.printerManager = printerManager;
+		this.selectedPrinter = selectedPrinter;
+		this.taskExecutor = taskExecutor;
+
+		this.advancedModePreference = advancedModePreference;
+		this.showDiagnosticsPreference = showDiagnosticsPreference;
+		this.showGCodeConsolePreference = showGCodeConsolePreference;
+		this.showAdjustmentsPreference = showAdjustmentsPreference;
+		this.showSnapshotPreference = showSnapshotPreference;
+		this.fxmlLoaderFactory = fxmlLoaderFactory;
+		this.displayManager = displayManager;
+	}
+
 	private final MapChangeListener<Integer, Filament> effectiveFilamentListener = (MapChangeListener.Change<? extends Integer, ? extends Filament> change) -> {
 		setupBaseDisplay();
 	};
@@ -205,14 +245,15 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 	@Override
 	public void initialize(URL url, ResourceBundle rb) {
 		// Should only run once, but gets called every time a printer stack is loaded.
+		// initialize is called every time a controller is created
 		if (initialised)
 			return;
-		else
-			initialised = true;
 
-		BaseLookup.getPrinterListChangesNotifier().addListener(this);
+		initialised = true;
 
-		new AdvancedModePreference().addChangeListener(new PreferenceChangeListener() {
+		printerManager.getPrinterChangeNotifier().addListener(this);
+
+		advancedModePreference.addChangeListener(new PreferenceChangeListener() {
 			@Override
 			public void preferenceChange(PreferenceChangeEvent evt) {
 				setAdvancedControlsVisibility();
@@ -233,7 +274,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 		fiveDPformatter.setMaximumFractionDigits(5);
 		fiveDPformatter.setGroupingUsed(false);
 
-		transferringDataString = OpenAutomakerEnv.getI18N().t("PrintQueue.SendingToPrinter");
+		transferringDataString = i18n.t("PrintQueue.SendingToPrinter");
 
 		printerColourChangeListener = (ObservableValue<? extends Color> observable, Color oldValue, Color newValue) -> {
 			setupAmbientLight();
@@ -259,7 +300,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 		AnchorPane.setBottomAnchor(vBoxLeft, 30.0);
 		loadInsetPanels();
 
-		Lookup.getSelectedPrinterProperty().addListener(
+		selectedPrinter.addListener(
 				new ChangeListener<Printer>() {
 					@Override
 					public void changed(ObservableValue<? extends Printer> ov,
@@ -297,11 +338,11 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 					}
 				});
 
-		disconnectedLinkedText.replaceText(OpenAutomakerEnv.getI18N().t("printerStatus.noPrinterAttached"));
+		disconnectedLinkedText.replaceText(i18n.t("printerStatus.noPrinterAttached"));
 
 		projectPanelVisibility.bind(projectPanelShouldBeVisible.and(selectedPrinterIsPrinting));
 
-		DisplayManager.getInstance().getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>() {
+		displayManager.getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>() {
 
 			@Override
 			public void changed(ObservableValue<? extends DisplayManager.DisplayScalingMode> ov, DisplayManager.DisplayScalingMode t, DisplayManager.DisplayScalingMode t1) {
@@ -309,7 +350,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			}
 		});
 
-		displayScaleChanged(DisplayManager.getInstance().getDisplayScalingModeProperty().get());
+		displayScaleChanged(displayManager.getDisplayScalingModeProperty().get());
 	}
 
 	private StackPane loadPrinterStack(String printerTypeCode) {
@@ -318,7 +359,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			String printerStackFXMLName = printerTypeCode.toLowerCase() + "Stack.fxml";
 			URL printerStackURL = getClass().getResource(ApplicationConfiguration.fxmlPrinterStatusResourcePath + printerStackFXMLName);
 			try {
-				FXMLLoader loader = new FXMLLoader(printerStackURL, new I18N().getResourceBundle());
+				FXMLLoader loader = fxmlLoaderFactory.create(printerStackURL);
 				loader.setController(this);
 
 				printerStack = loader.load();
@@ -604,10 +645,8 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 	private void setAdvancedControlsVisibility() {
 		boolean visible = false;
 
-		AdvancedModePreference advancedModePreference = new AdvancedModePreference();
-
 		if (printerToUse != null
-				&& advancedModePreference.get()
+				&& advancedModePreference.getValue()
 				&& !printerConnectionOffline.get()) {
 			switch (printerToUse.printerStatusProperty().get()) {
 				case IDLE:
@@ -635,7 +674,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 					break;
 			}
 			if (printerToUse.getCommandInterface() instanceof RoboxRemoteCommandInterface) {
-				DetectedServer connectedServer = ((RemoteDetectedPrinter) printerToUse.getCommandInterface().getPrinterHandle()).getServerPrinterIsAttachedTo();
+				PrintServerConnection connectedServer = ((RemoteDetectedPrinter) printerToUse.getCommandInterface().getPrinterHandle()).getServerPrinterIsAttachedTo();
 				if (serverToUse != null && serverToUse != connectedServer) {
 					selectedPrinterHasCamera.unbind();
 					selectedPrinterHasCamera.set(false);
@@ -657,11 +696,11 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 		yAxisControls.setVisible(visible);
 		zAxisControls.setVisible(visible);
 
-		extruder1Controls.setVisible(advancedModePreference.get()
+		extruder1Controls.setVisible(advancedModePreference.getValue()
 				&& visible
 				&& printerToUse.extrudersProperty().get(0).filamentLoadedProperty().get()
 				&& printerToUse.extrudersProperty().get(0).isFittedProperty().get());
-		extruder2Controls.setVisible(advancedModePreference.get()
+		extruder2Controls.setVisible(advancedModePreference.getValue()
 				&& visible
 				&& printerToUse.extrudersProperty().get(1).filamentLoadedProperty().get()
 				&& printerToUse.extrudersProperty().get(1).isFittedProperty().get());
@@ -761,12 +800,19 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			ObservableValue<Boolean> appearanceConditions,
 			VBox parentPanel,
 			int position) {
-		URL insetPanelURL = getClass().getResource(
+
+		//This needs to take into account panels which have been made into components now.
+		FXMLLoader loader = null;
+
+		if (!innerPanelFXMLName.equals("GCodePanel.fxml")) {
+			URL insetPanelURL = getClass().getResource(
 				ApplicationConfiguration.fxmlUtilityPanelResourcePath + innerPanelFXMLName);
-		FXMLLoader loader = new FXMLLoader(insetPanelURL, new I18N().getResourceBundle());
+			loader = fxmlLoaderFactory.create(insetPanelURL);
+		}
 		VBox wrappedPanel = null;
+
 		try {
-			VBox insetPanel = loader.load();
+			VBox insetPanel = innerPanelFXMLName.equals("GCodePanel.fxml") ? new GCodePanel() : loader.load();
 			if (title != null) {
 				wrappedPanel = wrapPanelInOuterPanel(insetPanel, title, visibleProperty);
 				if (appearanceConditions != null) {
@@ -777,6 +823,8 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 					parentPanel.getChildren().add(position, wrappedPanel);
 				else
 					parentPanel.getChildren().add(wrappedPanel);
+
+				//TODO: So what's this now?
 				//final VBox panelToChangeHeightOf = wrappedPanel;
 				//panelVisibilityAction((visibleProperty != null) ? visibleProperty.getValue() : false, panelToChangeHeightOf, parentPanel, position);
 				//wrappedPanel.visibleProperty().addListener(new ChangeListener<Boolean>()
@@ -799,7 +847,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 	}
 
 	private void panelVisibilityAction(boolean visible, VBox panel, VBox parentPanel, int position) {
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		taskExecutor.runOnGUIThread(() -> {
 			if (visible) {
 				if (!parentPanel.getChildren().contains(panel)) {
 					if (position <= parentPanel.getChildren().size()) {
@@ -821,13 +869,13 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			BooleanProperty visibleProperty) {
 		URL outerPanelURL = getClass().getResource(
 				ApplicationConfiguration.fxmlUtilityPanelResourcePath + "outerStatusPanel.fxml");
-		FXMLLoader loader = new FXMLLoader(outerPanelURL, new I18N().getResourceBundle());
+		FXMLLoader loader = fxmlLoaderFactory.create(outerPanelURL);
 		VBox outerPanel = null;
 		try {
 			outerPanel = loader.load();
 			OuterPanelController outerPanelController = loader.getController();
 			outerPanelController.setInnerPanel(insetPanel);
-			outerPanelController.setTitle(OpenAutomakerEnv.getI18N().t(title));
+			outerPanelController.setTitle(i18n.t(title));
 			outerPanelController.setPreferredVisibility(visibleProperty);
 		}
 		catch (IOException ex) {
@@ -839,16 +887,16 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 	private void loadInsetPanels() {
 		vBoxLeft.setSpacing(20);
 
-		BooleanProperty advancedMode = FXProperty.bind(fAdvancedModePreference);
+		BooleanProperty advancedMode = FXProperty.bind(advancedModePreference);
 
 		//TODO: Check all the appearance conditions on here to make sure it checks advanced mode.
-		BooleanProperty showDiagnostics = FXProperty.bind(fShowDiagnosticsPreference);
+		BooleanProperty showDiagnostics = FXProperty.bind(showDiagnosticsPreference);
 		diagnosticPanel = loadInsetPanel("DiagnosticPanel.fxml", "diagnosticPanel.title",
 				showDiagnostics, showDiagnostics.and(printerConnectionOffline.not()),
 				vBoxLeft,
 				0);
 
-		BooleanProperty showGCodeConsole = FXProperty.bind(fShowGCodeConsolePreference);
+		BooleanProperty showGCodeConsole = FXProperty.bind(showGCodeConsolePreference);
 		gcodePanel = loadInsetPanel("GCodePanel.fxml", "gcodeEntry.title",
 				showGCodeConsole,
 				showGCodeConsole
@@ -866,7 +914,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			resizePrinterDisplay(parentPanel);
 		});
 
-		BooleanProperty showAdjustments = FXProperty.bind(fShowAdjustmentsPreference);
+		BooleanProperty showAdjustments = FXProperty.bind(showAdjustmentsPreference);
 		printAdjustmentsPanel = loadInsetPanel("tweakPanel.fxml", "printAdjustmentsPanel.title",
 				showAdjustments,
 				showAdjustments.and(selectedPrinterIsPrinting), vBoxRight, 1);
@@ -874,7 +922,7 @@ public class PrinterStatusPageController implements Initializable, PrinterListCh
 			resizePrinterDisplay(parentPanel);
 		});
 
-		BooleanProperty showSnapshot = FXProperty.bind(fShowSnapshotPreference);
+		BooleanProperty showSnapshot = FXProperty.bind(showSnapshotPreference);
 		snapshotPanel = loadInsetPanel("SnapshotPanel.fxml", "snapshotPanel.title",
 				showSnapshot,
 				showSnapshot.and(selectedPrinterHasCamera), vBoxRight, 2);

@@ -4,13 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
 import org.parboiled.common.FileUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import celtech.roboxbase.comms.DetectedServer;
 
 /**
  *
@@ -22,7 +21,7 @@ public class CameraInfo implements Comparable<CameraInfo>
     private String cameraName = "";
     private int cameraNumber = 0;
     private String serverIP = "";
-    private DetectedServer server = null;
+    private PrintServerConnection server = null;
 
     public CameraInfo() {
     }
@@ -76,13 +75,13 @@ public class CameraInfo implements Comparable<CameraInfo>
     }
     
     @JsonIgnore
-    public DetectedServer getServer() 
+    public PrintServerConnection getServer() 
     {
         return server;
     }
     
     @JsonIgnore
-    public void setServer(DetectedServer server)
+    public void setServer(PrintServerConnection server)
     {
         this.server = server;
     }

@@ -1,13 +1,11 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.utils.threed;
 
 import static celtech.utils.threed.MeshUtils.copyMesh;
 import static celtech.utils.threed.TriangleCutter.getFaceNormal;
 import static celtech.utils.threed.TriangleCutter.reverseLastFaceNormal;
 import static celtech.utils.threed.TriangleCutter.splitFaceAndAddLowerFacesToMesh;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.File;
 import java.net.URL;
@@ -15,20 +13,22 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.openautomaker.test_library.GuiceExtension;
+import org.openautomaker.ui.inject.importer.STLImporterFactory;
 
 import celtech.utils.threed.MeshCutter2.BedToLocalConverter;
 import celtech.utils.threed.importers.stl.STLFileParsingException;
-import celtech.utils.threed.importers.stl.STLImporter;
+import jakarta.inject.Inject;
 import javafx.geometry.Point3D;
 import javafx.scene.shape.TriangleMesh;
 
-/**
- *
- * @author tony
- */
+@ExtendWith(GuiceExtension.class)
 public class TriangleCutterTest {
+
+	@Inject
+	STLImporterFactory stlImporterFactory;
 
 	public static TriangleMesh createSimpleCube() {
 		TriangleMesh mesh = new TriangleMesh();
@@ -385,9 +385,9 @@ public class TriangleCutterTest {
 
 		URL stlURL = this.getClass().getResource("/enrico.stl");
 		File singleObjectSTLFile = new File(stlURL.getFile());
-		TriangleMesh mesh = new STLImporter().processBinarySTLData(singleObjectSTLFile);
+		TriangleMesh mesh = stlImporterFactory.create().processBinarySTLData(singleObjectSTLFile);
 		Optional<MeshUtils.MeshError> error = MeshUtils.validate(mesh);
-		Assert.assertFalse(error.isPresent());
+		assertFalse(error.isPresent());
 
 		MeshCutter2.BedToLocalConverter nullBedToLocalConverter = makeNullConverter();
 

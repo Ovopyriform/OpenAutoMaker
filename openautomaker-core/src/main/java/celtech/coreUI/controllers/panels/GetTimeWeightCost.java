@@ -7,20 +7,22 @@ import java.util.Optional;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.gcodegenerator.GCodeGeneratorResult;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.CurrencySymbolPreference;
-import org.openautomaker.environment.preference.GBPToLocalMultiplierPreference;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.l10n.CurrencySymbolPreference;
+import org.openautomaker.environment.preference.l10n.GBPToLocalMultiplierPreference;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ModelContainerProject;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.Label;
 
@@ -36,11 +38,7 @@ public class GetTimeWeightCost {
 		FAILED
 	}
 
-	GBPToLocalMultiplierPreference fGBPToLocalMultiplier;
-
 	private static final Logger LOGGER = LogManager.getLogger();
-
-	private final CurrencySymbolPreference fCurrencySymbolPreference;
 
 	//We are allowed to use ModelContainerProject here since this class can only run calcs for projects with meshes
 	private final ModelContainerProject project;
@@ -50,11 +48,30 @@ public class GetTimeWeightCost {
 
 	private final Cancellable cancellable;
 
-	public GetTimeWeightCost(ModelContainerProject project,
-			Label lblTime, Label lblWeight, Label lblCost, Cancellable cancellable) {
+	@Inject
+	private CurrencySymbolPreference currencySymbolPreference;
 
-		fCurrencySymbolPreference = new CurrencySymbolPreference();
-		fGBPToLocalMultiplier = new GBPToLocalMultiplierPreference();
+	@Inject
+	private GBPToLocalMultiplierPreference gbpToLocalMultiplier;
+
+	@Inject
+	private SelectedPrinter selectedPrinter;
+
+	@Inject
+	private TaskExecutor taskExecutor;
+
+	@Inject
+	private I18N i18n;
+
+	public GetTimeWeightCost(
+			ModelContainerProject project,
+			Label lblTime,
+			Label lblWeight,
+			Label lblCost,
+			Cancellable cancellable) {
+
+		//TODO: Issue with creating this with a factory  Causes JavaFX init exception.  Look into later.
+		GuiceContext.get().injectMembers(this);
 
 		this.project = project;
 		this.lblTime = lblTime;
@@ -69,8 +86,8 @@ public class GetTimeWeightCost {
 	}
 
 	private void showCancelled() {
-		String cancelled = OpenAutomakerEnv.getI18N().t("timeCost.cancelled");
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		String cancelled = i18n.t("timeCost.cancelled");
+		taskExecutor.runOnGUIThread(() -> {
 			lblTime.setText(cancelled);
 			lblWeight.setText(cancelled);
 			lblCost.setText(cancelled);
@@ -83,13 +100,13 @@ public class GetTimeWeightCost {
 
 	public void updateFromProject(PrintQualityEnumeration printQuality) {
 		ModelContainerProject mProject = project;
-		Printer printer = Lookup.getSelectedPrinterProperty().get();
+		Printer printer = selectedPrinter.get();
 		Optional<GCodeGeneratorResult> resultOpt = mProject.getGCodeGenManager().getPrepResult(printQuality);
 		if (resultOpt.isPresent()) {
 			if (resultOpt.get().isSuccess()) {
 				GCodeGeneratorResult result = resultOpt.get();
 				if (result.getPrintJobStatistics().isPresent()) {
-					BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+					taskExecutor.runOnGUIThread(() -> {
 						updateFieldsForStatistics(result.getPrintJobStatistics().get(), printer);
 					});
 				}
@@ -97,8 +114,8 @@ public class GetTimeWeightCost {
 			else if (!isCancelled()) {
 				// Result failed. Note that the fields are already updated in response to a cancel.
 				LOGGER.error("Error with gCode preparation");
-				String failed = OpenAutomakerEnv.getI18N().t("timeCost.failed");
-				BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+				String failed = i18n.t("timeCost.failed");
+				taskExecutor.runOnGUIThread(() -> {
 					lblTime.setText(failed);
 					lblWeight.setText(failed);
 					lblCost.setText(failed);
@@ -107,7 +124,7 @@ public class GetTimeWeightCost {
 		}
 		else {
 			// Result not computed
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+			taskExecutor.runOnGUIThread(() -> {
 				lblTime.setText("...");
 				lblWeight.setText("...");
 				lblCost.setText("...");
@@ -140,7 +157,7 @@ public class GetTimeWeightCost {
 		if (filament0 == FilamentContainer.UNKNOWN_FILAMENT
 				&& filament1 == FilamentContainer.UNKNOWN_FILAMENT) {
 			// If there is no filament loaded...
-			String noFilament = OpenAutomakerEnv.getI18N().t("timeCost.noFilament");
+			String noFilament = i18n.t("timeCost.noFilament");
 			lblWeight.setText(noFilament);
 			lblCost.setText(noFilament);
 		}
@@ -183,10 +200,10 @@ public class GetTimeWeightCost {
 	 * Take the cost in pounds and return a string in the format £1.43.
 	 */
 	private String formatCost(final double cost) {
-		double convertedCost = cost * fGBPToLocalMultiplier.get();
+		double convertedCost = cost * gbpToLocalMultiplier.getValue();
 		int numPounds = (int) convertedCost;
 		int numPence = (int) ((convertedCost - numPounds) * 100);
-		return String.format(fCurrencySymbolPreference.get().getDisplayString() + "%s.%02d", numPounds, numPence);
+		return String.format(currencySymbolPreference.getValue().getDisplayString() + "%s.%02d", numPounds, numPence);
 	}
 
 }

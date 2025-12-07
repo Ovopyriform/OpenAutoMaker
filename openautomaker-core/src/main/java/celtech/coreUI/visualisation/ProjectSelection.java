@@ -11,6 +11,8 @@ import java.util.Set;
 
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
 
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.appManager.Project;
 import celtech.appManager.Project.ProjectChangesListener;
 import celtech.appManager.ProjectManager;
@@ -22,6 +24,7 @@ import celtech.modelcontrol.RotatableThreeD;
 import celtech.modelcontrol.RotatableTwoD;
 import celtech.modelcontrol.ScaleableThreeD;
 import celtech.modelcontrol.ScaleableTwoD;
+import jakarta.inject.Inject;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
@@ -51,7 +54,15 @@ public class ProjectSelection implements ProjectChangesListener {
 	 */
 	private final BooleanBinding selectionHasChildOfGroup;
 
-	public ProjectSelection(Project project) {
+	private final ProjectManager projectManager;
+
+	@Inject
+	public ProjectSelection(
+			ProjectManager projectManager,
+			@Assisted Project project) {
+
+		this.projectManager = projectManager;
+
 		modelContainers = FXCollections.observableSet();
 		primarySelectedModelDetails = new PrimarySelectedModelDetails();
 		selectedModelContainersListeners = new HashSet<>();
@@ -164,6 +175,7 @@ public class ProjectSelection implements ProjectChangesListener {
 	 * @return
 	 */
 	public <T> Set<T> getSelectedModelsSnapshot(Class desiredClass) {
+		//TODO: Look at typing here
 		Set<T> returnedModels = new HashSet<>();
 
 		for (ProjectifiableThing container : modelContainers) {
@@ -224,7 +236,7 @@ public class ProjectSelection implements ProjectChangesListener {
 				projectName = modelContainer.getModelName().split("\\.(?=[^\\.]+$)")[0];
 			}
 
-			Set<String> currentProjectNames = ProjectManager.getInstance().getOpenAndAvailableProjectNames();
+			Set<String> currentProjectNames = projectManager.getOpenAndAvailableProjectNames();
 			projectName = suggestNonDuplicateName(projectName, currentProjectNames);
 			project.setProjectName(projectName);
 			project.setProjectNameModified(true);

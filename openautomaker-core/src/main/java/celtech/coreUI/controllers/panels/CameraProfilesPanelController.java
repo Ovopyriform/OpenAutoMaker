@@ -1,35 +1,33 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.camera.CameraInfo;
 import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.CameraProfile;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.environment.I18N;
 
 import celtech.coreUI.DisplayManager;
 import celtech.coreUI.components.RestrictedComboBox;
 import celtech.coreUI.components.RestrictedNumberField;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.CheckBox;
 import javafx.scene.layout.GridPane;
 
@@ -37,11 +35,13 @@ import javafx.scene.layout.GridPane;
  *
  * @author George Salter
  */
-public class CameraProfilesPanelController implements Initializable, MenuInnerPanel {
-	private static final Logger LOGGER = LogManager.getLogger(CameraProfilesPanelController.class.getName());
+public class CameraProfilesPanelController implements MenuInnerPanel {
+	private static final Logger LOGGER = LogManager.getLogger();
 
-	private static final CameraProfileContainer CAMERA_PROFILE_CONTAINER = CameraProfileContainer.getInstance();
-	private static final String ANY_CAMERA_NAME = OpenAutomakerEnv.getI18N().t("cameraProfiles.anyCamera");
+	// Should be injectable
+	private final CameraProfileContainer cameraProfileContainer;
+
+	private static final String ANY_CAMERA_NAME = "cameraProfiles.anyCamera";
 
 	private final BooleanProperty canSave = new SimpleBooleanProperty(false);
 	private final BooleanProperty canCreateNew = new SimpleBooleanProperty(false);
@@ -102,16 +102,32 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 	private CameraProfilesControlSettingsManager controlSettingsManager = new CameraProfilesControlSettingsManager();
 	private String selectedProfileName = null;
 
-	private final ChangeListener<Object> dirtyFieldListener = (ObservableValue<? extends Object> ov, Object oldEntry, Object newEntry) -> {
+	private final ChangeListener<Object> dirtyFieldListener = (observable, oldValue, newValue) -> {
 		isDirty.set(true);
 	};
 
-	private final ListChangeListener<CameraInfo> connectedCamerasListener = (ListChangeListener.Change<? extends CameraInfo> c) -> {
+	private final ListChangeListener<CameraInfo> connectedCamerasListener = (c) -> {
 		populateCmbCameraNames();
 	};
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	private final I18N i18n;
+	private final DisplayManager fDisplayManager;
+	private final CameraManager cameraManager;
+
+	@Inject
+	public CameraProfilesPanelController(
+			I18N i18n,
+			DisplayManager displayManager,
+			CameraManager cameraManager,
+			CameraProfileContainer cameraProfileContainer) {
+
+		this.i18n = i18n;
+		this.fDisplayManager = displayManager;
+		this.cameraManager = cameraManager;
+		this.cameraProfileContainer = cameraProfileContainer;
+	}
+
+	public void initialize() {
 		setupProfileNameChangeListeners();
 		setupProfileFieldListeners();
 		controlSettingsManager.initialise(controlGrid, isDirty);
@@ -139,39 +155,44 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 			selectCameraProfile(newValue);
 		});
 
-		DisplayManager.getInstance().libraryModeEnteredProperty().addListener((observable, oldValue, enteredLibraryMode) -> {
-			if (enteredLibraryMode) {
-				populateCmbCameraProfiles();
-				BaseLookup.getConnectedCameras().addListener(connectedCamerasListener);
-				populateCmbCameraNames();
-				if (currentCameraProfile != null)
-					selectCameraProfile(currentCameraProfile.getProfileName());
-				else
-					selectDefaultCameraProfile();
+		fDisplayManager.libraryModeEnteredProperty().addListener((observable, oldValue, newValue) -> {
+			ObservableList<CameraInfo> connectedCameras = cameraManager.getConnectedCameras();
+
+			if (newValue.equals(Boolean.FALSE)) {
+				connectedCameras.removeListener(connectedCamerasListener);
+				return;
 			}
-			else {
-				BaseLookup.getConnectedCameras().removeListener(connectedCamerasListener);
+
+			populateCmbCameraProfiles();
+			connectedCameras.addListener(connectedCamerasListener);
+			populateCmbCameraNames();
+
+			if (currentCameraProfile != null) {
+				selectCameraProfile(currentCameraProfile.getProfileName());
+				return;
 			}
+
+			selectDefaultCameraProfile();
 		});
 	}
 
 	private void setupProfileNameChangeListeners() {
-		cmbCameraProfile.getEditor().textProperty().addListener(
-				(ObservableValue<? extends String> observable, String oldValue, String newValue) -> {
-					currentCameraProfile.setProfileName(newValue);
-					if (!validateProfileName()) {
-						isNameValid.set(false);
-					}
-					else {
-						isNameValid.set(true);
-					}
-				});
+		cmbCameraProfile.getEditor().textProperty().addListener((observable, oldValue, newValue) -> {
+			currentCameraProfile.setProfileName(newValue);
+
+			if (!validateProfileName()) {
+				isNameValid.set(false);
+				return;
+			}
+
+			isNameValid.set(true);
+		});
 
 		cmbCameraProfile.getEditor().textProperty().addListener(dirtyFieldListener);
 	}
 
 	private void populateCmbCameraProfiles() {
-		cameraProfilesMap = CAMERA_PROFILE_CONTAINER.getCameraProfilesMap();
+		cameraProfilesMap = cameraProfileContainer.getCameraProfilesMap();
 		List<String> profileNames = cameraProfilesMap.values()
 				.stream()
 				.map(CameraProfile::getProfileName)
@@ -183,7 +204,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 
 	private void populateCmbCameraNames() {
 		// Get all the distinct camera names from the currently connected cameras.
-		List<String> cameraNames = BaseLookup.getConnectedCameras()
+		List<String> cameraNames = cameraManager.getConnectedCameras()
 				.stream()
 				.map(CameraInfo::getCameraName)
 				.distinct()
@@ -200,7 +221,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 
 			cameraNames.addAll(additionalNames);
 		}
-		cameraNames.add(ANY_CAMERA_NAME);
+		cameraNames.add(i18n.t(ANY_CAMERA_NAME));
 		Collections.sort(cameraNames);
 		cmbCameraName.valueProperty().removeListener(dirtyFieldListener);
 		cmbCameraName.setItems(FXCollections.observableArrayList(cameraNames));
@@ -259,7 +280,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 
 		String cameraName = cameraProfile.getCameraName();
 		if (cameraName.isBlank())
-			cameraName = ANY_CAMERA_NAME;
+			cameraName = i18n.t(ANY_CAMERA_NAME);
 		cmbCameraName.setValue(cameraName);
 	}
 
@@ -287,7 +308,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 	private void whenSavePressed() {
 		if (validateProfileName()) {
 			updateProfileWithCurrentValues();
-			CAMERA_PROFILE_CONTAINER.saveCameraProfile(currentCameraProfile);
+			cameraProfileContainer.saveCameraProfile(currentCameraProfile);
 			populateCmbCameraProfiles();
 			populateCmbCameraNames();
 			selectCameraProfile(currentCameraProfile.getProfileName());
@@ -309,7 +330,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 
 	private void whenDeletePressed() {
 		if (state.get() != State.NEW) {
-			CAMERA_PROFILE_CONTAINER.deleteCameraProfile(currentCameraProfile);
+			cameraProfileContainer.deleteCameraProfile(currentCameraProfile);
 		}
 		populateCmbCameraProfiles();
 		populateCmbCameraNames();
@@ -336,7 +357,7 @@ public class CameraProfilesPanelController implements Initializable, MenuInnerPa
 		currentCameraProfile.setMoveToX(moveToX.getAsInt());
 		currentCameraProfile.setMoveToY(moveToY.getAsInt());
 		String cameraName = cmbCameraName.getValue().strip();
-		if (cameraName.equalsIgnoreCase(ANY_CAMERA_NAME))
+		if (cameraName.equalsIgnoreCase(i18n.t(ANY_CAMERA_NAME)))
 			cameraName = "";
 		currentCameraProfile.setCameraName(cameraName);
 	}

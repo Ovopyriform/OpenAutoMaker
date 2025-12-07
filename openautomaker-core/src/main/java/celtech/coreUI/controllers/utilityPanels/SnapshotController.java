@@ -1,28 +1,27 @@
 package celtech.coreUI.controllers.utilityPanels;
 
-import java.net.URL;
 import java.util.List;
 import java.util.Map;
-import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.camera.CameraInfo;
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
 import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.CameraProfile;
 import org.openautomaker.base.configuration.fileRepresentation.CameraSettings;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.base.task_executor.TaskExecutor;
 
-import celtech.roboxbase.comms.DetectedServer;
 import celtech.utils.CameraInfoStringConverter;
 import celtech.utils.CameraProfileStringConverter;
+import jakarta.inject.Inject;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.ComboBox;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -32,8 +31,8 @@ import javafx.scene.image.ImageView;
  *
  * @author Ian
  */
-public abstract class SnapshotController implements Initializable {
-	private static final Logger LOGGER = LogManager.getLogger(SnapshotController.class.getName());
+public abstract class SnapshotController {
+	private static final Logger LOGGER = LogManager.getLogger();
 	protected static final int SNAPSHOT_INTERVAL = 500;
 
 	@FXML
@@ -48,18 +47,32 @@ public abstract class SnapshotController implements Initializable {
 	protected boolean viewWidthFixed = true;
 	protected CameraProfile selectedProfile = null;
 	protected CameraInfo selectedCamera = null;
-	protected DetectedServer connectedServer = null;
+	protected PrintServerConnection connectedServer = null;
 	protected Task<Void> snapshotTask = null;
 
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	private final TaskExecutor taskExecutor;
+	private final CameraManager cameraManager;
+	private final CameraProfileContainer cameraProfileContainer;
+
+	@Inject
+	protected SnapshotController(
+			CameraManager cameraManager,
+			TaskExecutor taskExecutor,
+			CameraProfileContainer cameraProfileContainer) {
+
+		this.cameraManager = cameraManager;
+		this.taskExecutor = taskExecutor;
+		this.cameraProfileContainer = cameraProfileContainer;
+	}
+
+	public void initialize() {
 		cameraProfileChooser.setConverter(new CameraProfileStringConverter(cameraProfileChooser::getItems));
 		cameraProfileChooser.valueProperty().addListener((observable, oldValue, newValue) -> {
 			selectProfile(newValue);
 		});
 
 		cameraChooser.setConverter(new CameraInfoStringConverter(cameraChooser::getItems));
-		BaseLookup.getConnectedCameras().addListener((ListChangeListener.Change<? extends CameraInfo> c) -> {
+		cameraManager.getConnectedCameras().addListener((ListChangeListener.Change<? extends CameraInfo> c) -> {
 			repopulateCameraProfileChooser();
 			repopulateCameraChooser();
 		});
@@ -76,7 +89,7 @@ public abstract class SnapshotController implements Initializable {
 				.findFirst()
 				.ifPresent((p) -> {
 					selectedProfile = p;
-					BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+					taskExecutor.runOnGUIThread(() -> {
 						cameraProfileChooser.setValue(p);
 					});
 				});
@@ -86,7 +99,7 @@ public abstract class SnapshotController implements Initializable {
 				.findFirst()
 				.ifPresent((c) -> {
 					selectedCamera = c;
-					BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+					taskExecutor.runOnGUIThread(() -> {
 						cameraChooser.setValue(c);
 					});
 				});
@@ -123,7 +136,7 @@ public abstract class SnapshotController implements Initializable {
 	}
 
 	protected void repopulateCameraProfileChooser() {
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		taskExecutor.runOnGUIThread(() -> {
 			LOGGER.debug("Repopulating profile chooser");
 			CameraProfile currentProfile = cameraProfileChooser.getValue();
 			populateCameraProfileChooser();
@@ -135,10 +148,10 @@ public abstract class SnapshotController implements Initializable {
 				profileToSelect = itemList.stream()
 						.filter(p -> p.getProfileName().equals(currentProfileName))
 						.findAny()
-						.orElse(CameraProfileContainer.getInstance().getDefaultProfile());
+						.orElse(cameraProfileContainer.getDefaultProfile());
 			}
 			else
-				profileToSelect = CameraProfileContainer.getInstance().getDefaultProfile();
+				profileToSelect = cameraProfileContainer.getDefaultProfile();
 			cameraProfileChooser.setValue(profileToSelect);
 		});
 	}
@@ -146,13 +159,13 @@ public abstract class SnapshotController implements Initializable {
 	protected void populateCameraProfileChooser() {
 		// Get the names of all the cameras on the current server.
 		if (connectedServer != null) {
-			List<String> cameraNames = BaseLookup.getConnectedCameras()
+			List<String> cameraNames = cameraManager.getConnectedCameras()
 					.stream()
 					.filter(cc -> cc.getServer() == connectedServer)
 					.map(CameraInfo::getCameraName)
 					.distinct()
 					.collect(Collectors.toList());
-			Map<String, CameraProfile> cameraProfilesMap = CameraProfileContainer.getInstance().getCameraProfilesMap();
+			Map<String, CameraProfile> cameraProfilesMap = cameraProfileContainer.getCameraProfilesMap();
 			ObservableList<CameraProfile> items = cameraProfilesMap.values()
 					.stream()
 					.filter(pp -> pp.getCameraName().isBlank() ||
@@ -174,7 +187,7 @@ public abstract class SnapshotController implements Initializable {
 	}
 
 	protected void repopulateCameraChooser() {
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+		taskExecutor.runOnGUIThread(() -> {
 			LOGGER.debug("Repopulating camera chooser");
 			CameraInfo currentCamera = cameraChooser.getValue();
 			populateCameraChooser();
@@ -191,7 +204,7 @@ public abstract class SnapshotController implements Initializable {
 		String cameraName = (cameraProfileChooser.getValue() != null ? cameraProfileChooser.getValue().getCameraName()
 				: "");
 		if (connectedServer != null) {
-			ObservableList<CameraInfo> itemList = BaseLookup.getConnectedCameras().stream()
+			ObservableList<CameraInfo> itemList = cameraManager.getConnectedCameras().stream()
 					.filter(cc -> cc.getServer() == connectedServer &&
 							(cameraName.isBlank() ||
 									cameraName.equalsIgnoreCase(cc.getCameraName())))
@@ -214,10 +227,10 @@ public abstract class SnapshotController implements Initializable {
 			snapshotTask = new Task<>() {
 				@Override
 				protected Void call() throws Exception {
-					DetectedServer server = snapshotSettings.getCamera().getServer();
+					PrintServerConnection server = snapshotSettings.getCamera().getServer();
 					while (!isCancelled()) {
 						Image snapshotImage = server.takeCameraSnapshot(snapshotSettings);
-						BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+						taskExecutor.runOnGUIThread(() -> {
 							if (selectedCamera == snapshotSettings.getCamera()) {
 								snapshotView.setImage(snapshotImage);
 							}

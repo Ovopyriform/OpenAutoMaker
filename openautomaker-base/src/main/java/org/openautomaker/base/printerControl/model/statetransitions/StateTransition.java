@@ -2,7 +2,7 @@
 package org.openautomaker.base.printerControl.model.statetransitions;
 
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionManager.GUIName;
-import org.openautomaker.base.utils.tasks.TaskExecutor;
+import org.openautomaker.base.task_executor.TaskExecutor;
 
 /**
  * StateTransition represents a transition from the fromState to the toState. If the action has not been

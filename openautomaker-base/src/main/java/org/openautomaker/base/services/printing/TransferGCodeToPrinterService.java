@@ -3,10 +3,13 @@ package org.openautomaker.base.services.printing;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.fileRepresentation.CameraSettings;
+import org.openautomaker.base.inject.printing.TransferGCodeToPrinterTaskFactory;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.ControllableService;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -18,6 +21,7 @@ import javafx.concurrent.Task;
  *
  * @author ianhudson
  */
+@Singleton
 public class TransferGCodeToPrinterService extends Service<GCodePrintResult> implements ControllableService
 {
 
@@ -35,6 +39,16 @@ public class TransferGCodeToPrinterService extends Service<GCodePrintResult> imp
     private PrintJobStatistics printJobStatistics = null;
     private CameraSettings cameraData = null;
 
+	//Dependencies
+	private final TransferGCodeToPrinterTaskFactory transferGCodeToPrinterTaskFactory;
+
+	@Inject
+	protected TransferGCodeToPrinterService(
+			TransferGCodeToPrinterTaskFactory transferGCodeToPrinterTaskFactory) {
+
+		this.transferGCodeToPrinterTaskFactory = transferGCodeToPrinterTaskFactory;
+
+	}
     /**
      *
      * @param printerToUse
@@ -161,7 +175,7 @@ public class TransferGCodeToPrinterService extends Service<GCodePrintResult> imp
     @Override
     protected Task<GCodePrintResult> createTask()
     {
-        return new TransferGCodeToPrinterTask(getPrinterToUse(),
+		return transferGCodeToPrinterTaskFactory.create(getPrinterToUse(),
                                               getModelFileToPrint(),
                                               getCurrentPrintJobID(),
                                               linesInGCodeFileProperty(),

@@ -24,72 +24,64 @@ import org.apache.logging.log4j.Logger;
  *
  * @author Ian
  */
-public class FixedDecimalFloatFormat extends DecimalFormat
-{
+public class FixedDecimalFloatFormat extends DecimalFormat {
+
+	private static final long serialVersionUID = -6151549888729347749L;
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private final int fieldLength = 8;
-    private String decimalSeparator = "";
+	private final int fieldLength = 8;
+	private String decimalSeparator = "";
 
-    public FixedDecimalFloatFormat()
-    {
-        super("#.######", new DecimalFormatSymbols(Locale.UK));
-        this.setGroupingUsed(false);
-        this.decimalSeparator = decimalSeparator + this.getDecimalFormatSymbols().getDecimalSeparator();
-    }
+	public FixedDecimalFloatFormat() {
+		super("#.######", new DecimalFormatSymbols(Locale.UK));
+		this.setGroupingUsed(false);
+		this.decimalSeparator = decimalSeparator + this.getDecimalFormatSymbols().getDecimalSeparator();
+	}
 
-    private StringBuffer padResult(StringBuffer output)
-    {
-        if (output.length() > fieldLength && (output.indexOf(decimalSeparator) == -1 || output.indexOf(decimalSeparator) > fieldLength - 1))
-        {
-            throw new NumberFormatException("Number length exceeds maximum (" + fieldLength + ") : " + output);
-        }
+	private StringBuffer padResult(StringBuffer output) {
+		if (output.length() > fieldLength && (output.indexOf(decimalSeparator) == -1 || output.indexOf(decimalSeparator) > fieldLength - 1)) {
+			throw new NumberFormatException("Number length exceeds maximum (" + fieldLength + ") : " + output);
+		}
 
-        int charactersToPad = fieldLength - output.length();
+		int charactersToPad = fieldLength - output.length();
 
-        if (charactersToPad < 0)
-        {
-            String originalNumber = output.toString();
-            output.delete(fieldLength, output.length());
+		if (charactersToPad < 0) {
+			String originalNumber = output.toString();
+			output.delete(fieldLength, output.length());
 			LOGGER.warn("Truncated float from " + originalNumber + " to " + output);
-        }
+		}
 
-        while (charactersToPad > 0)
-        {
-            output.insert(0, " ");
-            charactersToPad--;
-        }
+		while (charactersToPad > 0) {
+			output.insert(0, " ");
+			charactersToPad--;
+		}
 
-        return output;
-    }
+		return output;
+	}
 
-    @Override
-    public StringBuffer format(double d, StringBuffer sb, FieldPosition fp)
-    {
-        StringBuffer formattedString = super.format(d, sb, fp);
+	@Override
+	public StringBuffer format(double d, StringBuffer sb, FieldPosition fp) {
+		StringBuffer formattedString = super.format(d, sb, fp);
 
-        return padResult(formattedString);
-    }
+		return padResult(formattedString);
+	}
 
-    @Override
-    public StringBuffer format(long l, StringBuffer sb, FieldPosition fp)
-    {
-        StringBuffer formattedString = super.format(l, sb, fp);
+	@Override
+	public StringBuffer format(long l, StringBuffer sb, FieldPosition fp) {
+		StringBuffer formattedString = super.format(l, sb, fp);
 
-        return padResult(formattedString);
-    }
+		return padResult(formattedString);
+	}
 
-    @Override
-    public Number parse(String string) throws ParseException
-    {
-        String stringToParse = string.trim();
+	@Override
+	public Number parse(String string) throws ParseException {
+		String stringToParse = string.trim();
 
-        if (stringToParse.length() > fieldLength)
-        {
-            throw new NumberFormatException("Number length exceeds maximum (" + fieldLength + ") : " + stringToParse);
-        }
+		if (stringToParse.length() > fieldLength) {
+			throw new NumberFormatException("Number length exceeds maximum (" + fieldLength + ") : " + stringToParse);
+		}
 
-        return super.parse(stringToParse);
-    }
+		return super.parse(stringToParse);
+	}
 }

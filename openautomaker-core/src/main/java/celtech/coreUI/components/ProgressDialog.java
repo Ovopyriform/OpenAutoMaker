@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package celtech.coreUI.components;
 
 import java.io.IOException;
@@ -10,10 +6,12 @@ import java.net.URL;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.services.ControllableService;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.StageManager;
 
 import celtech.configuration.ApplicationConfiguration;
-import celtech.coreUI.DisplayManager;
 import celtech.coreUI.controllers.ProgressDialogController;
+import jakarta.inject.Inject;
 import javafx.event.EventHandler;
 import javafx.event.EventType;
 import javafx.fxml.FXMLLoader;
@@ -25,31 +23,51 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
-/**
- *
- * @author ianhudson
- */
 public class ProgressDialog {
 
-	private static final Logger LOGGER = LogManager.getLogger(ProgressDialog.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 	private Stage dialogStage = null;
 	private ProgressDialogController dialogController = null;
 	private StackPane dialogBoxContainer = null;
 
-	/**
-	 *
-	 */
+	private ControllableService controllableService;
+
+	@Inject
+	private FXMLLoader fxmlLoader;
+
+	@Inject
+	private StageManager stageManager;
+
 	public ProgressDialog() {
-		setupDialog();
+		this(null);
 	}
 
-	/**
-	 *
-	 * @param service
-	 */
 	public ProgressDialog(ControllableService service) {
-		setupDialog();
-		dialogController.configure(service, dialogStage);
+		GuiceContext.get().injectMembers(this);
+		this.controllableService = service;
+
+		dialogStage = new Stage(StageStyle.TRANSPARENT);
+		URL dialogFXMLURL = getClass().getResource(ApplicationConfiguration.fxmlResourcePath + "ProgressDialog.fxml");
+
+		fxmlLoader.setLocation(dialogFXMLURL);
+
+		try {
+			dialogBoxContainer = (StackPane) fxmlLoader.load();
+			dialogController = (ProgressDialogController) fxmlLoader.getController();
+
+			if (controllableService != null)
+				dialogController.configure(controllableService, dialogStage);
+
+			Scene dialogScene = new Scene(dialogBoxContainer, Color.TRANSPARENT);
+			dialogScene.getStylesheets().add(ApplicationConfiguration.getMainCSSFile());
+			dialogStage.setScene(dialogScene);
+			dialogStage.initOwner(stageManager.getMainStage());
+			dialogStage.initModality(Modality.APPLICATION_MODAL);
+			dialogStage.toFront();
+		}
+		catch (IOException ex) {
+			LOGGER.error("Couldn't load dialog box FXML", ex);
+		}
 	}
 
 	/**
@@ -57,27 +75,8 @@ public class ProgressDialog {
 	 * @param service
 	 */
 	public void associateControllableService(ControllableService service) {
-		dialogController.configure(service, dialogStage);
-	}
-
-	private void setupDialog() {
-		dialogStage = new Stage(StageStyle.TRANSPARENT);
-		URL dialogFXMLURL = ProgressDialog.class.getResource(ApplicationConfiguration.fxmlResourcePath + "ProgressDialog.fxml");
-		FXMLLoader dialogLoader = new FXMLLoader(dialogFXMLURL);
-		try {
-			dialogBoxContainer = (StackPane) dialogLoader.load();
-			dialogController = (ProgressDialogController) dialogLoader.getController();
-
-			Scene dialogScene = new Scene(dialogBoxContainer, Color.TRANSPARENT);
-			dialogScene.getStylesheets().add(ApplicationConfiguration.getMainCSSFile());
-			dialogStage.setScene(dialogScene);
-			dialogStage.initOwner(DisplayManager.getMainStage());
-			dialogStage.initModality(Modality.APPLICATION_MODAL);
-			dialogStage.toFront();
-		}
-		catch (IOException ex) {
-			LOGGER.error("Couldn't load dialog box FXML", ex);
-		}
+		this.controllableService = service;
+		dialogController.configure(controllableService, dialogStage);
 	}
 
 	/**

@@ -1,7 +1,5 @@
 package org.openautomaker.base.printerControl.model;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_JOBS;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,10 +18,12 @@ import java.util.concurrent.FutureTask;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.Macro;
 import org.openautomaker.base.configuration.fileRepresentation.CameraSettings;
+import org.openautomaker.base.inject.camera_control.CameraTriggerManagerFactory;
+import org.openautomaker.base.inject.printing.PrintJobFactory;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.PrintJob;
 import org.openautomaker.base.printerControl.PrintQueueStatus;
@@ -36,15 +36,19 @@ import org.openautomaker.base.services.camera.CameraTriggerManager;
 import org.openautomaker.base.services.gcodegenerator.GCodeGeneratorResult;
 import org.openautomaker.base.services.printing.GCodePrintResult;
 import org.openautomaker.base.services.printing.TransferGCodeToPrinterService;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.base.utils.PrintJobUtils;
 import org.openautomaker.base.utils.SystemUtils;
 import org.openautomaker.base.utils.models.PrintableProject;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.PrinterType;
+import org.openautomaker.environment.preference.root.PrintJobsPathPreference;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
 import celtech.roboxbase.comms.rx.SendFile;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
@@ -69,6 +73,7 @@ import javafx.event.EventHandler;
  *
  * @author ianhudson
  */
+//TODO: PrintEngine needs an interface to allow easier mocking for testing.
 public class PrintEngine implements ControllableService {
 
 	private static final Logger LOGGER = LogManager.getLogger();
@@ -76,7 +81,7 @@ public class PrintEngine implements ControllableService {
 	private Printer associatedPrinter = null;
 	//    public final AbstractSlicerService slicerService = new SlicerService();
 	//    public final PostProcessorService postProcessorService = new PostProcessorService();
-	public final TransferGCodeToPrinterService transferGCodeToPrinterService = new TransferGCodeToPrinterService();
+
 	private final IntegerProperty linesInPrintingFile = new SimpleIntegerProperty(0);
 
 	/**
@@ -136,16 +141,46 @@ public class PrintEngine implements ControllableService {
 
 	private boolean safetyFeaturesRequiredForCurrentJob = true;
 
-	public PrintEngine(Printer associatedPrinter) {
+	private final Path printJobsPath;
+
+	//Dependencies
+	private final SystemNotificationManager systemNotificationManager;
+	private final TaskExecutor taskExecutor;
+	private final GCodeMacros gCodeMacros;
+
+	//TODO: So this public appears to be wrong...  Service is a singleton so just inject where used?
+	public final TransferGCodeToPrinterService transferGCodeToPrinterService;
+
+	private final PrintJobFactory printJobFactory;
+
+	@Inject
+	protected PrintEngine(
+			TaskExecutor taskExecutor,
+			PrintJobsPathPreference printJobsPathPreference,
+			SystemNotificationManager systemNotificationManager,
+			TransferGCodeToPrinterService transferGCodeToPrinterService,
+			GCodeMacros gCodeMacros,
+			PrintJobFactory printJobFactory,
+			CameraTriggerManagerFactory cameraTriggerManagerFactory,
+			@Assisted Printer associatedPrinter) {
+
+		this.taskExecutor = taskExecutor;
+		this.systemNotificationManager = systemNotificationManager;
+		this.gCodeMacros = gCodeMacros;
+		this.transferGCodeToPrinterService = transferGCodeToPrinterService;
+		this.printJobFactory = printJobFactory;
+
+		this.printJobsPath = printJobsPathPreference.getValue();
+
 		this.associatedPrinter = associatedPrinter;
-		cameraTriggerManager = new CameraTriggerManager(associatedPrinter);
+		cameraTriggerManager = cameraTriggerManagerFactory.create(associatedPrinter);
 
 		cancelPrintEventHandler = (WorkerStateEvent t) -> {
 			LOGGER.info(t.getSource().getTitle() + " has been cancelled");
 			Optional<Macro> macroRunning = Macro.getMacroForPrintJobID(((TransferGCodeToPrinterService) t.getSource()).getCurrentPrintJobID());
 
 			if (!macroRunning.isPresent()) {
-				BaseLookup.getSystemNotificationHandler().showPrintJobCancelledNotification();
+				systemNotificationManager.showPrintJobCancelledNotification();
 			}
 		};
 
@@ -153,7 +188,7 @@ public class PrintEngine implements ControllableService {
 			LOGGER.error(t.getSource().getTitle() + " has failed");
 			Optional<Macro> macroRunning = Macro.getMacroForPrintJobID(((TransferGCodeToPrinterService) t.getSource()).getCurrentPrintJobID());
 			if (!macroRunning.isPresent()) {
-				BaseLookup.getSystemNotificationHandler().showPrintJobFailedNotification();
+				systemNotificationManager.showPrintJobFailedNotification();
 			}
 			try {
 				associatedPrinter.cancel(null, safetyFeaturesRequiredForCurrentJob);
@@ -171,7 +206,7 @@ public class PrintEngine implements ControllableService {
 					Optional<Macro> macroRunning = Macro.getMacroForPrintJobID(result.getPrintJobID());
 
 					if (!macroRunning.isPresent() && canDisconnectDuringPrint) {
-						BaseLookup.getSystemNotificationHandler().showPrintTransferSuccessfulNotification(associatedPrinter.getPrinterIdentity().printerFriendlyNameProperty().get());
+						systemNotificationManager.showPrintTransferSuccessfulNotification(associatedPrinter.getPrinterIdentity().printerFriendlyNameProperty().get());
 					}
 				}
 			}
@@ -179,7 +214,7 @@ public class PrintEngine implements ControllableService {
 				Optional<Macro> macroRunning = Macro.getMacroForPrintJobID(result.getPrintJobID());
 
 				if (!macroRunning.isPresent()) {
-					BaseLookup.getSystemNotificationHandler().showPrintTransferFailedNotification(associatedPrinter.getPrinterIdentity().printerFriendlyNameProperty().get());
+					systemNotificationManager.showPrintTransferFailedNotification(associatedPrinter.getPrinterIdentity().printerFriendlyNameProperty().get());
 				}
 				LOGGER.error("Submission of job to printer failed");
 			}
@@ -195,7 +230,7 @@ public class PrintEngine implements ControllableService {
 			Optional<Macro> macroRunning = Macro.getMacroForPrintJobID(((TransferGCodeToPrinterService) t.getSource()).getCurrentPrintJobID());
 
 			if (!macroRunning.isPresent()) {
-				BaseLookup.getSystemNotificationHandler().showPrintTransferInitiatedNotification();
+				systemNotificationManager.showPrintTransferInitiatedNotification();
 			}
 		};
 
@@ -226,7 +261,7 @@ public class PrintEngine implements ControllableService {
 			@Override
 			public void changed(ObservableValue<? extends PrintQueueStatus> ov, PrintQueueStatus t, PrintQueueStatus t1) {
 				if (t1 == PrintQueueStatus.PRINTING) {
-					printJob.set(new PrintJob(associatedPrinter.printJobIDProperty().get()));
+					printJob.set(printJobFactory.create(associatedPrinter.printJobIDProperty().get()));
 				}
 				else {
 					printJob.set(null);
@@ -275,7 +310,7 @@ public class PrintEngine implements ControllableService {
 	}
 
 	public void makeETCCalculatorForJobOfUUID(String printJobID) {
-		PrintJob localPrintJob = new PrintJob(printJobID);
+		PrintJob localPrintJob = printJobFactory.create(printJobID);
 		PrintJobStatistics statistics = null;
 		try {
 			statistics = localPrintJob.getStatistics();
@@ -334,7 +369,7 @@ public class PrintEngine implements ControllableService {
 		Path slicedFilesLocation = printableProject.getProjectLocation().resolve(printableProject.getPrintQuality().toString());
 
 		String jobUUID = SystemUtils.generate16DigitID();
-		Path printJobDirectoryPath = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve(jobUUID);
+		Path printJobDirectoryPath = printJobsPath.resolve(jobUUID);
 		printableProject.setJobUUID(jobUUID);
 
 		try {
@@ -347,12 +382,12 @@ public class PrintEngine implements ControllableService {
 
 		deleteOldPrintJobDirectories();
 
-		PrintJob newPrintJob = new PrintJob(jobUUID);
+		PrintJob newPrintJob = printJobFactory.create(jobUUID);
 		printFileFromDisk(newPrintJob);
 	}
 
 	private void deleteOldPrintJobDirectories() {
-		File printSpoolDirectory = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).toFile();
+		File printSpoolDirectory = printJobsPath.toFile();
 		File[] filesOnDisk = printSpoolDirectory.listFiles();
 
 		if (filesOnDisk.length > BaseConfiguration.maxPrintSpoolFiles) {
@@ -378,7 +413,7 @@ public class PrintEngine implements ControllableService {
 
 			linesInPrintingFile.set(printJobStatistics.getNumberOfLines());
 
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+			taskExecutor.runOnGUIThread(() -> {
 				LOGGER.info("Respooling job " + jobUUID + " to printer from line " + startFromLineNumber);
 				transferGCodeToPrinterService.reset();
 				transferGCodeToPrinterService.setCurrentPrintJobID(jobUUID);
@@ -403,7 +438,7 @@ public class PrintEngine implements ControllableService {
 	}
 
 	protected boolean spoolAndPrintFileFromDisk(PrintJob printJob) {
-		PrintJob spoolJob = new PrintJob(printJob.getJobUUID());
+		PrintJob spoolJob = printJobFactory.create(printJob.getJobUUID());
 		File spoolJobDirectory = spoolJob.getJobDirectory().toFile();
 		if (spoolJobDirectory.exists()) {
 			try {
@@ -443,26 +478,27 @@ public class PrintEngine implements ControllableService {
 		return false;
 	}
 
-	private boolean reprintDirectFromPrinter(PrintJob printJob) throws RoboxCommsException {
-		boolean acceptedPrintRequest;
-		//Reprint directly from printer
-		LOGGER.info("Printing job " + printJob.getJobUUID() + " from printer store");
-		if (macroBeingRun.get() == null) {
-			BaseLookup.getSystemNotificationHandler().showReprintStartedNotification();
-		}
-
-		if (printJob.roboxisedFileExists()) {
-			try {
-				linesInPrintingFile.set(printJob.getStatistics().getNumberOfLines());
-			}
-			catch (IOException ex) {
-				LOGGER.error("Couldn't get job statistics for job " + printJob.getJobUUID());
-			}
-		}
-		associatedPrinter.initiatePrint(printJob.getJobUUID());
-		acceptedPrintRequest = true;
-		return acceptedPrintRequest;
-	}
+	//TODO: tidy up
+	//	private boolean reprintDirectFromPrinter(PrintJob printJob) throws RoboxCommsException {
+	//		boolean acceptedPrintRequest;
+	//		//Reprint directly from printer
+	//		LOGGER.info("Printing job " + printJob.getJobUUID() + " from printer store");
+	//		if (macroBeingRun.get() == null) {
+	//			systemNotificationManager.showReprintStartedNotification();
+	//		}
+	//
+	//		if (printJob.roboxisedFileExists()) {
+	//			try {
+	//				linesInPrintingFile.set(printJob.getStatistics().getNumberOfLines());
+	//			}
+	//			catch (IOException ex) {
+	//				LOGGER.error("Couldn't get job statistics for job " + printJob.getJobUUID());
+	//			}
+	//		}
+	//		associatedPrinter.initiatePrint(printJob.getJobUUID());
+	//		acceptedPrintRequest = true;
+	//		return acceptedPrintRequest;
+	//	}
 
 	/**
 	 *
@@ -515,11 +551,11 @@ public class PrintEngine implements ControllableService {
 
 		tidyPrintSpoolDirectory();
 
-		Path printjobFilename = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve(printUUID).resolve(printUUID + BaseConfiguration.gcodeTempFileExtension);
+		Path printjobFilename = printJobsPath.resolve(printUUID).resolve(printUUID + BaseConfiguration.gcodeTempFileExtension);
 
 		PrintJobStatistics printJobStatistics = null;
 		if (printJobName != null) {
-			PrintJob printJob = new PrintJob(printUUID);
+			PrintJob printJob = printJobFactory.create(printUUID);
 			printJobStatistics = new PrintJobStatistics();
 			printJobStatistics.setProjectName(printJobName);
 			try {
@@ -536,8 +572,8 @@ public class PrintEngine implements ControllableService {
 		Optional<PrinterType> printerType = Optional.of(associatedPrinter.findPrinterType());
 		try {
 			FileUtils.copyFile(src, dest);
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
-				int numberOfLines = GCodeMacros.countLinesInMacroFile(dest, ";", printerType);
+			taskExecutor.runOnGUIThread(() -> {
+				int numberOfLines = gCodeMacros.countLinesInMacroFile(dest, ";", printerType);
 				linesInPrintingFile.set(numberOfLines);
 				transferGCodeToPrinterService.reset();
 				transferGCodeToPrinterService.setPrintUsingSDCard(useSDCard);
@@ -562,7 +598,7 @@ public class PrintEngine implements ControllableService {
 
 	private void tidyPrintSpoolDirectory() {
 		//Erase old print job directories
-		File printSpoolDirectory = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).toFile();
+		File printSpoolDirectory = printJobsPath.toFile();
 		File[] filesOnDisk = printSpoolDirectory.listFiles();
 		if (filesOnDisk.length > BaseConfiguration.maxPrintSpoolFiles) {
 			int filesToDelete = filesOnDisk.length - BaseConfiguration.maxPrintSpoolFiles;
@@ -575,7 +611,7 @@ public class PrintEngine implements ControllableService {
 
 	private void tidyMacroSpoolDirectory() {
 		//Erase old print jobs
-		File printSpoolDirectory = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).toFile();
+		File printSpoolDirectory = printJobsPath.toFile();
 
 		File[] filesOnDisk = printSpoolDirectory.listFiles();
 
@@ -603,9 +639,7 @@ public class PrintEngine implements ControllableService {
 		//Create the print job directory
 		String printUUID = macro.getMacroJobNumber();
 
-		Path spoolPath = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS);
-
-		File printJobDirectory = spoolPath.toFile();
+		File printJobDirectory = printJobsPath.toFile();
 		printJobDirectory.mkdirs();
 
 		tidyMacroSpoolDirectory();
@@ -613,7 +647,7 @@ public class PrintEngine implements ControllableService {
 		//String printjobFilename = printJobDirectoryName + printUUID
 		//        + BaseConfiguration.gcodeTempFileExtension;
 
-		File printjobFile = spoolPath.resolve(printUUID + BaseConfiguration.gcodeTempFileExtension).toFile();
+		File printjobFile = printJobsPath.resolve(printUUID + BaseConfiguration.gcodeTempFileExtension).toFile();
 
 		Optional<PrinterType> printerType = Optional.of(associatedPrinter.findPrinterType());
 		try {
@@ -622,7 +656,7 @@ public class PrintEngine implements ControllableService {
 			Head head = associatedPrinter.headProperty().get();
 			if (head != null)
 				headTypeCode = head.typeCodeProperty().get();
-			ArrayList<String> macroContents = GCodeMacros.getMacroContents(macro.getMacroFileName(), printerType, headTypeCode, requireNozzle0, requireNozzle1, requireSafetyFeatures);
+			ArrayList<String> macroContents = gCodeMacros.getMacroContents(macro.getMacroFileName(), printerType, headTypeCode, requireNozzle0, requireNozzle1, requireSafetyFeatures);
 
 			// Write the contents of the macro file to the print area
 			FileUtils.writeLines(printjobFile, macroContents, false);
@@ -634,8 +668,8 @@ public class PrintEngine implements ControllableService {
 			throw new MacroPrintException("Error whilst generating macro - " + ex.getMessage());
 		}
 
-		BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
-			int numberOfLines = GCodeMacros.countLinesInMacroFile(printjobFile, ";", printerType);
+		taskExecutor.runOnGUIThread(() -> {
+			int numberOfLines = gCodeMacros.countLinesInMacroFile(printjobFile, ";", printerType);
 			linesInPrintingFile.set(numberOfLines);
 			LOGGER.info("Print service is in state:" + transferGCodeToPrinterService.stateProperty().get().name());
 			if (transferGCodeToPrinterService.isRunning()) {
@@ -660,7 +694,7 @@ public class PrintEngine implements ControllableService {
 	private String createPrintJobDirectory() {
 		//Create the print job directory
 		String printUUID = SystemUtils.generate16DigitID();
-		Path printJobDirectoryPath = OpenAutomakerEnv.get().getUserPath(PRINT_JOBS).resolve(printUUID);
+		Path printJobDirectoryPath = printJobsPath.resolve(printUUID);
 
 		try {
 			Files.createDirectories(printJobDirectoryPath);
@@ -714,7 +748,7 @@ public class PrintEngine implements ControllableService {
 			}
 		};
 		FutureTask<Boolean> stopServicesTask = new FutureTask<>(stopServices);
-		BaseLookup.getTaskExecutor().runOnGUIThread(stopServicesTask);
+		taskExecutor.runOnGUIThread(stopServicesTask);
 		try {
 			stopServicesTask.get();
 		}
@@ -724,13 +758,13 @@ public class PrintEngine implements ControllableService {
 	}
 
 	public boolean reEstablishTransfer(String printJobID, int expectedSequenceNumber) {
-		PrintJob printJob = new PrintJob(printJobID);
+		PrintJob printJob = printJobFactory.create(printJobID);
 		boolean acceptedPrintRequest = false;
 
 		if (printJob.roboxisedFileExists()) {
 			acceptedPrintRequest = printFileFromDisk(printJob, expectedSequenceNumber, false);
 			if (macroBeingRun.get() == null) {
-				BaseLookup.getSystemNotificationHandler().removePrintTransferFailedNotification();
+				systemNotificationManager.removePrintTransferFailedNotification();
 			}
 		}
 

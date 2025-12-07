@@ -1,16 +1,14 @@
 package celtech.coreUI.components.Notifications;
 
-import celtech.Lookup;
+import jakarta.inject.Inject;
 import javafx.scene.layout.VBox;
 
-/**
- *
- * @author Ian
- */
 public class NotificationArea extends VBox {
-	public NotificationArea() {
-		this.getChildren().add(Lookup.getNotificationDisplay());
-		this.getChildren().add(Lookup.getProgressDisplay());
+
+	@Inject
+	public NotificationArea(NotificationDisplay notificationDisplay, ProgressDisplay progressDisplay) {
+		this.getChildren().add(notificationDisplay);
+		this.getChildren().add(progressDisplay);
 		setPickOnBounds(false);
 	}
 }

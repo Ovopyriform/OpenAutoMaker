@@ -8,17 +8,19 @@ import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.utils.RectangularBounds;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.coreUI.visualisation.ScreenExtents;
 import celtech.coreUI.visualisation.ScreenExtentsProvider;
 import celtech.coreUI.visualisation.ScreenExtentsProviderTwoD;
 import celtech.coreUI.visualisation.ShapeProviderTwoD;
+import jakarta.annotation.PostConstruct;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.geometry.Point3D;
 import javafx.scene.Group;
@@ -28,19 +30,15 @@ import javafx.scene.transform.Scale;
 import javafx.scene.transform.Transform;
 import javafx.scene.transform.Translate;
 
-/**
- *
- * @author ianhudson
- */
 public abstract class ProjectifiableThing extends Group implements ScreenExtentsProviderTwoD, ShapeProviderTwoD {
 
 	private File modelFile;
 	protected boolean isCollided = false;
-	protected BooleanProperty isSelected;
-	protected BooleanProperty isOffBed;
+	protected BooleanProperty isSelected = new SimpleBooleanProperty(false);
+	protected BooleanProperty isOffBed = new SimpleBooleanProperty(false);
 	protected ScreenExtents extents = null;
-	private List<ShapeProviderTwoD.ShapeChangeListener> shapeChangeListeners;
-	private List<ScreenExtentsProviderTwoD.ScreenExtentsListener> screenExtentsChangeListeners;
+	private List<ShapeProviderTwoD.ShapeChangeListener> shapeChangeListeners = new ArrayList<>();
+	private List<ScreenExtentsProviderTwoD.ScreenExtentsListener> screenExtentsChangeListeners = new ArrayList<>();
 	protected double printVolumeWidth = 0;
 	protected double printVolumeDepth = 0;
 	protected double printVolumeHeight = 0;
@@ -51,44 +49,60 @@ public abstract class ProjectifiableThing extends Group implements ScreenExtents
 	 */
 	protected int modelId;
 	private SimpleStringProperty modelName;
-	protected Translate transformBedCentre;
-	protected Scale transformScalePreferred;
-	protected Rotate transformRotateTurnPreferred;
-	protected Translate transformMoveToPreferred;
-	protected List<Transform> rotationTransforms;
+
+	protected Translate transformBedCentre = new Translate(0, 0, 0);
+
+	protected Scale transformScalePreferred = new Scale(1, 1, 1);
+
+	protected Rotate transformRotateTurnPreferred = new Rotate(0, 0, 0, 0, Z_AXIS);
+
+	protected Translate transformMoveToPreferred = new Translate(0, 0, 0);
+
+	protected List<Transform> rotationTransforms = new ArrayList<>();;
 	protected RectangularBounds lastTransformedBoundsInParent;
 	protected RectangularBounds originalModelBounds;
+
 	protected static final Point3D Y_AXIS = new Point3D(0, 1, 0);
 	protected static final Point3D Z_AXIS = new Point3D(0, 0, 1);
 	protected static final Point3D X_AXIS = new Point3D(1, 0, 0);
-	protected DoubleProperty preferredXScale;
-	protected DoubleProperty preferredYScale;
-	protected DoubleProperty preferredRotationTurn;
+
+	protected DoubleProperty preferredXScale = new SimpleDoubleProperty(1);
+	protected DoubleProperty preferredYScale = new SimpleDoubleProperty(1);
+	protected DoubleProperty preferredZScale = new SimpleDoubleProperty(1);
+
+	protected DoubleProperty preferredRotationLean = new SimpleDoubleProperty(0);
+	protected DoubleProperty preferredRotationTwist = new SimpleDoubleProperty(0);
+	protected DoubleProperty preferredRotationTurn = new SimpleDoubleProperty(0);
 
 	protected double bedCentreOffsetX;
 	protected double bedCentreOffsetY;
 	protected double bedCentreOffsetZ;
 
+	@Inject
+	protected transient SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected transient PrinterContainer printerContainer;
+
 	public ProjectifiableThing() {
-		initialise();
-	}
-
-	public ProjectifiableThing(File modelFile) {
-		this.modelFile = modelFile;
-		initialise();
-	}
-
-	private void initialise() {
 		isSelected = new SimpleBooleanProperty(false);
 		isOffBed = new SimpleBooleanProperty(false);
 		shapeChangeListeners = new ArrayList<>();
 		screenExtentsChangeListeners = new ArrayList<>();
+	}
 
-		Lookup.getSelectedPrinterProperty().addListener((ObservableValue<? extends Printer> ov, Printer t, Printer t1) -> {
-			updatePrintVolumeBounds(t1);
+	public ProjectifiableThing(File modelFile) {
+		this();
+		this.modelFile = modelFile;
+	}
+
+	@PostConstruct
+	protected void postConstruct() {
+		selectedPrinter.addListener((observable, oldValue, newValue) -> {
+			updatePrintVolumeBounds(newValue);
 		});
 
-		updatePrintVolumeBounds(Lookup.getSelectedPrinterProperty().get());
+		updatePrintVolumeBounds(selectedPrinter.get());
 	}
 
 	public int getModelId() {
@@ -215,7 +229,7 @@ public abstract class ProjectifiableThing extends Group implements ScreenExtents
 			printVolumeHeight = printer.printerConfigurationProperty().get().getPrintVolumeHeight();
 		}
 		else {
-			PrinterDefinitionFile defaultPrinterConfiguration = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+			PrinterDefinitionFile defaultPrinterConfiguration = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 			printVolumeWidth = defaultPrinterConfiguration.getPrintVolumeWidth();
 			printVolumeDepth = defaultPrinterConfiguration.getPrintVolumeDepth();
 			printVolumeHeight = defaultPrinterConfiguration.getPrintVolumeHeight();

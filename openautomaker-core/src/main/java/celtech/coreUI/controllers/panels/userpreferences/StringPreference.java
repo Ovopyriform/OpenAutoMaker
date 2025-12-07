@@ -1,8 +1,10 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.Control;
@@ -18,7 +20,13 @@ public class StringPreference implements PreferencesInnerPanelController.Prefere
 	private final StringProperty stringProperty;
 	private final String caption;
 
+	@Inject
+	private I18N i18n;
+
 	public StringPreference(StringProperty stringProperty, String caption) {
+
+		GuiceContext.get().injectMembers(this);
+
 		this.stringProperty = stringProperty;
 		this.caption = caption;
 
@@ -55,7 +63,7 @@ public class StringPreference implements PreferencesInnerPanelController.Prefere
 
 	@Override
 	public String getDescription() {
-		return OpenAutomakerEnv.getI18N().t(caption);
+		return i18n.t(caption);
 	}
 
 	@Override

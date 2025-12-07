@@ -1,137 +1,80 @@
 package org.openautomaker.base.configuration;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.OPENAUTOMAKER_LAST_PRINTER_FIRMWARE;
-import static org.openautomaker.environment.OpenAutomakerEnv.OPENAUTOMAKER_LAST_PRINTER_SERIAL;
-import static org.openautomaker.environment.OpenAutomakerEnv.OPENAUTOMAKER_ROOT_CONNECTED;
+import java.net.InetAddress;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
+import org.openautomaker.environment.preference.ConnectedServersPreference;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.Version;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-
-import celtech.roboxbase.comms.DetectedServer;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 /**
  *
  * @author Ian
  */
+@Singleton
 public class CoreMemory {
-	private static final Logger LOGGER = LogManager.getLogger();
+	//private static final Logger LOGGER = LogManager.getLogger();
 
-	private List<DetectedServer> cachedActiveRoboxRoots = null;
+	private final ConnectedServersPreference connectedServersPreference;
 
 	private static CoreMemory instance = null;
 
-	private final ObjectMapper mapper = new ObjectMapper();
+	@Inject
+	protected CoreMemory(
+			ConnectedServersPreference connectedServersPreference) {
 
-	private CoreMemory() {
-		SimpleModule module = new SimpleModule("DetectedServerDeserializer", new Version(1, 0, 0, null, null, null));
-		module.addDeserializer(DetectedServer.class, new DetectedServer.DetectedServerDeserializer());
-		module.addSerializer(DetectedServer.class, new DetectedServer.DetectedServerSerializer());
-		mapper.registerModule(module);
+		this.connectedServersPreference = connectedServersPreference;
+
+		instance = this;
 	}
 
+	@Deprecated
 	public static CoreMemory getInstance() {
-		if (instance == null) {
-			instance = new CoreMemory();
-		}
 		return instance;
 	}
 
-	public List<DetectedServer> getActiveRoboxRoots() {
-		if (cachedActiveRoboxRoots == null) {
-			String activeRootsJSON = OpenAutomakerEnv.get().getProperty(OPENAUTOMAKER_ROOT_CONNECTED);
-			if (activeRootsJSON != null) {
-				try {
-					cachedActiveRoboxRoots = mapper.readValue(activeRootsJSON,
-							new TypeReference<List<DetectedServer>>() {
-							});
-				}
-				catch (IOException ex) {
-					LOGGER.warn("Unable to map data for active robox roots");
-				}
-			}
-
-			if (cachedActiveRoboxRoots == null) {
-				cachedActiveRoboxRoots = new ArrayList<>();
-			}
-		}
-		return cachedActiveRoboxRoots;
+	public Map<InetAddress, PrintServerConnection> getActiveRoboxRoots() {
+		return connectedServersPreference.getValue();
 	}
 
 	public void clearActiveRoboxRoots() {
-		cachedActiveRoboxRoots.clear();
-		OpenAutomakerEnv.get().setProperty(OPENAUTOMAKER_ROOT_CONNECTED, "");
-
-		// BaseConfiguration.setApplicationMemory(ACTIVE_ROBOX_ROOT_KEY, "");
+		connectedServersPreference.remove();
 	}
 
-	private void writeRoboxRootData() {
-		try {
-			OpenAutomakerEnv.get().setProperty(OPENAUTOMAKER_ROOT_CONNECTED, mapper.writeValueAsString(cachedActiveRoboxRoots));
-		}
-		catch (JsonProcessingException ex) {
-			LOGGER.warn("Unable to write connected root data:", ex);
-		}
+	public void activateRoboxRoot(PrintServerConnection server) {
+		Map<InetAddress, PrintServerConnection> serverList = connectedServersPreference.getValue();
+		if (serverList.containsValue(server))
+			return;
+
+		//Create a modifiable list
+		serverList = new ConcurrentHashMap<>(serverList);
+		serverList.get(server.getAddress());
+		connectedServersPreference.setValue(serverList);
 	}
 
-	public void activateRoboxRoot(DetectedServer server) {
-		if (!cachedActiveRoboxRoots.contains(server)) {
-			cachedActiveRoboxRoots.add(server);
-			writeRoboxRootData();
-		}
-		else {
-			// LOGGER.warning("Root " + server.getName() + " is already active");
-		}
+	public void deactivateRoboxRoot(PrintServerConnection server) {
+		Map<InetAddress, PrintServerConnection> serverList = connectedServersPreference.getValue();
+		if (!serverList.containsValue(server))
+			return;
+
+		//Create a modifiable list
+		serverList = new ConcurrentHashMap<>(serverList);
+		serverList.remove(server.getAddress());
+		connectedServersPreference.setValue(serverList);
 	}
 
-	public void deactivateRoboxRoot(DetectedServer server) {
-		if (cachedActiveRoboxRoots.contains(server)) {
-			cachedActiveRoboxRoots.remove(server);
-			writeRoboxRootData();
-		}
-	}
+	public void updateRoboxRoot(PrintServerConnection server) {
+		Map<InetAddress, PrintServerConnection> serverList = connectedServersPreference.getValue();
+		if (!serverList.containsValue(server))
+			return;
 
-	public void updateRoboxRoot(DetectedServer server) {
-		if (cachedActiveRoboxRoots.contains(server))
-			writeRoboxRootData();
-	}
-
-	public float getLastPrinterFirmwareVersion() {
-		String lastFirmwareVersion = OpenAutomakerEnv.get().getProperty(OPENAUTOMAKER_LAST_PRINTER_FIRMWARE);
-
-		if (lastFirmwareVersion == null || lastFirmwareVersion.isBlank())
-			return 0;
-
-		float lastFirmwareVersionNum = 0;
-		try {
-			lastFirmwareVersionNum = Float.valueOf(lastFirmwareVersion);
-		}
-		catch (NumberFormatException ex) {
-			LOGGER.warn("Unable to read firmware version from application memory");
-		}
-		return lastFirmwareVersionNum;
-	}
-
-	public void setLastPrinterFirmwareVersion(float firmwareVersionInUse) {
-		OpenAutomakerEnv.get().setProperty(OPENAUTOMAKER_LAST_PRINTER_FIRMWARE, String.format(Locale.UK, "%f", firmwareVersionInUse));
-	}
-
-	public String getLastPrinterSerial() {
-		return OpenAutomakerEnv.get().getProperty(OPENAUTOMAKER_LAST_PRINTER_SERIAL);
-	}
-
-	public void setLastPrinterSerial(String printerIDToUse) {
-		OpenAutomakerEnv.get().setProperty(OPENAUTOMAKER_LAST_PRINTER_SERIAL, printerIDToUse);
+		//Create a modifiable list
+		serverList = new ConcurrentHashMap<>(serverList);
+		serverList.remove(server.getAddress());
+		serverList.put(server.getAddress(), server);
+		connectedServersPreference.setValue(serverList);
 	}
 }

@@ -8,6 +8,7 @@ import celtech.roboxbase.comms.exceptions.UnknownPacketTypeException;
  *
  * @author ianhudson
  */
+//TODO: Make this Guice injectable factory and not have static methods
 public class RoboxRxPacketFactory
 {
 

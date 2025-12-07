@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import celtech.coreUI.components.buttons.*?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel?>
 <?import javafx.scene.*?>
 <?import javafx.scene.shape.*?>
 <?import java.lang.*?>

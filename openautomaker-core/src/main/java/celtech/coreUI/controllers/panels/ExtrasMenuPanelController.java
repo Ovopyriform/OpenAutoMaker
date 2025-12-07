@@ -3,12 +3,36 @@ package celtech.coreUI.controllers.panels;
 import celtech.configuration.ApplicationConfiguration;
 import celtech.coreUI.controllers.panels.userpreferences.Preferences;
 import celtech.coreUI.controllers.utilityPanels.HeadEEPROMController;
+import jakarta.inject.Inject;
 
 //TODO: Look at this binding of FXML to classes
 public class ExtrasMenuPanelController extends MenuPanelController {
 
-	public ExtrasMenuPanelController() {
+	//	public ExtrasMenuPanelController() {
+	//		paneli18Name = "extrasMenu.title";
+	//	}
+
+	private final HeadEEPROMController headEEPROMController;
+	private final RootScannerPanelController rootScannerPanelController;
+	private final MaintenanceInsetPanelController maintenanceInsetPanelController;
+
+	private final Preferences preferences;
+
+	@Inject
+	protected ExtrasMenuPanelController(
+			HeadEEPROMController headEEPROMController,
+			RootScannerPanelController rootScannerPanelController,
+			MaintenanceInsetPanelController maintenanceInsetPanelController,
+			Preferences preferences) {
+
+		super();
+
+		this.preferences = preferences;
+
 		paneli18Name = "extrasMenu.title";
+		this.headEEPROMController = headEEPROMController;
+		this.rootScannerPanelController = rootScannerPanelController;
+		this.maintenanceInsetPanelController = maintenanceInsetPanelController;
 	}
 
 	/**
@@ -16,19 +40,20 @@ public class ExtrasMenuPanelController extends MenuPanelController {
 	 */
 	@Override
 	protected void setupInnerPanels() {
+		//TODO: These all look like the controller should be defined in the fxml.  Look to moving there.
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlUtilityPanelResourcePath + "headEEPROM.fxml",
-				new HeadEEPROMController());
+				headEEPROMController);
 
 		//UserPreferences userPreferences = Lookup.getUserPreferences();
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "preferencesPanel.fxml",
 				new PreferencesInnerPanelController("preferences.environment",
-						Preferences.createEnvironmentPreferences()));
+						preferences.createEnvironmentPreferences()));
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "preferencesPanel.fxml",
 				new PreferencesInnerPanelController("preferences.printing",
-						Preferences.createPrintingPreferences()));
+						preferences.createPrintingPreferences()));
 		//        loadInnerPanel(
 		//                ApplicationConfiguration.fxmlPanelResourcePath + "preferencesPanel.fxml",
 		//                new PreferencesInnerPanelController("preferences.timelapse",
@@ -36,19 +61,20 @@ public class ExtrasMenuPanelController extends MenuPanelController {
 
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "rootScanner.fxml",
-				new RootScannerPanelController());
+				rootScannerPanelController);
 
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "MaintenanceInsetPanel.fxml",
-				new MaintenanceInsetPanelController());
+				maintenanceInsetPanelController);
 
+		//TODO: These should all be injected
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "preferencesPanel.fxml",
 				new PreferencesInnerPanelController("preferences.advanced",
-						Preferences.createAdvancedPreferences()));
+						preferences.createAdvancedPreferences()));
 		loadInnerPanel(
 				ApplicationConfiguration.fxmlPanelResourcePath + "preferencesPanel.fxml",
 				new PreferencesInnerPanelController("preferences.customPrinter",
-						Preferences.createCustomPrinterPreferences()));
+						preferences.createCustomPrinterPreferences()));
 	}
 }

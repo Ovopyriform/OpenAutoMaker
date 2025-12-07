@@ -11,127 +11,119 @@ import org.openautomaker.base.services.camera.CameraTriggerData;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
 import org.openautomaker.environment.Slicer;
 
-/**
- *
- * @author ianhudson
- */
-public class PrintableMeshes
-{
+import com.google.inject.assistedinject.Assisted;
 
-    private final List<MeshForProcessing> meshesForProcessing;
-    private final List<Boolean> usedExtruders;
-    private final List<Integer> extruderForModel;
-    private final String projectName;
-    private final String requiredPrintJobID;
-    private final RoboxProfile settings;
-    private final PrinterSettingsOverrides printOverrides;
-    private final PrintQualityEnumeration printQuality;
-    private final Slicer defaultSlicerType;
-    private final Vector3D centreOfPrintedObject;
-    private final boolean safetyFeaturesRequired;
-    private final boolean cameraEnabled;
-    private final CameraTriggerData cameraTriggerData;
+import jakarta.inject.Inject;
 
-    public PrintableMeshes(List<MeshForProcessing> meshesForProcessing,
-            List<Boolean> usedExtruders,
-            List<Integer> extruderForModel,
-            String projectName,
-            String requiredPrintJobID,
-            RoboxProfile settings,
-            PrinterSettingsOverrides printOverrides,
-            PrintQualityEnumeration printQuality,
-            Slicer defaultSlicerType,
-            Vector3D centreOfPrintedObject,
-            boolean safetyFeaturesRequired,
-            boolean cameraEnabled,
-            CameraTriggerData cameraTriggerData)
-    {
-        this.meshesForProcessing = meshesForProcessing;
-        this.usedExtruders = usedExtruders;
-        this.extruderForModel = extruderForModel;
-        this.projectName = projectName;
-        this.requiredPrintJobID = requiredPrintJobID;
-        this.settings = settings;
-        this.printOverrides = printOverrides;
-        this.printQuality = printQuality;
-        this.defaultSlicerType = defaultSlicerType;
-        this.centreOfPrintedObject = centreOfPrintedObject;
-        this.safetyFeaturesRequired = safetyFeaturesRequired;
-        this.cameraEnabled = cameraEnabled;
-        this.cameraTriggerData = cameraTriggerData;
-    }
+public class PrintableMeshes {
 
-    public List<MeshForProcessing> getMeshesForProcessing()
-    {
-        return meshesForProcessing;
-    }
+	private final List<MeshForProcessing> meshesForProcessing;
+	private final List<Boolean> usedExtruders;
+	private final List<Integer> extruderForModel;
+	private final String projectName;
+	private final String requiredPrintJobID;
+	private final RoboxProfile settings;
+	private final PrinterSettingsOverrides printOverrides;
+	private final PrintQualityEnumeration printQuality;
+	private final Slicer defaultSlicerType;
+	private final Vector3D centreOfPrintedObject;
+	private final boolean safetyFeaturesRequired;
+	private final boolean cameraEnabled;
+	private final CameraTriggerData cameraTriggerData;
 
-    public List<Boolean> getUsedExtruders()
-    {
-        return usedExtruders;
-    }
+	private final HeadContainer headContainer;
 
-    public List<Integer> getExtruderForModel()
-    {
-        return extruderForModel;
-    }
+	@Inject
+	protected PrintableMeshes(
+			HeadContainer headContainer,
+			@Assisted List<MeshForProcessing> meshesForProcessing,
+			@Assisted List<Boolean> usedExtruders,
+			@Assisted List<Integer> extruderForModel,
+			@Assisted("projectName") String projectName,
+			@Assisted("requiredPrintJobID") String requiredPrintJobID,
+			@Assisted RoboxProfile settings,
+			@Assisted PrinterSettingsOverrides printOverrides,
+			@Assisted PrintQualityEnumeration printQuality,
+			@Assisted Slicer defaultSlicerType,
+			@Assisted Vector3D centreOfPrintedObject,
+			@Assisted("safetyFeaturesRequired") boolean safetyFeaturesRequired,
+			@Assisted("cameraEnabled") boolean cameraEnabled,
+			@Assisted CameraTriggerData cameraTriggerData) {
 
-    public String getProjectName()
-    {
-        return projectName;
-    }
+		this.headContainer = headContainer;
 
-    public String getRequiredPrintJobID()
-    {
-        return requiredPrintJobID;
-    }
+		this.meshesForProcessing = meshesForProcessing;
+		this.usedExtruders = usedExtruders;
+		this.extruderForModel = extruderForModel;
+		this.projectName = projectName;
+		this.requiredPrintJobID = requiredPrintJobID;
+		this.settings = settings;
+		this.printOverrides = printOverrides;
+		this.printQuality = printQuality;
+		this.defaultSlicerType = defaultSlicerType;
+		this.centreOfPrintedObject = centreOfPrintedObject;
+		this.safetyFeaturesRequired = safetyFeaturesRequired;
+		this.cameraEnabled = cameraEnabled;
+		this.cameraTriggerData = cameraTriggerData;
+	}
 
-    public RoboxProfile getSettings()
-    {
-        return settings;
-    }
+	public List<MeshForProcessing> getMeshesForProcessing() {
+		return meshesForProcessing;
+	}
 
-    public PrinterSettingsOverrides getPrintOverrides()
-    {
-        return printOverrides;
-    }
+	public List<Boolean> getUsedExtruders() {
+		return usedExtruders;
+	}
 
-    public PrintQualityEnumeration getPrintQuality()
-    {
-        return printQuality;
-    }
+	public List<Integer> getExtruderForModel() {
+		return extruderForModel;
+	}
 
-    public Slicer getDefaultSlicerType()
-    {
-        return defaultSlicerType;
-    }
+	public String getProjectName() {
+		return projectName;
+	}
 
-    public Vector3D getCentreOfPrintedObject()
-    {
-        return centreOfPrintedObject;
-    }
+	public String getRequiredPrintJobID() {
+		return requiredPrintJobID;
+	}
 
-    public boolean isSafetyFeaturesRequired()
-    {
-        return safetyFeaturesRequired;
-    }
+	public RoboxProfile getSettings() {
+		return settings;
+	}
 
-    public boolean isCameraEnabled()
-    {
-        return cameraEnabled;
-    }
+	public PrinterSettingsOverrides getPrintOverrides() {
+		return printOverrides;
+	}
 
-    public CameraTriggerData getCameraTriggerData()
-    {
-        return cameraTriggerData;
-    }
-    
-    public int getNumberOfNozzles()
-    {
-        int nNozzles = 0;
-        HeadFile printerHead = HeadContainer.getHeadByID(settings.getHeadType());
-        if (printerHead != null)
-            nNozzles = printerHead.getNozzles().size();
-        return nNozzles;
-    }
+	public PrintQualityEnumeration getPrintQuality() {
+		return printQuality;
+	}
+
+	public Slicer getDefaultSlicerType() {
+		return defaultSlicerType;
+	}
+
+	public Vector3D getCentreOfPrintedObject() {
+		return centreOfPrintedObject;
+	}
+
+	public boolean isSafetyFeaturesRequired() {
+		return safetyFeaturesRequired;
+	}
+
+	public boolean isCameraEnabled() {
+		return cameraEnabled;
+	}
+
+	public CameraTriggerData getCameraTriggerData() {
+		return cameraTriggerData;
+	}
+
+	public int getNumberOfNozzles() {
+		int nNozzles = 0;
+		HeadFile printerHead = headContainer.getHeadByID(settings.getHeadType());
+		if (printerHead != null)
+			nNozzles = printerHead.getNozzles().size();
+		return nNozzles;
+	}
 }

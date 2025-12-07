@@ -2,7 +2,11 @@ package celtech.coreUI.components;
 
 import java.net.URL;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
 import celtech.configuration.ApplicationConfiguration;
+import jakarta.inject.Inject;
 import javafx.animation.Animation;
 import javafx.animation.Transition;
 import javafx.beans.property.BooleanProperty;
@@ -64,10 +68,15 @@ public class SlideoutAndProjectHolder extends HBox {
 		}
 	};
 
+	@Inject
+	FXMLLoaderFactory fxmlLoaderFactory;
+
 	/**
 	 *
 	 */
 	public SlideoutAndProjectHolder() {
+		GuiceContext.get().injectMembers(this);
+
 		hideSidebar.onFinishedProperty().set(new EventHandler<ActionEvent>() {
 			@Override
 			public void handle(ActionEvent event) {
@@ -85,7 +94,7 @@ public class SlideoutAndProjectHolder extends HBox {
 
 		try {
 			URL fxmlFileName = getClass().getResource(ApplicationConfiguration.fxmlResourcePath + "slideHandleButton.fxml");
-			FXMLLoader buttonLoader = new FXMLLoader(fxmlFileName);
+			FXMLLoader buttonLoader = fxmlLoaderFactory.create(fxmlFileName);
 			slideButton = (Button) buttonLoader.load();
 		}
 		catch (Exception ex) {

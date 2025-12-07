@@ -4,8 +4,11 @@ import java.io.IOException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.configuration.ApplicationConfiguration;
+import jakarta.inject.Inject;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ChangeListener;
@@ -13,12 +16,8 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Group;
 import javafx.scene.control.Tab;
 
-/**
- *
- * @author George Salter
- */
 public class GraphicTab extends Tab {
-	private static final Logger LOGGER = LogManager.getLogger(GraphicTab.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final StringProperty fxmlIconName = new SimpleStringProperty("");
 	private final StringProperty fxmlSelectedIconName = new SimpleStringProperty("");
@@ -32,13 +31,23 @@ public class GraphicTab extends Tab {
 		}
 	};
 
+	@Inject
+	FXMLLoaderFactory fxmlLoaderFactory;
+
 	public GraphicTab() {
+		GuiceContext.get().injectMembers(this);
 		selectedProperty().addListener(selectedTabChangeListener);
 	}
 
+	//TODO: Consider blank constructor for builder
+	//	public GraphicTab() {
+	//		selectedProperty().addListener(selectedTabChangeListener);
+	//		fxmlLoaderFactory = null;
+	//	}
+
 	public GraphicTab(String fxmlIconName) {
+		this();
 		setFxmlIconName(fxmlIconName);
-		selectedProperty().addListener(selectedTabChangeListener);
 	}
 
 	public String getFxmlIconName() {
@@ -58,20 +67,19 @@ public class GraphicTab extends Tab {
 		this.fxmlSelectedIconName.set(fxmlSelectedFileName);
 	}
 
+	//TODO, this seems like a silly way to do this.  Just have an icon component which takes a name as a param and do it all in markup.
 	private void loadFXMLIcon(String fxmlIconName) {
-		if (!fxmlIconName.equalsIgnoreCase("")) {
-			FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-					ApplicationConfiguration.fxmlTabsResourcePath + fxmlIconName + ".fxml"));
+		if (fxmlIconName.equalsIgnoreCase(""))
+			return;
 
-			fxmlLoader.setClassLoader(this.getClass().getClassLoader());
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource(ApplicationConfiguration.fxmlTabsResourcePath + fxmlIconName + ".fxml"));
 
-			try {
-				Group graphicGroup = fxmlLoader.load();
-				setGraphic(graphicGroup);
-			}
-			catch (IOException ex) {
-				LOGGER.error("Could not load FXML from file: " + fxmlIconName + ".fxml", ex);
-			}
+		try {
+			Group graphicGroup = fxmlLoader.load();
+			setGraphic(graphicGroup);
+		}
+		catch (IOException ex) {
+			LOGGER.error("Could not load FXML from file: " + fxmlIconName + ".fxml", ex);
 		}
 	}
 }

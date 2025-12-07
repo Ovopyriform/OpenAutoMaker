@@ -2,21 +2,23 @@ package celtech.roboxbase.comms;
 
 import java.util.Objects;
 
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
+
 /**
  *
  * @author Ian
  */
 public class RemoteDetectedPrinter extends DetectedDevice
 {
-    private final DetectedServer serverPrinterIsAttachedTo;
+    private final PrintServerConnection serverPrinterIsAttachedTo;
 
-    public RemoteDetectedPrinter(DetectedServer serverPrinterIsAttachedTo, DeviceDetector.DeviceConnectionType connectionType, String connectionHandle)
+    public RemoteDetectedPrinter(PrintServerConnection serverPrinterIsAttachedTo, DeviceDetector.DeviceConnectionType connectionType, String connectionHandle)
     {
         super(connectionType, connectionHandle);
         this.serverPrinterIsAttachedTo = serverPrinterIsAttachedTo;
     }
 
-    public DetectedServer getServerPrinterIsAttachedTo()
+    public PrintServerConnection getServerPrinterIsAttachedTo()
     {
         return serverPrinterIsAttachedTo;
     }

@@ -1,9 +1,7 @@
 package celtech.coreUI.controllers.panels;
 
 import java.io.File;
-import java.net.URL;
 import java.util.List;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -11,37 +9,36 @@ import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.environment.preference.paths.GCodePathPreference;
+import org.openautomaker.environment.preference.root.FirmwarePathPreference;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.StageManager;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
-import celtech.configuration.ApplicationConfiguration;
-import celtech.configuration.DirectoryMemoryProperty;
 import celtech.coreUI.DisplayManager;
+import jakarta.inject.Inject;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
+import javafx.stage.FileChooser.ExtensionFilter;
 
 /**
  * FXML Controller class
  *
  * @author Ian
  */
-public class MaintenanceInsetPanelController implements Initializable, MenuInnerPanel {
+public class MaintenanceInsetPanelController implements MenuInnerPanel {
 
 	private static final Logger LOGGER = LogManager.getLogger();
-
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference = new SafetyFeaturesPreference();
 
 	private Printer connectedPrinter;
 
@@ -100,6 +97,36 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 	@FXML
 	private Button ZTestButton;
 
+	private final I18N i18n;
+	private final SafetyFeaturesPreference safetyFeaturesPreference;
+	private final DisplayManager displayManager;
+	private final StageManager stageManager;
+	private final SelectedPrinter selectedPrinter;
+	private final AdvancedModePreference advancedModePreference;
+	private final FirmwarePathPreference firmwarePathPreference;
+	private final GCodePathPreference gCodePathPreference;
+
+	@Inject
+	protected MaintenanceInsetPanelController(
+			I18N i18n,
+			SafetyFeaturesPreference safetyFeaturesPreference,
+			DisplayManager displayManager,
+			StageManager stageManager,
+			SelectedPrinter selectedPrinter,
+			AdvancedModePreference advancedModePreference,
+			FirmwarePathPreference firmwarePathPreference,
+			GCodePathPreference gCodePathPreference) {
+
+		this.i18n = i18n;
+		this.safetyFeaturesPreference = safetyFeaturesPreference;
+		this.displayManager = displayManager;
+		this.stageManager = stageManager;
+		this.selectedPrinter = selectedPrinter;
+		this.advancedModePreference = advancedModePreference;
+		this.firmwarePathPreference = firmwarePathPreference;
+		this.gCodePathPreference = gCodePathPreference;
+	}
+
 	@FXML
 	void ejectStuckMaterial1(ActionEvent event) {
 		if (connectedPrinter != null && connectedPrinter.headProperty().get() != null) {
@@ -108,7 +135,7 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 				if (connectedPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.DUAL_MATERIAL_HEAD)
 					nozzleNumber = 1;
 
-				connectedPrinter.ejectStuckMaterial(nozzleNumber, false, null, fSafetyFeaturesPreference.get());
+				connectedPrinter.ejectStuckMaterial(nozzleNumber, false, null, safetyFeaturesPreference.getValue());
 			}
 			catch (PrinterException ex) {
 				LOGGER.info("Error attempting to run eject stuck material E");
@@ -122,7 +149,7 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 				connectedPrinter.headProperty().get() != null &&
 				connectedPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.DUAL_MATERIAL_HEAD) {
 			try {
-				connectedPrinter.ejectStuckMaterial(0, false, null, fSafetyFeaturesPreference.get());
+				connectedPrinter.ejectStuckMaterial(0, false, null, safetyFeaturesPreference.getValue());
 			}
 			catch (PrinterException ex) {
 				LOGGER.info("Error attempting to run eject stuck material D");
@@ -173,7 +200,7 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 	@FXML
 	void cleanNozzleT0(ActionEvent event) {
 		try {
-			connectedPrinter.cleanNozzle(0, false, null, fSafetyFeaturesPreference.get());
+			connectedPrinter.cleanNozzle(0, false, null, safetyFeaturesPreference.getValue());
 		}
 		catch (PrinterException ex) {
 			LOGGER.error("Couldn't clean left nozzle");
@@ -183,7 +210,7 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 	@FXML
 	void cleanNozzleT1(ActionEvent event) {
 		try {
-			connectedPrinter.cleanNozzle(1, false, null, fSafetyFeaturesPreference.get());
+			connectedPrinter.cleanNozzle(1, false, null, safetyFeaturesPreference.getValue());
 		}
 		catch (PrinterException ex) {
 			LOGGER.error("Couldn't clean right nozzle");
@@ -202,38 +229,46 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 
 	@FXML
 	void loadFirmware(ActionEvent event) {
+
+		//TODO: Why does this have a field??  Shouldn't this just be a file chooser builder method?
 		firmwareFileChooser.setInitialFileName("Untitled");
+		firmwareFileChooser.setTitle(i18n.t("maintenancePanel.firmwareFileChooserTitle"));
+		firmwareFileChooser.setSelectedExtensionFilter(new ExtensionFilter(i18n.t("maintenancePanel.firmwareFileDescription"), "*.bin"));
+		firmwareFileChooser.setInitialDirectory(firmwarePathPreference.getValue().toFile());
 
-		firmwareFileChooser.setInitialDirectory(ApplicationConfiguration.getLastDirectoryFile(DirectoryMemoryProperty.LAST_FIRMWARE_DIRECTORY));
+		final File file = firmwareFileChooser.showOpenDialog(stageManager.getMainStage());
 
-		final File file = firmwareFileChooser.showOpenDialog(DisplayManager.getMainStage());
 		if (file != null) {
-			ApplicationConfiguration.setLastDirectory(DirectoryMemoryProperty.LAST_FIRMWARE_DIRECTORY, file.getParentFile().getAbsolutePath());
+			firmwarePathPreference.setValue(file.toPath().getParent());
 			connectedPrinter.loadFirmware(file.getAbsolutePath());
 		}
 	}
 
 	@FXML
 	void sendGCodeSD(ActionEvent event) {
+
 		gcodeFileChooser.setInitialFileName("Untitled");
-		gcodeFileChooser.setInitialDirectory(ApplicationConfiguration.getLastDirectoryFile(DirectoryMemoryProperty.LAST_GCODE_DIRECTORY));
+		gcodeFileChooser.setTitle(i18n.t("maintenancePanel.gcodeFileChooserTitle"));
+		gcodeFileChooser.setSelectedExtensionFilter(new ExtensionFilter(i18n.t("maintenancePanel.gcodeFileDescription"), "*.gcode"));
+		gcodeFileChooser.setInitialDirectory(gCodePathPreference.getValue().toFile());
 
 		final File file = gcodeFileChooser.showOpenDialog(container.getScene().getWindow());
 
 		if (file != null) {
+			gCodePathPreference.setValue(file.toPath().getParent());
 			try {
 				connectedPrinter.executeGCodeFile(file.toPath(), false);
 			}
 			catch (PrinterException ex) {
 				LOGGER.error("Error sending SD job");
 			}
-			ApplicationConfiguration.setLastDirectory(DirectoryMemoryProperty.LAST_GCODE_DIRECTORY, file.getParentFile().getAbsolutePath());
+
 		}
 	}
 
 	@FXML
 	void purge(ActionEvent event) {
-		DisplayManager.getInstance().getPurgeInsetPanelController().purge(connectedPrinter);
+		displayManager.getPurgeInsetPanelController().purge(connectedPrinter);
 	}
 
 	/**
@@ -242,8 +277,7 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 	 * @param url
 	 * @param rb
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		try {
 			YTestButton.disableProperty().bind(printingDisabled);
 			PurgeMaterialButton.disableProperty().bind(
@@ -271,27 +305,26 @@ public class MaintenanceInsetPanelController implements Initializable, MenuInner
 			LevelGantryButton.disableProperty().bind(printingDisabled);
 			ZTestButton.disableProperty().bind(printingDisabled);
 			
-			BooleanProperty advancedmodeProperty = FXProperty.bind(new AdvancedModePreference());
+			BooleanProperty advancedmodeProperty = FXProperty.bind(advancedModePreference);
 			
 			sendGCodeSDButton.disableProperty().bind(printingDisabled.or(advancedmodeProperty).not());
 
 			currentFirmwareField.setStyle("-fx-font-weight: bold;");
 
-			gcodeFileChooser.setTitle(OpenAutomakerEnv.getI18N().t("maintenancePanel.gcodeFileChooserTitle"));
-			gcodeFileChooser.getExtensionFilters()
-					.addAll(
-							new FileChooser.ExtensionFilter(OpenAutomakerEnv.getI18N().t(
-									"maintenancePanel.gcodeFileDescription"),
-									"*.gcode"));
+			//			gcodeFileChooser.setTitle(i18n.tInst("maintenancePanel.gcodeFileChooserTitle"));
+			//			gcodeFileChooser.getExtensionFilters()
+			//					.addAll(
+			//							new FileChooser.ExtensionFilter(i18n.tInst(
+			//									"maintenancePanel.gcodeFileDescription"),
+			//									"*.gcode"));
 
-			firmwareFileChooser.setTitle(OpenAutomakerEnv.getI18N().t("maintenancePanel.firmwareFileChooserTitle"));
-			firmwareFileChooser.getExtensionFilters()
-					.addAll(
-							new FileChooser.ExtensionFilter(OpenAutomakerEnv.getI18N().t(
-									"maintenancePanel.firmwareFileDescription"), "*.bin"));
+			//			firmwareFileChooser.setTitle(i18n.tInst("maintenancePanel.firmwareFileChooserTitle"));
+			//			firmwareFileChooser.getExtensionFilters()
+			//					.addAll(
+			//							new FileChooser.ExtensionFilter(i18n.tInst(
+			//									"maintenancePanel.firmwareFileDescription"), "*.bin"));
 
-			Lookup.getSelectedPrinterProperty().addListener(
-					(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
+			selectedPrinter.addListener((observable, oldValue, newValue) -> {
 						if (connectedPrinter != null) {
 							currentFirmwareField.textProperty().unbind();
 							sendGCodeSDButton.disableProperty().unbind();

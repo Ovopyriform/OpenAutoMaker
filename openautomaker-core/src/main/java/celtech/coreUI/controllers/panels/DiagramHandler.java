@@ -5,12 +5,13 @@ package celtech.coreUI.controllers.panels;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.guice.FXMLLoaderFactory;
 
 import celtech.configuration.ApplicationConfiguration;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
@@ -32,11 +33,9 @@ public class DiagramHandler {
 	private Bounds diagramBounds;
 	private Pane diagramNode;
 	private final VBox diagramContainer;
-	private final ResourceBundle resources;
 
-	public DiagramHandler(VBox diagramContainer, ResourceBundle resources) {
+	public DiagramHandler(VBox diagramContainer) {
 		this.diagramContainer = diagramContainer;
-		this.resources = resources;
 	}
 
 	private void addDiagramMoveScaleListeners() {
@@ -63,11 +62,13 @@ public class DiagramHandler {
 		return bounds;
 	}
 
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
 	private void loadDiagram() {
-		URL fxmlFileName = getClass().getResource(
-				ApplicationConfiguration.fxmlDiagramsResourcePath + "purge/purge.fxml");
+		URL fxmlFileName = getClass().getResource(ApplicationConfiguration.fxmlDiagramsResourcePath + "purge/purge.fxml");
 		try {
-			FXMLLoader loader = new FXMLLoader(fxmlFileName, resources);
+			FXMLLoader loader = fxmlLoaderFactory.create(fxmlFileName);
 			diagramNode = loader.load();
 			diagramBounds = getBoundsOfNotYetDisplayedNode(diagramNode);
 			diagramContainer.getChildren().clear();

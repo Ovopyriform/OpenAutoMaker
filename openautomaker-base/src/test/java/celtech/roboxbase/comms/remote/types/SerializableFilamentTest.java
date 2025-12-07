@@ -1,55 +1,46 @@
 package celtech.roboxbase.comms.remote.types;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
+import org.openautomaker.base.MaterialType;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import celtech.roboxbase.comms.remote.types.SerializableFilament;
 import javafx.scene.paint.Color;
 
-import org.junit.Test;
-import org.openautomaker.base.MaterialType;
-import org.openautomaker.base.configuration.Filament;
+public class SerializableFilamentTest {
 
-import static org.junit.Assert.*;
+	private static final String jsonifiedClass = "{\"friendlyFilamentName\":\"A Filament\",\"material\":\"ABS\",\"reelID\":\"U123456\",\"brand\":\"\",\"category\":\"\",\"diameter\":0.4,\"filamentMultiplier\":0.0,\"feedRateMultiplier\":0.0,\"requiredAmbientTemperature\":0,\"requiredFirstLayerBedTemperature\":0,\"requiredBedTemperature\":0,\"requiredFirstLayerNozzleTemperature\":0,\"requiredNozzleTemperature\":0,\"webDisplayColour\":\"0x00ffffff\",\"costGBPPerKG\":0.0,\"defaultLength_m\":0,\"mutable\":true}";
 
-/**
- *
- * @author Ian
- */
-public class SerializableFilamentTest
-{
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"friendlyFilamentName\":\"A Filament\",\"material\":\"ABS\",\"reelID\":\"U123456\",\"brand\":\"\",\"category\":\"\",\"diameter\":0.4,\"filamentMultiplier\":0.0,\"feedRateMultiplier\":0.0,\"requiredAmbientTemperature\":0,\"requiredFirstLayerBedTemperature\":0,\"requiredBedTemperature\":0,\"requiredFirstLayerNozzleTemperature\":0,\"requiredNozzleTemperature\":0,\"webDisplayColour\":\"0x00ffffff\",\"costGBPPerKG\":0.0,\"defaultLength_m\":0,\"mutable\":true}";
-           
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final SerializableFilament packet = getTestFilament();
+	@Test
+	public void serializesToJSON() throws Exception {
+		final SerializableFilament packet = getTestFilament();
 
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final SerializableFilament packet = getTestFilament();
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final SerializableFilament packet = getTestFilament();
 
-        try
-        {
-            SerializableFilament packetRec = mapper.readValue(jsonifiedClass, SerializableFilament.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
+		try {
+			SerializableFilament packetRec = mapper.readValue(jsonifiedClass, SerializableFilament.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-    private SerializableFilament getTestFilament()
-    {
-        SerializableFilament packet = new SerializableFilament("A Filament", MaterialType.ABS, "U123456", "", "", 0.4f, 0, 0, 0, 0, 0, 0, 0, Color.AQUA.toString(), 0, 0, false, true);
+	private SerializableFilament getTestFilament() {
+		SerializableFilament packet = new SerializableFilament("A Filament", MaterialType.ABS, "U123456", "", "", 0.4f, 0, 0, 0, 0, 0, 0, 0, Color.AQUA.toString(), 0, 0, false, true);
 
-        return packet;
-    }
+		return packet;
+	}
 }

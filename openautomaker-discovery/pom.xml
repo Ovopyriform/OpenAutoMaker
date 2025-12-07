@@ -1,0 +1,97 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>openautomaker-discovery</artifactId>
+	<packaging>jar</packaging>
+	<version>1.0-SNAPSHOT</version>
+
+	<name>OpenAutomaker Discovery</name>
+	<description>Discover and manage connected devices</description>
+
+	<parent>
+		<artifactId>openautomaker-parent</artifactId>
+		<groupId>org.openautomaker</groupId>
+		<version>1.0</version>
+		<relativePath>../openautomaker-parent</relativePath>
+	</parent>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-environment</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-controls</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openautomaker</groupId>
+			<artifactId>openautomaker-test-environment</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.vdurmont</groupId>
+			<artifactId>semver4j</artifactId>
+		</dependency>
+	</dependencies>
+
+	<build>
+	</build>
+
+	<!--profiles>
+		<profile>
+			<id>osx-specific</id>
+			<activation>
+				<os>
+					<family>mac</family>
+				</os>
+			</activation>
+			<properties>
+				<runtime.log.location><![CDATA[${sys:user.home}/Library/Logs/OpenAutomaker/openautomaker.log]]></runtime.log.location>
+			</properties>
+		</profile>
+		<profile>
+			<id>windows-specific</id>
+			<activation>
+				<os>
+					<family>windows</family>
+				</os>
+			</activation>
+			<properties>
+				<runtime.log.location><![CDATA[${sys:jpackage.app-path}/logs/openautomaker.log]]></runtime.log.location>
+			</properties>
+		</profile>
+		<profile>
+			<id>linux-specific</id>
+			<activation>
+				<os>
+					<family>unix</family>
+					<name>Linux</name>
+				</os>
+			</activation>
+			<properties>
+				<runtime.log.location><![CDATA[/var/log/OpenAutomaker/openautomaker.log]]></runtime.log.location>
+			</properties>
+		</profile>
+	</profiles -->
+</project>

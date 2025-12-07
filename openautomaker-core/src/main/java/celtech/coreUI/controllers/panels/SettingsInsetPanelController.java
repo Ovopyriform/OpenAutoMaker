@@ -2,19 +2,15 @@ package celtech.coreUI.controllers.panels;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.net.URL;
 import java.util.List;
 import java.util.Optional;
-import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.prefs.PreferenceChangeEvent;
 import java.util.prefs.PreferenceChangeListener;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.MaterialType;
-import org.openautomaker.base.appManager.NotificationType;
 import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.RoboxProfile;
@@ -23,15 +19,17 @@ import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.configuration.datafileaccessors.RoboxProfileSettingsContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
 import org.openautomaker.base.configuration.fileRepresentation.SupportType;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.notification_manager.NotificationType;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterListChangesAdapter;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
 import org.openautomaker.environment.Slicer;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ModelContainerProject;
@@ -42,6 +40,7 @@ import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.components.Notifications.ConditionalNotificationBar;
 import celtech.coreUI.controllers.ProjectAwareController;
 import celtech.modelcontrol.ProjectifiableThing;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -53,7 +52,6 @@ import javafx.collections.MapChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -66,11 +64,9 @@ import javafx.scene.layout.HBox;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class SettingsInsetPanelController implements Initializable, ProjectAwareController, ModelContainerProject.ProjectChangesListener {
+public class SettingsInsetPanelController implements ProjectAwareController, ModelContainerProject.ProjectChangesListener {
 
 	private static final Logger LOGGER = LogManager.getLogger();
-
-	private static final RoboxProfileSettingsContainer ROBOX_PROFILE_SETTINGS_CONTAINER = RoboxProfileSettingsContainer.getInstance();
 
 	@FXML
 	private HBox settingsInsetRoot;
@@ -211,13 +207,39 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 		}
 	};
 
+	private final ApplicationStatus applicationStatus;
+	private final DisplayManager displayManager;
+	private final RoboxProfileSettingsContainer roboxProfileSettingsContainer;
+	private final SelectedPrinter selectedPrinter;
+	private final PrinterManager printerManager;
+	private final SlicerPreference slicerPreference;
+	private final HeadContainer headContainer;
+
+	@Inject
+	protected SettingsInsetPanelController(
+			ApplicationStatus applicationStatus,
+			DisplayManager displayManager,
+			PrinterManager printerManager,
+			RoboxProfileSettingsContainer roboxProfileSettingsContainer,
+			SelectedPrinter selectedPrinter,
+			SlicerPreference slicerPreference,
+			HeadContainer headContainer) {
+
+		this.applicationStatus = applicationStatus;
+		this.displayManager = displayManager;
+		this.printerManager = printerManager;
+		this.roboxProfileSettingsContainer = roboxProfileSettingsContainer;
+		this.selectedPrinter = selectedPrinter;
+		this.slicerPreference = slicerPreference;
+		this.headContainer = headContainer;
+	}
+
 	/**
 	 * Initialises the controller class.
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		PLACompatibilityModeNotificationBar = new ConditionalNotificationBar("notification.printSettingsAutomaticallyAdjustedForPLA", NotificationType.NOTE);
-		PLACompatibilityModeNotificationBar.setAppearanceCondition(ApplicationStatus.getInstance().modeProperty().isEqualTo(ApplicationMode.SETTINGS).and(inPLACompatibilityMode));
+		PLACompatibilityModeNotificationBar.setAppearanceCondition(applicationStatus.modeProperty().isEqualTo(ApplicationMode.SETTINGS).and(inPLACompatibilityMode));
 
 		try {
 			supportComboBox.getItems().clear();
@@ -228,18 +250,18 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 			setupOverrides();
 
-			if (new SlicerPreference().get() == Slicer.CURA)
-				supportComboBox.getSelectionModel().select(SupportType.MATERIAL_2);
-			else
-				supportComboBox.getSelectionModel().select(SupportType.AS_PROFILE);
+			//			if (new SlicerPreference().getValue() == Slicer.CURA)
+			//				supportComboBox.getSelectionModel().select(SupportType.MATERIAL_2);
+			//			else
+			supportComboBox.getSelectionModel().select(SupportType.AS_PROFILE);
 
-			Lookup.getSelectedPrinterProperty().addListener(selectedPrinterChangeListener);
+			selectedPrinter.addListener(selectedPrinterChangeListener);
 
-			ApplicationStatus.getInstance().modeProperty().addListener(applicationModeChangeListener);
+			applicationStatus.modeProperty().addListener(applicationModeChangeListener);
 
-			ROBOX_PROFILE_SETTINGS_CONTAINER.addProfileChangeListener(roboxProfileChangeListener);
+			roboxProfileSettingsContainer.addProfileChangeListener(roboxProfileChangeListener);
 
-			new SlicerPreference().addChangeListener(new PreferenceChangeListener() {
+			slicerPreference.addChangeListener(new PreferenceChangeListener() {
 				@Override
 				public void preferenceChange(PreferenceChangeEvent evt) {
 					populateCustomProfileChooser();
@@ -251,9 +273,9 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 			showPleaseCreateProfile(customProfileChooser.getItems().isEmpty());
 
-			whenPrinterChanged(Lookup.getSelectedPrinterProperty().get());
+			whenPrinterChanged(selectedPrinter.get());
 
-			BaseLookup.getPrinterListChangesNotifier().addListener(printerListChangesListener);
+			printerManager.getPrinterChangeNotifier().addListener(printerListChangesListener);
 		}
 		catch (Exception ex) {
 			ex.printStackTrace();
@@ -323,8 +345,8 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 	}
 
 	private void populateCustomProfileChooser() {
-		Slicer slicerType = new SlicerPreference().get();
-		ObservableList<RoboxProfile> filesForHeadType = ROBOX_PROFILE_SETTINGS_CONTAINER.getCustomRoboxProfilesForSlicer(slicerType).getOrDefault(currentHeadType, FXCollections.emptyObservableList());
+		Slicer slicerType = slicerPreference.getValue();
+		ObservableList<RoboxProfile> filesForHeadType = roboxProfileSettingsContainer.getCustomRoboxProfilesForSlicer(slicerType).getOrDefault(currentHeadType, FXCollections.emptyObservableList());
 		customProfileChooser.setItems(filesForHeadType);
 		if (currentProject != null
 				&& currentProject.getPrinterSettings().getPrintQuality() == PrintQualityEnumeration.CUSTOM) {
@@ -342,14 +364,14 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 		SupportType typeToSelect = SupportType.AS_PROFILE;
 		boolean allowSaveSupportType = false;
 
-		if (HeadContainer.getHeadByID(currentHeadType).getType() == Head.HeadType.DUAL_MATERIAL_HEAD
+		if (headContainer.getHeadByID(currentHeadType).getType() == Head.HeadType.DUAL_MATERIAL_HEAD
 				&& printerSettings != null) {
-			if (new SlicerPreference().get() == Slicer.CURA) {
-				// For a dual material head and old Cura default to Material 2, there is no as profile
-				supportComboBox.getItems().remove(SupportType.AS_PROFILE);
-				typeToSelect = SupportType.MATERIAL_2;
-				allowSaveSupportType = true;
-			}
+			//			if (new SlicerPreference().getValue() == Slicer.CURA) {
+			//				// For a dual material head and old Cura default to Material 2, there is no as profile
+			//				supportComboBox.getItems().remove(SupportType.AS_PROFILE);
+			//				typeToSelect = SupportType.MATERIAL_2;
+			//				allowSaveSupportType = true;
+			//			}
 
 			if (printerSettings.getPrintSupportTypeOverride() != null
 					&& printerSettings.getPrintSupportTypeOverride() != SupportType.AS_PROFILE) {
@@ -358,7 +380,7 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 				allowSaveSupportType = true;
 			}
 		}
-		else if (HeadContainer.getHeadByID(currentHeadType).getType() == Head.HeadType.SINGLE_MATERIAL_HEAD
+		else if (headContainer.getHeadByID(currentHeadType).getType() == Head.HeadType.SINGLE_MATERIAL_HEAD
 				&& printerSettings != null) {
 			allowSaveSupportType = true;
 		}
@@ -433,10 +455,10 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 					|| now.doubleValue() >= fillDensitySlider.getMax()
 					|| now.doubleValue() <= fillDensitySlider.getMin()) {
 
-				if (new SlicerPreference().get() == Slicer.CURA)
-					printerSettings.setFillDensityOverride(now.floatValue() / 100.0f);
-				else
-					printerSettings.setFillDensityOverride(now.floatValue());
+				//				if (new SlicerPreference().getValue() == Slicer.CURA)
+				//					printerSettings.setFillDensityOverride(now.floatValue() / 100.0f);
+				//				else
+				printerSettings.setFillDensityOverride(now.floatValue());
 
 			}
 		});
@@ -473,7 +495,7 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 	@FXML
 	void editPrintProfile(ActionEvent event) {
-		DisplayManager.getInstance().showAndSelectPrintProfile(customProfileChooser.getValue());
+		displayManager.showAndSelectPrintProfile(customProfileChooser.getValue());
 	}
 
 	/**
@@ -586,10 +608,10 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 		brimSlider.setValue(saveBrim);
 
-		if (new SlicerPreference().get() == Slicer.CURA)
-			fillDensitySlider.setValue(saveFillDensity * 100);
-		else
-			fillDensitySlider.setValue(saveFillDensity);
+		//		if (new SlicerPreference().getValue() == Slicer.CURA)
+		//			fillDensitySlider.setValue(saveFillDensity * 100);
+		//		else
+		fillDensitySlider.setValue(saveFillDensity);
 
 		raftButton.setSelected(savePrintRaft);
 
@@ -607,7 +629,7 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 		supportButton.setSelected(autoSupport);
 
 		if (savePrinterSettingsName.length() > 0) {
-			List<RoboxProfile> profiles = ROBOX_PROFILE_SETTINGS_CONTAINER.getRoboxProfilesForSlicer(new SlicerPreference().get()).get(currentHeadType);
+			List<RoboxProfile> profiles = roboxProfileSettingsContainer.getRoboxProfilesForSlicer(slicerPreference.getValue()).get(currentHeadType);
 			Optional<RoboxProfile> chosenProfile = profiles.stream()
 					.filter(profile -> profile.getName().equals(savePrinterSettingsName))
 					.findFirst();
@@ -656,9 +678,9 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 					&& !(currentPrinter.effectiveFilamentsProperty().get(0).getMaterial() != currentPrinter.effectiveFilamentsProperty().get(1).getMaterial()
 							&& !((ModelContainerProject) currentProject).getPrintingExtruders(currentPrinter).get(supportComboBox.getSelectionModel().getSelectedItem().getExtruderNumber()));
 
-			if (new SlicerPreference().get() == Slicer.CURA) {
-				supportGapButton.setSelected(supportGapEnabledDriver);
-			}
+			//			if (new SlicerPreference().getValue() == Slicer.CURA) {
+			//				supportGapButton.setSelected(supportGapEnabledDriver);
+			//			}
 		}
 	}
 
@@ -694,7 +716,7 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 			if (currentHead != null) {
 				headType = currentHead.typeCodeProperty().get();
 			}
-			RoboxProfile customSettings = printerSettings.getSettings(headType, new SlicerPreference().get());
+			RoboxProfile customSettings = printerSettings.getSettings(headType, slicerPreference.getValue());
 			customProfileChooser.getSelectionModel().select(customSettings);
 		}
 	}
@@ -713,18 +735,18 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 		switch (quality) {
 			case DRAFT:
-				settings = ROBOX_PROFILE_SETTINGS_CONTAINER
-						.getRoboxProfileWithName(BaseConfiguration.draftSettingsProfileName, new SlicerPreference().get(), currentHeadType);
+				settings = roboxProfileSettingsContainer
+						.getRoboxProfileWithName(BaseConfiguration.draftSettingsProfileName, slicerPreference.getValue(), currentHeadType);
 				enableCustomChooser(false);
 				break;
 			case NORMAL:
-				settings = ROBOX_PROFILE_SETTINGS_CONTAINER
-						.getRoboxProfileWithName(BaseConfiguration.normalSettingsProfileName, new SlicerPreference().get(), currentHeadType);
+				settings = roboxProfileSettingsContainer
+						.getRoboxProfileWithName(BaseConfiguration.normalSettingsProfileName, slicerPreference.getValue(), currentHeadType);
 				enableCustomChooser(false);
 				break;
 			case FINE:
-				settings = ROBOX_PROFILE_SETTINGS_CONTAINER
-						.getRoboxProfileWithName(BaseConfiguration.fineSettingsProfileName, new SlicerPreference().get(), currentHeadType);
+				settings = roboxProfileSettingsContainer
+						.getRoboxProfileWithName(BaseConfiguration.fineSettingsProfileName, slicerPreference.getValue(), currentHeadType);
 				enableCustomChooser(false);
 				break;
 			case CUSTOM:
@@ -737,16 +759,16 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 
 		if (currentProject != null) {
 			if (settings.isPresent() && !printerSettings.isFillDensityChangedByUser()) {
-				if (new SlicerPreference().get() == Slicer.CURA) {
-					float fillDensity = settings.get().getSpecificFloatSetting("fillDensity_normalised");
-					printerSettings.setFillDensityOverride(fillDensity);
-					fillDensitySlider.setValue(fillDensity * 100.0);
-				}
-				else {
-					int fillDensity = settings.get().getSpecificIntSetting("fillDensity_normalised");
-					printerSettings.setFillDensityOverride(fillDensity);
-					fillDensitySlider.setValue(fillDensity);
-				}
+				//				if (new SlicerPreference().getValue() == Slicer.CURA) {
+				//					float fillDensity = settings.get().getSpecificFloatSetting("fillDensity_normalised");
+				//					printerSettings.setFillDensityOverride(fillDensity);
+				//					fillDensitySlider.setValue(fillDensity * 100.0);
+				//				}
+				//				else {
+				int fillDensity = settings.get().getSpecificIntSetting("fillDensity_normalised");
+				printerSettings.setFillDensityOverride(fillDensity);
+				fillDensitySlider.setValue(fillDensity);
+				//				}
 			}
 		}
 	}
@@ -757,7 +779,7 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 			return Optional.empty();
 		}
 		else {
-			return ROBOX_PROFILE_SETTINGS_CONTAINER.getRoboxProfileWithName(customSettingsName, new SlicerPreference().get(), currentHeadType);
+			return roboxProfileSettingsContainer.getRoboxProfileWithName(customSettingsName, slicerPreference.getValue(), currentHeadType);
 		}
 	}
 
@@ -803,13 +825,13 @@ public class SettingsInsetPanelController implements Initializable, ProjectAware
 		}
 		currentProject = null;
 
-		Lookup.getSelectedPrinterProperty().removeListener(selectedPrinterChangeListener);
+		selectedPrinter.removeListener(selectedPrinterChangeListener);
 
-		ApplicationStatus.getInstance().modeProperty().removeListener(applicationModeChangeListener);
+		applicationStatus.modeProperty().removeListener(applicationModeChangeListener);
 
-		ROBOX_PROFILE_SETTINGS_CONTAINER.removeProfileChangeListener(roboxProfileChangeListener);
+		roboxProfileSettingsContainer.removeProfileChangeListener(roboxProfileChangeListener);
 
-		BaseLookup.getPrinterListChangesNotifier().removeListener(printerListChangesListener);
+		printerManager.getPrinterChangeNotifier().removeListener(printerListChangesListener);
 
 		PLACompatibilityModeNotificationBar.destroyBar();
 	}

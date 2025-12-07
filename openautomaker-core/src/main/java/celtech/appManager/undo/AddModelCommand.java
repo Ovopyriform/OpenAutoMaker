@@ -16,7 +16,7 @@ import celtech.modelcontrol.ProjectifiableThing;
  *
  * @author tony
  */
-public class AddModelCommand extends Command {
+public class AddModelCommand implements Command {
 
 	private final Logger LOGGER = LogManager.getLogger();
 

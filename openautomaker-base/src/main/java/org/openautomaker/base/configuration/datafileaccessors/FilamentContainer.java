@@ -1,11 +1,10 @@
 package org.openautomaker.base.configuration.datafileaccessors;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.FILAMENTS;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DecimalFormat;
@@ -13,39 +12,37 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.MaterialType;
+import org.openautomaker.base.comms.print_server.PrintServerConnection;
 import org.openautomaker.base.configuration.BaseConfiguration;
-import org.openautomaker.base.configuration.CoreMemory;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.FilamentFileFilter;
 import org.openautomaker.base.utils.DeDuplicator;
 import org.openautomaker.base.utils.FileUtilities;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.ConnectedServersPreference;
+import org.openautomaker.environment.preference.printer.FilamentsPathPreference;
 
-import celtech.roboxbase.comms.DetectedServer;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 import javafx.scene.paint.Color;
 
-/**
- *
- * @author ianhudson
- */
+@Singleton
 public class FilamentContainer {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private static FilamentContainer instance = null;
-
 	private final ObservableList<Filament> appFilamentList = FXCollections.observableArrayList();
 	private final ObservableList<Filament> userFilamentList = FXCollections.observableArrayList();
 	private final ObservableList<Filament> completeFilamentList = FXCollections.observableArrayList();
-	private final ObservableList<Filament> completeFilamentListNoDuplicates = FXCollections.observableArrayList();
+	//private final ObservableList<Filament> completeFilamentListNoDuplicates = FXCollections.observableArrayList();
 	private final ObservableMap<String, Filament> completeFilamentMapByID = FXCollections.observableHashMap();
 	private final ObservableMap<String, String> completeFilamentNameByID = FXCollections.observableHashMap();
 
@@ -99,15 +96,18 @@ public class FilamentContainer {
 
 	private final List<FilamentDatabaseChangesListener> filamentDatabaseChangesListeners = new ArrayList<>();
 
-	private FilamentContainer() {
-		loadFilamentData();
-	}
+	private final FilamentsPathPreference filamentsPathPreference;
+	private final ConnectedServersPreference connectedServersPreference;
 
-	public static FilamentContainer getInstance() {
-		if (instance == null) {
-			instance = new FilamentContainer();
-		}
-		return instance;
+	@Inject
+	protected FilamentContainer(
+			FilamentsPathPreference filamentsPathPreference,
+			ConnectedServersPreference connectedServersPreference) {
+
+		this.filamentsPathPreference = filamentsPathPreference;
+		this.connectedServersPreference = connectedServersPreference;
+
+		loadFilamentData();
 	}
 
 	public void addFilamentDatabaseChangesListener(FilamentDatabaseChangesListener listener) {
@@ -124,10 +124,10 @@ public class FilamentContainer {
 		}
 	}
 
-	public static Path constructFilePath(Filament filament) {
+	public Path constructFilePath(Filament filament) {
 		String fileName = FileUtilities.cleanFileName(filament.getFriendlyFilamentName() + "-" + filament.getMaterial().getFriendlyName()) + BaseConfiguration.filamentFileExtension;
 
-		return OpenAutomakerEnv.get().getUserPath(FILAMENTS).resolve(fileName);
+		return filamentsPathPreference.getUserValue().resolve(fileName);
 	}
 
 	private void loadFilamentData() {
@@ -137,11 +137,11 @@ public class FilamentContainer {
 		appFilamentList.clear();
 		userFilamentList.clear();
 
-		ArrayList<Filament> filaments = null;
+		List<Filament> filaments = null;
 
-		File applicationFilamentDirHandle = OpenAutomakerEnv.get().getApplicationPath(FILAMENTS).toFile();
-		File[] applicationfilaments = applicationFilamentDirHandle.listFiles(
-				new FilamentFileFilter());
+		File applicationFilamentDirHandle = filamentsPathPreference.getAppValue().toFile();
+		File[] applicationfilaments = applicationFilamentDirHandle.listFiles(new FilamentFileFilter());
+
 		if (applicationfilaments != null) {
 			filaments = ingestFilaments(applicationfilaments, false);
 			filaments.sort(Filament.BY_MATERIAL.thenComparing(Filament::compareByFilamentID));
@@ -149,10 +149,10 @@ public class FilamentContainer {
 			completeFilamentList.addAll(filaments);
 		}
 		else {
-			LOGGER.error("No application filaments found");
+			LOGGER.error("No application filaments found: " + applicationFilamentDirHandle.getAbsolutePath());
 		}
 
-		File userFilamentDirHandle = OpenAutomakerEnv.get().getUserPath(FILAMENTS).toFile();
+		File userFilamentDirHandle = filamentsPathPreference.getUserValue().toFile();
 		File[] userfilaments = userFilamentDirHandle.listFiles(new FilamentFileFilter());
 		if (userfilaments != null) {
 			filaments = ingestFilaments(userfilaments, true);
@@ -165,7 +165,7 @@ public class FilamentContainer {
 			userFilamentList.addAll(filaments);
 		}
 		else {
-			LOGGER.info("No user filaments found");
+			LOGGER.info("No user filaments found: " + userFilamentDirHandle.getAbsolutePath());
 		}
 	}
 
@@ -335,9 +335,9 @@ public class FilamentContainer {
 	 * Save the given filament to file, using the friendly name and material type as file name. If a filament already exists of the same filamentID but different file name then delete that file.
 	 */
 	public void saveFilament(Filament filament) {
-		List<DetectedServer> serversToPushTo = new ArrayList<>(CoreMemory.getInstance().getActiveRoboxRoots());
+		Map<InetAddress, PrintServerConnection> serversToPushTo = connectedServersPreference.getValue();
 
-		for (DetectedServer server : serversToPushTo) {
+		for (PrintServerConnection server : serversToPushTo.values()) {
 			server.saveFilament(filament);
 		}
 
@@ -419,9 +419,9 @@ public class FilamentContainer {
 	public void deleteFilament(Filament filament) {
 		assert (filament.isMutable());
 
-		List<DetectedServer> serversToPushTo = new ArrayList<>(CoreMemory.getInstance().getActiveRoboxRoots());
+		Map<InetAddress, PrintServerConnection> serversToPushTo = connectedServersPreference.getValue();
 
-		for (DetectedServer server : serversToPushTo) {
+		for (PrintServerConnection server : serversToPushTo.values()) {
 			server.deleteFilament(filament);
 		}
 
@@ -442,7 +442,7 @@ public class FilamentContainer {
 		assert (filament.isMutable());
 		String oldName = completeFilamentNameByID.get(filament.getFilamentID()) + "-" + filament.getMaterial().getFriendlyName() + BaseConfiguration.filamentFileExtension;
 
-		Path oldFilePath = OpenAutomakerEnv.get().getUserPath(FILAMENTS).resolve(oldName);
+		Path oldFilePath = filamentsPathPreference.getUserValue().resolve(oldName);
 
 		try {
 			Files.delete(oldFilePath);

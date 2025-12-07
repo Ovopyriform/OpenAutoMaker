@@ -11,9 +11,11 @@ import org.openautomaker.base.printerControl.model.statetransitions.StateTransit
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionManager;
 import org.openautomaker.base.printerControl.model.statetransitions.StateTransitionManager.GUIName;
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.CalibrationXAndYState;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
 import celtech.configuration.ApplicationConfiguration;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.layout.Region;
@@ -31,8 +33,14 @@ public class CalibrationXAndYGUI {
 	StateTransitionManager<CalibrationXAndYState> stateManager;
 	Map<GUIName, Region> namesToButtons = new HashMap<>();
 
+	@Inject
+	private I18N i18n;
+
 	public CalibrationXAndYGUI(CalibrationInsetPanelController controller,
 			StateTransitionManager stateManager) {
+
+		GuiceContext.get().injectMembers(this);
+
 		this.controller = controller;
 		this.stateManager = stateManager;
 
@@ -60,7 +68,7 @@ public class CalibrationXAndYGUI {
 
 	public void setState(CalibrationXAndYState state) {
 		LOGGER.debug("GUI going to state " + state);
-		controller.calibrationStatus.replaceText(state.getStepTitle());
+		controller.calibrationStatus.replaceText(i18n.t(state.key()));
 		showAppropriateButtons(state);
 		if (state.getDiagramName().isPresent()) {
 			URL fxmlURL = getClass().getResource(
@@ -101,7 +109,7 @@ public class CalibrationXAndYGUI {
 				break;
 		}
 		if (stepNo != 0) {
-			controller.stepNumber.setText(String.format(OpenAutomakerEnv.getI18N().t("calibrationPanel.stepXOf2"), stepNo));
+			controller.stepNumber.setText(String.format(i18n.t("calibrationPanel.stepXOf2"), stepNo));
 		}
 	}
 

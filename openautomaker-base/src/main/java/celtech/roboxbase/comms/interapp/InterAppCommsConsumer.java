@@ -6,5 +6,5 @@ package celtech.roboxbase.comms.interapp;
  */
 public interface InterAppCommsConsumer
 {
-    public void incomingComms(InterAppRequest interAppRequest);
+    public void incomingComms(AbstractInterAppRequest interAppRequest);
 }

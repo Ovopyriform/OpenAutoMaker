@@ -4,6 +4,8 @@
  */
 package celtech.appManager;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -15,9 +17,9 @@ import javafx.beans.property.StringProperty;
  *
  * @author ianhudson
  */
+@Singleton
 public class ApplicationStatus {
 
-	private static ApplicationStatus instance = null;
 	private final ObjectProperty<ApplicationMode> currentMode = new SimpleObjectProperty<>(null);
 	private final StringProperty modeStringProperty = new SimpleStringProperty();
 	private final StringProperty modeDisplayStringProperty = new SimpleStringProperty();
@@ -25,18 +27,20 @@ public class ApplicationStatus {
 	private final DoubleProperty averageTimePerFrameProperty = new SimpleDoubleProperty(0);
 	private static ApplicationMode lastMode = null;
 
-	private ApplicationStatus() {
+	//TODO: Kept for static reference for the moment
+	private static ApplicationStatus instance;
+
+	@Inject
+	protected ApplicationStatus() {
+		instance = this;
 	}
 
 	/**
 	 *
 	 * @return
 	 */
+	@Deprecated
 	public static ApplicationStatus getInstance() {
-		if (instance == null) {
-			instance = new ApplicationStatus();
-		}
-
 		return instance;
 	}
 
@@ -45,12 +49,14 @@ public class ApplicationStatus {
 	 * @param newMode
 	 */
 	public void setMode(ApplicationMode newMode) {
-		if (currentMode.get() != ApplicationMode.ABOUT
-				&& currentMode.get() != ApplicationMode.PURGE
-				&& currentMode.get() != ApplicationMode.CALIBRATION_CHOICE
-				&& currentMode.get() != ApplicationMode.EXTRAS_MENU
-				&& currentMode.get() != ApplicationMode.LIBRARY) {
-			lastMode = currentMode.get();
+		ApplicationMode currMode = currentMode.get();
+
+		if (currMode != ApplicationMode.ABOUT
+				&& currMode != ApplicationMode.PURGE
+				&& currMode != ApplicationMode.CALIBRATION_CHOICE
+				&& currMode != ApplicationMode.EXTRAS_MENU
+				&& currMode != ApplicationMode.LIBRARY) {
+			lastMode = currMode;
 		}
 		currentMode.setValue(newMode);
 	}

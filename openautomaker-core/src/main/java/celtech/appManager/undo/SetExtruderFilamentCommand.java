@@ -13,7 +13,7 @@ import celtech.appManager.ModelContainerProject;
  *
  * @author tony
  */
-public class SetExtruderFilamentCommand extends Command {
+public class SetExtruderFilamentCommand implements Command {
 
 	private static final Logger LOGGER = LogManager.getLogger(
 			SetExtruderFilamentCommand.class.getName());

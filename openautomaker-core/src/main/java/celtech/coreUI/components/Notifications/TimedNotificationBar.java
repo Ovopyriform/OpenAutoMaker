@@ -3,23 +3,33 @@ package celtech.coreUI.components.Notifications;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.guice.GuiceContext;
 
-import celtech.Lookup;
+import jakarta.inject.Inject;
 
-/**
- *
- * @author Ian
- */
 public class TimedNotificationBar extends AppearingNotificationBar {
 
 	private final int displayFor_ms = 4000;
 	private final int selfDestructIn_ms = 6000;
 	private Timer selfDestructTimer = null;
 
+	private final NotificationDisplay notificationDisplay;
+
+	@Inject
+	private TaskExecutor taskExecutor;
+
+	protected TimedNotificationBar(NotificationDisplay notificationDisplay) {
+
+		GuiceContext.get().injectMembers(this);
+
+		this.notificationDisplay = notificationDisplay;
+
+	}
+
 	@Override
 	public void show() {
-		Lookup.getNotificationDisplay().addNotificationBar(this);
+		notificationDisplay.addNotificationBar(this);
 		selfDestructTimer = new Timer("TimedNotificationSelfDestruct", true);
 		startSlidingInToView();
 		selfDestructTimer.schedule(new SelfDestructTask(), selfDestructIn_ms);
@@ -33,7 +43,7 @@ public class TimedNotificationBar extends AppearingNotificationBar {
 
 	@Override
 	public void finishedSlidingOutOfView() {
-		Lookup.getNotificationDisplay().removeNotificationBar(this);
+		notificationDisplay.removeNotificationBar(this);
 		if (selfDestructTimer != null) {
 			selfDestructTimer.cancel();
 			selfDestructTimer = null;
@@ -52,7 +62,7 @@ public class TimedNotificationBar extends AppearingNotificationBar {
 
 		@Override
 		public void run() {
-			BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+			taskExecutor.runOnGUIThread(() -> {
 				finishedSlidingOutOfView();
 			});
 		}

@@ -4,12 +4,12 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.appManager.NotificationType;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.notification_manager.NotificationType;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Head.HeadType;
 import org.openautomaker.base.printerControl.model.Head.ValveType;
@@ -22,10 +22,13 @@ import org.openautomaker.base.printerControl.model.statetransitions.calibration.
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.NozzleHeightCalibrationState;
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.NozzleOpeningCalibrationState;
 import org.openautomaker.base.printerControl.model.statetransitions.calibration.SingleNozzleHeightCalibrationState;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedSpinnerControl;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.configuration.ApplicationConfiguration;
@@ -33,7 +36,7 @@ import celtech.coreUI.SpinnerControl;
 import celtech.coreUI.components.HyperlinkedLabel;
 import celtech.coreUI.components.VerticalMenu;
 import celtech.coreUI.components.Notifications.ConditionalNotificationBar;
-import celtech.coreUI.components.buttons.GraphicButtonWithLabel;
+import jakarta.inject.Inject;
 import javafx.animation.Animation;
 import javafx.animation.Transition;
 import javafx.beans.binding.Bindings;
@@ -41,11 +44,9 @@ import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.fxml.Initializable;
 import javafx.geometry.Bounds;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -64,8 +65,7 @@ import javafx.util.Duration;
  *
  * @author Ian
  */
-public class CalibrationInsetPanelController implements Initializable,
-		PrinterListChangesListener {
+public class CalibrationInsetPanelController implements PrinterListChangesListener {
 
 	final CalibrationMenuConfiguration calibrationMenuConfiguration;
 	ObjectProperty<CalibrationMode> calibrationMode = new SimpleObjectProperty<>(null);
@@ -76,9 +76,6 @@ public class CalibrationInsetPanelController implements Initializable,
 
 	StateTransitionManager stateManager;
 	SpinnerControl spinnerControl;
-	private ApplicationStatus applicationStatus = null;
-
-	private ResourceBundle resources;
 
 	private void resizeTopBorderPane() {
 		topBorderPane.setPrefWidth(topPane.getWidth());
@@ -99,8 +96,7 @@ public class CalibrationInsetPanelController implements Initializable,
 		NONE;
 	}
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			CalibrationInsetPanelController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	@FXML
 	protected VerticalMenu calibrationMenu;
@@ -163,6 +159,7 @@ public class CalibrationInsetPanelController implements Initializable,
 	private boolean backToStatusInhibitWhenAtTop = false;
 	private Line lineToAnimate;
 	private double originalAnimatedLineLength = 0;
+
 	private Transition animatedFilamentTransition = new Transition() {
 		{
 			setCycleDuration(Duration.millis(2000));
@@ -203,7 +200,7 @@ public class CalibrationInsetPanelController implements Initializable,
 	void backToStatusAction(ActionEvent event) {
 		if (calibrationMode.get() == CalibrationMode.CHOICE
 				|| stateManager == null) {
-			ApplicationStatus.getInstance().setMode(ApplicationMode.STATUS);
+			applicationStatus.setMode(ApplicationMode.STATUS);
 		}
 		else {
 			try {
@@ -211,7 +208,7 @@ public class CalibrationInsetPanelController implements Initializable,
 			}
 			catch (RuntimeException ex) {
 			}
-			ApplicationStatus.getInstance().setMode(ApplicationMode.STATUS);
+			applicationStatus.setMode(ApplicationMode.STATUS);
 			calibrationMenu.reset();
 		}
 	}
@@ -236,12 +233,9 @@ public class CalibrationInsetPanelController implements Initializable,
 		stateManager.followTransition(StateTransitionManager.GUIName.RETRY);
 	}
 
-	private final ChangeListener<ApplicationMode> applicationModeChangeListener = new ChangeListener<>() {
-		@Override
-		public void changed(ObservableValue<? extends ApplicationMode> observable, ApplicationMode oldValue, ApplicationMode newValue) {
-			if (newValue == ApplicationMode.CALIBRATION_CHOICE)
-				resetMenuAndGoToChoiceMode();
-		}
+	private final ChangeListener<ApplicationMode> applicationModeChangeListener = (observable, oldValue, newValue) -> {
+		if (newValue == ApplicationMode.CALIBRATION_CHOICE)
+			resetMenuAndGoToChoiceMode();
 	};
 
 	protected void hideAllInputControlsExceptStepNumber() {
@@ -260,19 +254,49 @@ public class CalibrationInsetPanelController implements Initializable,
 		stepNumber.setText("");
 	}
 
-	public CalibrationInsetPanelController() {
-		this.calibrationMenuConfiguration = new CalibrationMenuConfiguration(true, true, true);
+	private final FXMLLoaderFactory fxmlLoaderFactory;
+	private final I18N i18n;
+	private final ApplicationStatus applicationStatus;
+	private final PrinterManager printerManager;
+	private final SelectedPrinter selectedPrinter;
+	private final SelectedSpinnerControl selectedSpinnerControl;
+	private final SystemNotificationManager systemNotificationManager;
+	private final SafetyFeaturesPreference safetyFeaturesPreference;
+
+	@Inject
+	protected CalibrationInsetPanelController(
+			FXMLLoaderFactory fxmlLoaderFactory,
+			I18N i18n,
+			ApplicationStatus applicationStatus,
+			CalibrationMenuConfiguration calibrationMenuConfiguration,
+			PrinterManager printerManager,
+			SelectedPrinter selectedPrinter,
+			SystemNotificationManager systemNotificationManager,
+			SelectedSpinnerControl selectedSpinnerControl,
+			SafetyFeaturesPreference safetyFeaturesPreference) {
+
+		this.fxmlLoaderFactory = fxmlLoaderFactory;
+		this.i18n = i18n;
+		this.applicationStatus = applicationStatus;
+		this.calibrationMenuConfiguration = calibrationMenuConfiguration;
+		this.printerManager = printerManager;
+		this.selectedPrinter = selectedPrinter;
+		this.selectedSpinnerControl = selectedSpinnerControl;
+		this.systemNotificationManager = systemNotificationManager;
+		this.safetyFeaturesPreference = safetyFeaturesPreference;
 	}
 
-	public CalibrationInsetPanelController(boolean displayOpening,
-			boolean displayHeight,
-			boolean displayAlignment) {
-		this.calibrationMenuConfiguration = new CalibrationMenuConfiguration(displayOpening, displayHeight, displayAlignment);
-	}
+	//	public CalibrationInsetPanelController() {
+	//		this.calibrationMenuConfiguration = new CalibrationMenuConfiguration(true, true, true);
+	//	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-		applicationStatus = ApplicationStatus.getInstance();
+	//	public CalibrationInsetPanelController(boolean displayOpening,
+	//			boolean displayHeight,
+	//			boolean displayAlignment) {
+	//		this.calibrationMenuConfiguration = new CalibrationMenuConfiguration(displayOpening, displayHeight, displayAlignment);
+	//	}
+
+	public void initialize() {
 
 		oneExtruderNoFilamentSelectedNotificationBar = new ConditionalNotificationBar("dialogs.cantPrintAttachRoboxReelMessage", NotificationType.CAUTION);
 		oneExtruderNoFilamentNotificationBar = new ConditionalNotificationBar("dialogs.cantPrintNoFilamentMessage", NotificationType.CAUTION);
@@ -283,12 +307,11 @@ public class CalibrationInsetPanelController implements Initializable,
 
 		cantCalibrateHeadIsDetachedNotificationBar = new ConditionalNotificationBar("dialogs.cantCalibrateHeadIsDetached", NotificationType.CAUTION);
 
-		this.resources = resources;
-		spinnerControl = Lookup.getSpinnerControl();
+		spinnerControl = selectedSpinnerControl.get();
 
 		setCalibrationMode(CalibrationMode.CHOICE);
 
-		BaseLookup.getPrinterListChangesNotifier().addListener(this);
+		printerManager.getPrinterChangeNotifier().addListener(this);
 
 		calibrationMenuConfiguration.configureCalibrationMenu(calibrationMenu, this);
 
@@ -298,41 +321,35 @@ public class CalibrationInsetPanelController implements Initializable,
 		addDiagramMoveScaleListeners();
 
 		// If the application mode changes, or a different printer is selected, then the calibration page should reset to a known state.
-		ApplicationStatus.getInstance().modeProperty().addListener(
-				(ObservableValue<? extends ApplicationMode> observable, ApplicationMode oldValue, ApplicationMode newValue) -> {
-					if (newValue == ApplicationMode.CALIBRATION_CHOICE)
-						resetMenuAndGoToChoiceMode();
-				});
+		applicationStatus.modeProperty().addListener((observable, oldValue, newValue) -> {
+			if (newValue == ApplicationMode.CALIBRATION_CHOICE)
+				resetMenuAndGoToChoiceMode();
+		});
 
-		Lookup.getSelectedPrinterProperty().addListener(
-				(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
-					if (ApplicationStatus.getInstance().getMode() == ApplicationMode.CALIBRATION_CHOICE &&
-							currentPrinter != newValue) {
-						resetMenuAndGoToChoiceMode();
-					}
-				});
+		selectedPrinter.addListener((observable, oldValue, newValue) -> {
+			if (applicationStatus.getMode() == ApplicationMode.CALIBRATION_CHOICE &&
+					currentPrinter != newValue) {
+				resetMenuAndGoToChoiceMode();
+			}
+		});
 	}
 
 	private void addDiagramMoveScaleListeners() {
-		topPane.widthProperty().addListener(
-				(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
-					resizeTopBorderPane();
-				});
+		topPane.widthProperty().addListener((observable, oldValue, newValue) -> {
+			resizeTopBorderPane();
+		});
 
-		topPane.heightProperty().addListener(
-				(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
-					resizeTopBorderPane();
-				});
+		topPane.heightProperty().addListener((Oobservable, oldValue, newValue) -> {
+			resizeTopBorderPane();
+		});
 
-		diagramContainer.widthProperty().addListener(
-				(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
-					resizeDiagram();
-				});
+		diagramContainer.widthProperty().addListener((observable, oldValue, newValue) -> {
+			resizeDiagram();
+		});
 
-		diagramContainer.heightProperty().addListener(
-				(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) -> {
-					resizeDiagram();
-				});
+		diagramContainer.heightProperty().addListener((observable, oldValue, newValue) -> {
+			resizeDiagram();
+		});
 
 	}
 
@@ -379,18 +396,25 @@ public class CalibrationInsetPanelController implements Initializable,
 		Pane loadedDiagramNode = null;
 		animatedFilamentTransition.stop();
 		try {
-			FXMLLoader loader = new FXMLLoader(fxmlFileName, resources);
-			diagramController = new DiagramController();
+			FXMLLoader loader = fxmlLoaderFactory.create(fxmlFileName, DiagramController.class);
+			DiagramController diagramController = loader.getController();
+
 			loader.setController(diagramController);
+
 			loadedDiagramNode = loader.load();
+
 			lineToAnimate = (Line) loadedDiagramNode.lookup("#animatedFilament");
+
 			if (lineToAnimate != null) {
 				originalAnimatedLineLength = lineToAnimate.getEndY();
 				animatedFilamentTransition.playFrom(Duration.ZERO);
 			}
 
 			Bounds bounds = getBoundsOfNotYetDisplayedNode(loadedDiagramNode);
-			LOGGER.debug("diagram bounds are " + bounds);
+
+			if (LOGGER.isDebugEnabled())
+				LOGGER.debug("diagram bounds are " + bounds);
+
 			nodeToBoundsCache.put(loadedDiagramNode, bounds);
 			diagramController.setStateTransitionManager(stateManager);
 
@@ -499,10 +523,10 @@ public class CalibrationInsetPanelController implements Initializable,
 						printer.headProperty().get() != null &&
 						printer.headProperty().get().valveTypeProperty().get() == ValveType.NOT_FITTED) {
 					notRequiredMessagesShown = true;
-					BaseLookup.getSystemNotificationHandler().showInformationNotification(OpenAutomakerEnv.getI18N().t("openNozzleCalibrationNotRequired.title"),
-							OpenAutomakerEnv.getI18N().t("openNozzleCalibrationNotRequired.message"));
-					BaseLookup.getSystemNotificationHandler().showInformationNotification(OpenAutomakerEnv.getI18N().t("xyAlignmentNotRequired.title"),
-							OpenAutomakerEnv.getI18N().t("xyAlignmentNotRequired.message"));
+					systemNotificationManager.showInformationNotification(i18n.t("openNozzleCalibrationNotRequired.title"),
+							i18n.t("openNozzleCalibrationNotRequired.message"));
+					systemNotificationManager.showInformationNotification(i18n.t("xyAlignmentNotRequired.title"),
+							i18n.t("xyAlignmentNotRequired.message"));
 				}
 				break;
 		}
@@ -510,15 +534,13 @@ public class CalibrationInsetPanelController implements Initializable,
 
 	public void setCalibrationMode(CalibrationMode calibrationMode) {
 		this.calibrationMode.set(calibrationMode);
-		switchToPrinter(Lookup.getSelectedPrinterProperty().get());
+		switchToPrinter(selectedPrinter.get());
 		configureStartButtonForMode(currentPrinter);
-
-		SafetyFeaturesPreference safetyFeaturesPreference = new SafetyFeaturesPreference();
 
 		switch (calibrationMode) {
 			case NOZZLE_OPENING: {
 				try {
-					stateManager = currentPrinter.startCalibrateNozzleOpening(safetyFeaturesPreference.get());
+					stateManager = currentPrinter.startCalibrateNozzleOpening(safetyFeaturesPreference.getValue());
 				}
 				catch (PrinterException ex) {
 					LOGGER.warn("Can't switch to calibration: " + ex);
@@ -533,7 +555,7 @@ public class CalibrationInsetPanelController implements Initializable,
 				if (currentPrinter.headProperty().get() != null &&
 						currentPrinter.headProperty().get().getNozzles().size() == 1) {
 					try {
-						stateManager = currentPrinter.startCalibrateSingleNozzleHeight(safetyFeaturesPreference.get());
+						stateManager = currentPrinter.startCalibrateSingleNozzleHeight(safetyFeaturesPreference.getValue());
 					}
 					catch (PrinterException ex) {
 						LOGGER.warn("Can't switch to calibration: " + ex);
@@ -545,7 +567,7 @@ public class CalibrationInsetPanelController implements Initializable,
 				}
 				else {
 					try {
-						stateManager = currentPrinter.startCalibrateNozzleHeight(safetyFeaturesPreference.get());
+						stateManager = currentPrinter.startCalibrateNozzleHeight(safetyFeaturesPreference.getValue());
 					}
 					catch (PrinterException ex) {
 						LOGGER.warn("Can't switch to calibration: " + ex);
@@ -560,7 +582,7 @@ public class CalibrationInsetPanelController implements Initializable,
 
 			case X_AND_Y_OFFSET: {
 				try {
-					stateManager = currentPrinter.startCalibrateXAndY(safetyFeaturesPreference.get());
+					stateManager = currentPrinter.startCalibrateXAndY(safetyFeaturesPreference.getValue());
 				}
 				catch (PrinterException ex) {
 					LOGGER.warn("Can't switch to calibration: " + ex);
@@ -577,7 +599,7 @@ public class CalibrationInsetPanelController implements Initializable,
 	}
 
 	private void setupChoice() {
-		calibrationStatus.replaceText(OpenAutomakerEnv.getI18N().t("calibrationPanel.chooseCalibration"));
+		calibrationStatus.replaceText(i18n.t("calibrationPanel.chooseCalibration"));
 		calibrationMenu.reset();
 		hideAllInputControlsExceptStepNumber();
 		stepNumber.setVisible(false);

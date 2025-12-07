@@ -1,53 +1,67 @@
 package org.openautomaker.base.services.slicer;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.CURA_ENGINE;
-
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 import org.apache.commons.math3.geometry.euclidean.threed.Vector3D;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.BaseConfiguration;
+import org.openautomaker.base.inject.exporters.STLOutputConverterFactory;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.base.slicer.SlicerManager;
 import org.openautomaker.base.utils.TimeUtils;
 import org.openautomaker.base.utils.exporters.MeshExportResult;
 import org.openautomaker.base.utils.exporters.MeshFileOutputConverter;
-import org.openautomaker.base.utils.exporters.STLOutputConverter;
 import org.openautomaker.base.utils.models.PrintableMeshes;
-import org.openautomaker.environment.MachineType;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.slicer.SetWorkingDirectoryPreference;
 
+import com.google.inject.assistedinject.Assisted;
+
+import jakarta.inject.Inject;
 import javafx.concurrent.Task;
 
 /**
  *
  * @author ianhudson
  */
+
 public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	private static final TimeUtils TIME_UTILS = new TimeUtils();
 	private static final String SLICER_TIMER_NAME = "Slicer";
 
+	private final STLOutputConverterFactory stlOutputConverterFactory;
+	private final SlicerManager slicerManager;
+	private final SetWorkingDirectoryPreference setWorkingDirectoryPreference;
+
 	private final String printJobUUID;
 	private final PrintableMeshes printableMeshes;
-	private final String printJobDirectory;
+	private final Path printJobDirectory;
 	private final Printer printerToUse;
 	private final ProgressReceiver progressReceiver;
 
-	public SlicerTask(String printJobUUID,
-			PrintableMeshes printableMeshes,
-			String printJobDirectory,
-			Printer printerToUse,
-			ProgressReceiver progressReceiver) {
+	@Inject
+	protected SlicerTask(
+			STLOutputConverterFactory stlOutputConverterFactory,
+			SlicerManager slicerManager,
+			SetWorkingDirectoryPreference setWorkingDirectoryPreference,
+			@Assisted String printJobUUID,
+			@Assisted PrintableMeshes printableMeshes,
+			@Assisted Path printJobDirectory,
+			@Assisted Printer printerToUse,
+			@Assisted ProgressReceiver progressReceiver) {
+
+		this.stlOutputConverterFactory = stlOutputConverterFactory;
+		this.slicerManager = slicerManager;
+		this.setWorkingDirectoryPreference = setWorkingDirectoryPreference;
+
 		this.printJobUUID = printJobUUID;
 		this.printableMeshes = printableMeshes;
 		this.printJobDirectory = printJobDirectory;
@@ -63,7 +77,9 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 			return null;
 		}
 
-		LOGGER.debug("slice " + printableMeshes.getSettings().getName());
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("Slice " + printableMeshes.getSettings().getName());
+
 		updateTitle("Slicer");
 		updateMessage("Preparing model for conversion");
 		updateProgress(0.0, 100.0);
@@ -72,11 +88,9 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 		String timerUUID = UUID.randomUUID().toString();
 		TIME_UTILS.timerStart(timerUUID, SLICER_TIMER_NAME);
 
-		Slicer slicerType = printableMeshes.getDefaultSlicerType();
-
 		MeshFileOutputConverter outputConverter = null;
 
-		outputConverter = new STLOutputConverter();
+		outputConverter = stlOutputConverterFactory.create();
 
 		MeshExportResult meshExportResult = null;
 
@@ -84,11 +98,11 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 		if (printerToUse == null
 				|| printerToUse.headProperty().get() == null
 				|| printerToUse.headProperty().get().headTypeProperty().get() == Head.HeadType.SINGLE_MATERIAL_HEAD) {
-			meshExportResult = outputConverter.outputFile(printableMeshes.getMeshesForProcessing(), printJobUUID, Paths.get(printJobDirectory),
+			meshExportResult = outputConverter.outputFile(printableMeshes.getMeshesForProcessing(), printJobUUID, printJobDirectory,
 					true);
 		}
 		else {
-			meshExportResult = outputConverter.outputFile(printableMeshes.getMeshesForProcessing(), printJobUUID, Paths.get(printJobDirectory),
+			meshExportResult = outputConverter.outputFile(printableMeshes.getMeshesForProcessing(), printJobUUID, printJobDirectory,
 					false);
 		}
 
@@ -99,9 +113,7 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 
 		Vector3D centreOfPrintedObject = meshExportResult.getCentre();
 
-		boolean succeeded = sliceFile(printJobUUID,
-				printJobDirectory,
-				slicerType,
+		boolean succeeded = sliceFile(
 				meshExportResult.getCreatedFiles(),
 				printableMeshes.getExtruderForModel(),
 				centreOfPrintedObject,
@@ -124,14 +136,14 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 		return new SliceResult(printJobUUID, printableMeshes, printerToUse, succeeded);
 	}
 
-	private boolean sliceFile(String printJobUUID,
-			String printJobDirectory,
-			Slicer slicerType,
+	private boolean sliceFile(
 			List<String> createdMeshFiles,
 			List<Integer> extrudersForMeshes,
 			Vector3D centreOfPrintedObject,
 			ProgressReceiver progressReceiver,
 			int numberOfNozzles) {
+
+		//TODO: Look into this comment more
 		// Heads with a single nozzle are anomalous because
 		// tool zero uses the "E" extruder, which is usually
 		// extruder number 1. So for these kinds of head, the
@@ -145,302 +157,88 @@ public class SlicerTask extends Task<SliceResult> implements ProgressReceiver {
 
 		String tempGcodeFilename = printJobUUID + BaseConfiguration.gcodeTempFileExtension;
 
-		String configFile = printJobUUID + BaseConfiguration.printProfileFileExtension;
 		String jsonSettingsFile = "fdmprinter_robox.def.json";
 
-		MachineType machineType = OpenAutomakerEnv.get().getMachineType();
-		ArrayList<String> commands = new ArrayList<>();
-
-		String windowsSlicerCommand = "";
-		String macSlicerCommand = "";
-		String linuxSlicerCommand = "";
-		String configLoadCommand = "";
-		String configLoadFile = "";
-		//The next variable is only required for Cura4
-		String actionCommand = "";
-		//The next variable is only required for Slic3r
-		String printCenterCommand = "";
-		String verboseOutputCommand = "";
-		String progressOutputCommand = "";
-		String modelFileCommand = "";
-		String extruderTrainCommand = "";
-		String settingCommand = "-s";
-		String extruderSettingFormat = "extruder_nr=%d";
-
-		windowsSlicerCommand = "\"" + OpenAutomakerEnv.get().getApplicationPath(CURA_ENGINE).resolve(slicerType.getPathModifier()).resolve("CuraEngine.exe").toString() + "\"";
-		macSlicerCommand = slicerType.getPathModifier().resolve("CuraEngine").toString();
-		linuxSlicerCommand = slicerType.getPathModifier().resolve("CuraEngine").toString();
-
-		switch (slicerType) {
-			case CURA:
-				verboseOutputCommand = "-v";
-				configLoadCommand = "-c";
-				configLoadFile = configFile;
-				progressOutputCommand = "-p";
-				break;
-			case CURA_4:
-			case CURA_5:
-				actionCommand = "slice";
-				verboseOutputCommand = "-v";
-				configLoadCommand = "-j";
-				configLoadFile = jsonSettingsFile;
-				progressOutputCommand = "-p";
-				modelFileCommand = "-l";
-				extruderTrainCommand = "-e";
-				break;
-		}
+		Slicer slicer = slicerManager.getSlicer();
 
 		if (LOGGER.isDebugEnabled())
-			LOGGER.debug("Selected slicer is " + slicerType + ": " + Thread.currentThread().getName());
+			LOGGER.debug("Selected slicer is " + slicer + ": " + Thread.currentThread().getName());
+
+		// Will probably have to revisit this for windows.
+		List<String> commandElements = new ArrayList<>();
+		commandElements.add(slicerManager.getExecutable().toString());
+		commandElements.addAll(List.of(slicerManager.formatParams(Path.of(jsonSettingsFile), Path.of(tempGcodeFilename))));
 
 		int previousExtruder;
 		int extruderNo;
-		switch (machineType) {
-			//            case WINDOWS_95:
-			//                commands.add("command.com");
-			//                commands.add("/S");
-			//                commands.add("/C");
-			//                String win95PrintCommand = "\"pushd \""
-			//                        + printJobDirectory
-			//                        + "\" && "
-			//                        + windowsSlicerCommand
-			//                        + " ";
-			//
-			//                if (!actionCommand.isEmpty())
-			//                    win95PrintCommand += actionCommand + " ";
-			//
-			//                win95PrintCommand += verboseOutputCommand
-			//                        + " "
-			//                        + progressOutputCommand
-			//                        + " "
-			//                        + configLoadCommand
-			//                        + " \"" + configLoadFile + "\""
-			//                        + " -o "
-			//                        + "\"" + tempGcodeFilename + "\"";
-			//
-			//				for (String fileName : createdMeshFiles) {
-			//                    win95PrintCommand += " \"";
-			//                    win95PrintCommand += fileName;
-			//                    win95PrintCommand += "\"";
-			//                }
-			//
-			//                win95PrintCommand += " && popd\"";
-			//                commands.add(win95PrintCommand);
-			//                break;
-			case WINDOWS:
-				commands.add("cmd.exe");
-				commands.add("/S");
-				commands.add("/C");
-				String windowsPrintCommand = "\"pushd \""
-						+ printJobDirectory
-						+ "\" && "
-						+ windowsSlicerCommand
-						+ " ";
 
-				if (!actionCommand.isEmpty())
-					windowsPrintCommand += actionCommand + " ";
+		// Theoretically, this should work for all OSs
+		// Build the meshes
+		previousExtruder = -1;
+		extruderNo = 0;
 
-				windowsPrintCommand += verboseOutputCommand
-						+ " "
-						+ progressOutputCommand
-						+ " "
-						+ configLoadCommand
-						+ " \"" + configLoadFile + "\"";
+		for (int i = 0; i < createdMeshFiles.size(); i++) {
+			if (previousExtruder != extrudersForMeshes.get(i) && numberOfNozzles > 1)
+				extruderNo = extrudersForMeshes.get(i) > 0 ? 0 : 1; //TODO: WTF does this mean?! 'Extruder needs swapping... just because'
 
-				windowsPrintCommand += " -o "
-						+ "\"" + tempGcodeFilename + "\"";
-
-				if (!printCenterCommand.isEmpty()) {
-					windowsPrintCommand += " " + printCenterCommand;
-					windowsPrintCommand += " "
-							+ String.format(Locale.UK, "%.3f", centreOfPrintedObject.getX())
-							+ ","
-							+ String.format(Locale.UK, "%.3f", centreOfPrintedObject.getZ());
-				}
-
-				previousExtruder = -1;
-				extruderNo = 0;
-				for (int i = 0; i < createdMeshFiles.size(); i++) {
-					if (slicerType != Slicer.CURA && previousExtruder != extrudersForMeshes.get(i)) {
-						if (numberOfNozzles > 1) {
-							// Extruder needs swapping... just because
-							extruderNo = extrudersForMeshes.get(i) > 0 ? 0 : 1;
-						}
-
-						windowsPrintCommand += " " + extruderTrainCommand + extruderNo;
-					}
-					windowsPrintCommand += " " + modelFileCommand;
-					windowsPrintCommand += " \"";
-					windowsPrintCommand += createdMeshFiles.get(i);
-					windowsPrintCommand += "\"";
-
-					if (slicerType != Slicer.CURA) {
-						windowsPrintCommand += " " + settingCommand;
-						windowsPrintCommand += " " + String.format(extruderSettingFormat, extruderNo);
-					}
-
-					previousExtruder = extrudersForMeshes.get(i);
-				}
-				windowsPrintCommand += " && popd\"";
-				LOGGER.debug(windowsPrintCommand);
-				commands.add(windowsPrintCommand);
-				break;
-			case MAC:
-				commands.add(OpenAutomakerEnv.get().getApplicationPath(CURA_ENGINE).resolve(macSlicerCommand).toString());
-
-				if (!actionCommand.isEmpty())
-					commands.add(actionCommand);
-
-				if (!verboseOutputCommand.isEmpty())
-					commands.add(verboseOutputCommand);
-
-				if (!progressOutputCommand.isEmpty())
-					commands.add(progressOutputCommand);
-
-				commands.add(configLoadCommand);
-				commands.add(configLoadFile);
-				commands.add("-o");
-				commands.add(tempGcodeFilename);
-
-				if (!printCenterCommand.isEmpty()) {
-					commands.add(printCenterCommand);
-					commands.add(String.format(Locale.UK, "%.3f", centreOfPrintedObject.getX())
-							+ ","
-							+ String.format(Locale.UK, "%.3f", centreOfPrintedObject.getZ()));
-				}
-
-				previousExtruder = -1;
-				extruderNo = 0;
-				for (int i = 0; i < createdMeshFiles.size(); i++) {
-					if (slicerType != Slicer.CURA && previousExtruder != extrudersForMeshes.get(i)) {
-						if (numberOfNozzles > 1) {
-							// Extruder needs swapping... just because
-							extruderNo = extrudersForMeshes.get(i) > 0 ? 0 : 1;
-						}
-						commands.add(extruderTrainCommand + extruderNo);
-					}
-
-					if (!modelFileCommand.isEmpty())
-						commands.add(modelFileCommand);
-
-					commands.add(createdMeshFiles.get(i));
-
-					if (slicerType != Slicer.CURA) {
-						commands.add(settingCommand);
-						commands.add(String.format(extruderSettingFormat, extruderNo));
-					}
-
-					previousExtruder = extrudersForMeshes.get(i);
-				}
-
-				break;
-			case LINUX:
-				commands.add(OpenAutomakerEnv.get().getApplicationPath(CURA_ENGINE).resolve(linuxSlicerCommand).toString());
-				if (!actionCommand.isEmpty())
-					commands.add(actionCommand);
-				if (!verboseOutputCommand.isEmpty()) {
-					commands.add(verboseOutputCommand);
-				}
-				if (!progressOutputCommand.isEmpty()) {
-					commands.add(progressOutputCommand);
-				}
-				commands.add(configLoadCommand);
-				commands.add(configLoadFile);
-				commands.add("-o");
-				commands.add(tempGcodeFilename);
-				if (!printCenterCommand.isEmpty()) {
-					commands.add(printCenterCommand);
-					commands.add(String.format(Locale.UK, "%.3f", centreOfPrintedObject.getX())
-							+ ","
-							+ String.format(Locale.UK, "%.3f", centreOfPrintedObject.getZ()));
-				}
-				previousExtruder = -1;
-				extruderNo = 0;
-				for (int i = 0; i < createdMeshFiles.size(); i++) {
-					if (slicerType != Slicer.CURA && previousExtruder != extrudersForMeshes.get(i)) {
-						if (numberOfNozzles > 1) {
-							// Extruder needs swapping... just because
-							extruderNo = extrudersForMeshes.get(i) > 0 ? 0 : 1;
-						}
-						commands.add(extruderTrainCommand + extruderNo);
-					}
-					if (!modelFileCommand.isEmpty())
-						commands.add(modelFileCommand);
-					commands.add(createdMeshFiles.get(i));
-
-					if (slicerType != Slicer.CURA) {
-						commands.add(settingCommand);
-						commands.add(String.format(extruderSettingFormat, extruderNo));
-					}
-
-					previousExtruder = extrudersForMeshes.get(i);
-				}
-				break;
-			default:
-				LOGGER.error("Couldn't determine how to run slicer");
+			commandElements.addAll(List.of(slicerManager.formatMeshParams(extruderNo, Path.of(createdMeshFiles.get(i)))));
+			previousExtruder = extrudersForMeshes.get(i);
 		}
 
-		if (commands.size() > 0) {
-			// LOGGER.debug("Slicer command is " + String.join(" ", commands));
-			ProcessBuilder slicerProcessBuilder = new ProcessBuilder(commands);
-			if (machineType != MachineType.WINDOWS) {
-				LOGGER.debug("Set working directory (Non-Windows) to " + printJobDirectory);
-				slicerProcessBuilder.directory(new File(printJobDirectory));
-			}
-			LOGGER.info("Slicer command is " + String.join(" ", slicerProcessBuilder.command()));
+		ProcessBuilder slicerProcessBuilder = new ProcessBuilder(commandElements);
+		if (setWorkingDirectoryPreference.getValue().booleanValue())
+			slicerProcessBuilder.directory(printJobDirectory.toFile());
 
-			Process slicerProcess = null;
+		LOGGER.info("Slicer command is " + slicerProcessBuilder.command());
+
+		Process slicerProcess = null;
+
+		if (isCancelled()) {
+			LOGGER.debug("Slice cancelled");
+			return false;
+		}
+
+		try {
+			slicerProcess = slicerProcessBuilder.start();
+			// any error message?
+			SlicerOutputGobbler errorGobbler = new SlicerOutputGobbler(progressReceiver, slicerProcess.getErrorStream(), "ERROR",
+					slicer);
+
+			// any output?
+			SlicerOutputGobbler outputGobbler = new SlicerOutputGobbler(progressReceiver, slicerProcess.getInputStream(),
+					"OUTPUT", slicer);
+
+			// kick them off
+			errorGobbler.start();
+			outputGobbler.start();
+
+			int exitStatus = slicerProcess.waitFor();
 
 			if (isCancelled()) {
 				LOGGER.debug("Slice cancelled");
 				return false;
 			}
 
-			try {
-				slicerProcess = slicerProcessBuilder.start();
-				// any error message?
-				SlicerOutputGobbler errorGobbler = new SlicerOutputGobbler(progressReceiver, slicerProcess.getErrorStream(), "ERROR",
-						slicerType);
-
-				// any output?
-				SlicerOutputGobbler outputGobbler = new SlicerOutputGobbler(progressReceiver, slicerProcess.getInputStream(),
-						"OUTPUT", slicerType);
-
-				// kick them off
-				errorGobbler.start();
-				outputGobbler.start();
-
-				int exitStatus = slicerProcess.waitFor();
-
-				if (isCancelled()) {
-					LOGGER.debug("Slice cancelled");
-					return false;
-				}
-
-				switch (exitStatus) {
-					case 0:
-						LOGGER.debug("Slicer terminated successfully ");
-						succeeded = true;
-						break;
-					default:
-						LOGGER.error("Failure when invoking slicer with command line: " + String.join(
-								" ", slicerProcessBuilder.command()));
-						LOGGER.error("Slicer terminated with exit code " + exitStatus);
-						break;
-				}
-			}
-			catch (IOException ex) {
-				LOGGER.error("Exception whilst running slicer: " + ex);
-			}
-			catch (InterruptedException ex) {
-				LOGGER.warn("Interrupted whilst waiting for slicer to complete");
-				if (slicerProcess != null) {
-					slicerProcess.destroyForcibly();
-				}
+			switch (exitStatus) {
+				case 0:
+					LOGGER.debug("Slicer terminated successfully ");
+					succeeded = true;
+					break;
+				default:
+					LOGGER.error("Failure when invoking slicer with command line: " + String.join(
+							" ", slicerProcessBuilder.command()));
+					LOGGER.error("Slicer terminated with exit code " + exitStatus);
+					break;
 			}
 		}
-		else {
-			LOGGER.error("Couldn't run slicer - no commands for OS ");
+		catch (IOException ex) {
+			LOGGER.error("Exception whilst running slicer: " + ex);
+		}
+		catch (InterruptedException ex) {
+			LOGGER.warn("Interrupted whilst waiting for slicer to complete");
+			if (slicerProcess != null) {
+				slicerProcess.destroyForcibly();
+			}
 		}
 
 		return succeeded;

@@ -1,8 +1,11 @@
 package celtech.coreUI.controllers.panels.userpreferences;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.CheckBox;
@@ -18,7 +21,15 @@ public class TickBoxPreference implements PreferencesInnerPanelController.Prefer
 	private final BooleanProperty booleanProperty;
 	private final String caption;
 
-	public TickBoxPreference(BooleanProperty booleanProperty, String caption) {
+	private final I18N i18n;
+
+	@Inject
+	public TickBoxPreference(
+			I18N i18n,
+			@Assisted BooleanProperty booleanProperty,
+			@Assisted String caption) {
+
+		this.i18n = i18n;
 		this.booleanProperty = booleanProperty;
 		this.caption = caption;
 
@@ -55,7 +66,7 @@ public class TickBoxPreference implements PreferencesInnerPanelController.Prefer
 
 	@Override
 	public String getDescription() {
-		return OpenAutomakerEnv.getI18N().t(caption);
+		return i18n.t(caption);
 	}
 
 	@Override

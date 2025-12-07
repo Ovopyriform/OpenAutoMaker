@@ -1,12 +1,11 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.coreUI.controllers.panels;
 
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel;
 
-import celtech.coreUI.components.buttons.GraphicButtonWithLabel;
 import celtech.coreUI.controllers.panels.MenuInnerPanel.OperationButton;
+import jakarta.inject.Inject;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.value.ObservableValue;
@@ -21,7 +20,11 @@ import javafx.scene.layout.HBox;
  */
 public class ButtonBox extends HBox {
 
+	@Inject
+	private I18N i18n;
+
 	public ButtonBox(ReadOnlyObjectProperty<MenuInnerPanel> extrasMenuInnerPanelProperty) {
+		GuiceContext.get().injectMembers(this);
 		setAlignment(Pos.CENTER);
 		extrasMenuInnerPanelProperty.addListener(
 				(ObservableValue<? extends MenuInnerPanel> observable, MenuInnerPanel oldValue, MenuInnerPanel newValue) -> {
@@ -30,26 +33,37 @@ public class ButtonBox extends HBox {
 		setupButtonsForInnerPanel(extrasMenuInnerPanelProperty.get());
 	}
 
+	public void setExtrasMenuInnerPanelProperty(ReadOnlyObjectProperty<MenuInnerPanel> extrasMenuInnerPanelProperty) {
+		extrasMenuInnerPanelProperty.addListener(
+				(observable, oldValue, newValue) -> {
+					setupButtonsForInnerPanel(newValue);
+				});
+
+		setupButtonsForInnerPanel(extrasMenuInnerPanelProperty.get());
+	}
+
 	/**
 	 * Set up the buttons according to the given panel.
 	 */
 	private void setupButtonsForInnerPanel(MenuInnerPanel innerPanel) {
-		if (innerPanel == null) {
+		if (innerPanel == null)
 			return;
-		}
-		getChildren().clear();
-		if (innerPanel.getOperationButtons() != null) {
-			for (OperationButton operationButton : innerPanel.getOperationButtons()) {
-				GraphicButtonWithLabel button = new GraphicButtonWithLabel();
-				button.setLabelText(OpenAutomakerEnv.getI18N().t(operationButton.getTextId()));
-				button.setFxmlFileName(operationButton.getFXMLName());
-				button.setOnAction((ActionEvent event) -> {
-					operationButton.whenClicked();
-				});
-				button.disableProperty().bind(Bindings.not(operationButton.whenEnabled()));
 
-				getChildren().add(button);
-			}
+		getChildren().clear();
+
+		if (innerPanel.getOperationButtons() == null)
+			return;
+
+		for (OperationButton operationButton : innerPanel.getOperationButtons()) {
+			GraphicButtonWithLabel button = new GraphicButtonWithLabel(operationButton.getFXMLName(), i18n.t(operationButton.getTextId()));
+
+			button.setOnAction((ActionEvent event) -> {
+				operationButton.whenClicked();
+			});
+
+			button.disableProperty().bind(Bindings.not(operationButton.whenEnabled()));
+
+			getChildren().add(button);
 		}
 	}
 

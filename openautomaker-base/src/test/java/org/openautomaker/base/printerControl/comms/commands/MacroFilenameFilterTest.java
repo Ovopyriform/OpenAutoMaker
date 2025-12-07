@@ -1,18 +1,12 @@
 package org.openautomaker.base.printerControl.comms.commands;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
-import org.openautomaker.base.printerControl.comms.commands.GCodeMacros;
-import org.openautomaker.base.printerControl.comms.commands.MacroFilenameFilter;
-import org.openautomaker.base.printerControl.model.Head;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import static org.junit.Assert.*;
+import java.io.FilenameFilter;
+
+import org.junit.jupiter.api.Test;
+import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 
 /**
  *
@@ -20,31 +14,6 @@ import static org.junit.Assert.*;
  */
 public class MacroFilenameFilterTest
 {
-
-    public MacroFilenameFilterTest()
-    {
-    }
-
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
-
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
-
-    @Before
-    public void setUp()
-    {
-    }
-
-    @After
-    public void tearDown()
-    {
-    }
-
     /**
      * Test of accept method, of class MacroFilenameFilter.
      */

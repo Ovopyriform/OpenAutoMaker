@@ -13,12 +13,18 @@ import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.HeadFile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
+import org.openautomaker.base.inject.printer_control.model.HeadFactory;
+import org.openautomaker.base.inject.slicer.CuraDefaultSettingsEditorFactory;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Nozzle;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.utils.cura.CuraDefaultSettingsEditor;
 import org.openautomaker.base.utils.models.PrintableMeshes;
 import org.openautomaker.environment.Slicer;
+
+import com.google.inject.assistedinject.Assisted;
+
+import jakarta.inject.Inject;
 
 /**
  *
@@ -34,15 +40,33 @@ public class Cura4PlusConfigConvertor {
 	private final Slicer slicerType;
 
 	private CuraDefaultSettingsEditor curaDefaultSettingsEditor;
+	private final CuraDefaultSettingsEditorFactory curaDefaultSettingsEditorFactory;
+	private final HeadContainer headContainer;
+	private final HeadFactory headFactory;
+	private final PrinterContainer printerContainer;
 
-	public Cura4PlusConfigConvertor(Printer printer, PrintableMeshes printableMeshes, Slicer slicerType) {
+	@Inject
+	protected Cura4PlusConfigConvertor(
+			CuraDefaultSettingsEditorFactory curaDefaultSettingsEditorFactory,
+			HeadContainer headContainer,
+			HeadFactory headFactory,
+			@Assisted Printer printer,
+			@Assisted PrintableMeshes printableMeshes,
+			@Assisted Slicer slicerType,
+			PrinterContainer printerContainer) {
+
+		this.curaDefaultSettingsEditorFactory = curaDefaultSettingsEditorFactory;
+		this.headContainer = headContainer;
+		this.headFactory = headFactory;
+
 		this.printer = printer;
 		this.printableMeshes = printableMeshes;
 		this.slicerType = slicerType;
+		this.printerContainer = printerContainer;
 	}
 
 	public void injectConfigIntoCura4SettingsFile(Path configFile, Path storageDirectory) {
-		curaDefaultSettingsEditor = new CuraDefaultSettingsEditor(printableMeshes.getNumberOfNozzles() <= 1, slicerType);
+		curaDefaultSettingsEditor = curaDefaultSettingsEditorFactory.create(printableMeshes.getNumberOfNozzles() <= 1, slicerType);
 		curaDefaultSettingsEditor.beginEditing();
 
 		addDefaultsForPrinter();
@@ -58,7 +82,7 @@ public class Cura4PlusConfigConvertor {
 		int height;
 
 		if (printer == null) {
-			PrinterDefinitionFile printerDef = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+			PrinterDefinitionFile printerDef = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 			width = printerDef.getPrintVolumeWidth();
 			depth = printerDef.getPrintVolumeDepth();
 			height = printerDef.getPrintVolumeHeight();
@@ -83,8 +107,8 @@ public class Cura4PlusConfigConvertor {
 	private void addExtrudersAndDefaults() {
 		Head headOnPrinter;
 		if (printer == null || printer.headProperty() == null || printer.headProperty().get() == null) {
-			HeadFile defaultHeadData = HeadContainer.getHeadByID(HeadContainer.defaultHeadID);
-			headOnPrinter = new Head(defaultHeadData);
+			HeadFile defaultHeadData = headContainer.getHeadByID(HeadContainer.defaultHeadID);
+			headOnPrinter = headFactory.create(defaultHeadData);
 		} else {
 			headOnPrinter = printer.headProperty().get();
 		}

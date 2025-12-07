@@ -1,7 +1,5 @@
 package org.openautomaker.base.printerControl.comms.commands;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.MACROS;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -20,16 +18,17 @@ import org.openautomaker.base.configuration.BaseConfiguration;
 import org.openautomaker.base.configuration.Macro;
 import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.base.task_executor.Cancellable;
 import org.openautomaker.base.utils.PrinterUtils;
 import org.openautomaker.base.utils.SystemUtils;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.PrinterType;
+import org.openautomaker.environment.preference.slicer.MacroPathPreference;
 
-/**
- *
- * @author ianhudson
- */
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+
+//TODO: Look at moving the enums out of this class.  Seems like they could be in a package with this class not part of it.
+@Singleton
 public class GCodeMacros {
 
 	private static final Logger LOGGER = LogManager.getLogger();
@@ -47,7 +46,8 @@ public class GCodeMacros {
 		// Safeties off
 		SAFETIES_OFF("U"),
 		// Safeties on
-		SAFETIES_ON("S"), DONT_CARE(null);
+		SAFETIES_ON("S"),
+		DONT_CARE(null);
 
 		private final String filenameCode;
 
@@ -81,7 +81,8 @@ public class GCodeMacros {
 		// Nozzle 1 only
 		NOZZLE_1("N1"),
 		//Both nozzles
-		BOTH("NB"), DONT_CARE(null);
+		BOTH("NB"),
+		DONT_CARE(null);
 
 		private final String filenameCode;
 
@@ -108,6 +109,19 @@ public class GCodeMacros {
 		}
 	}
 
+	//Dependencies
+	private final PrinterUtils printerUtils;
+	private final MacroPathPreference macroPathPreference;
+
+	@Inject
+	protected GCodeMacros(
+			PrinterUtils printerUtils,
+			MacroPathPreference macroPathPreference) {
+
+		this.printerUtils = printerUtils;
+		this.macroPathPreference = macroPathPreference;
+	}
+
 	/**
 	 *
 	 * @param macroFileName         - this can include the macro execution directive at the * start of the line
@@ -120,7 +134,7 @@ public class GCodeMacros {
 	 * @throws java.io.IOException
 	 * @throws org.openautomaker.base.printerControl.comms.commands.MacroLoadException
 	 */
-	public static ArrayList<String> getMacroContents(String macroFileName, Optional<PrinterType> typeCode, String headTypeCode, boolean requireNozzle0, boolean requireNozzle1, boolean requireSafetyFeatures)
+	public ArrayList<String> getMacroContents(String macroFileName, Optional<PrinterType> typeCode, String headTypeCode, boolean requireNozzle0, boolean requireNozzle1, boolean requireSafetyFeatures)
 			throws IOException, MacroLoadException {
 
 		assert typeCode != null;
@@ -130,7 +144,8 @@ public class GCodeMacros {
 
 		if (requireSafetyFeatures) {
 			contents.add("; Printed with safety features ON");
-		} else {
+		}
+		else {
 			contents.add("; Printed with safety features OFF");
 		}
 
@@ -140,16 +155,20 @@ public class GCodeMacros {
 		if (headTypeCode == null) {
 			nozzleUse = NozzleUseIndicator.DONT_CARE;
 			specifiedHeadType = HeadContainer.defaultHeadID;
-		} else {
+		}
+		else {
 			specifiedHeadType = headTypeCode;
 
 			if (!requireNozzle0 && !requireNozzle1) {
 				nozzleUse = NozzleUseIndicator.DONT_CARE;
-			} else if (requireNozzle0 && !requireNozzle1) {
+			}
+			else if (requireNozzle0 && !requireNozzle1) {
 				nozzleUse = NozzleUseIndicator.NOZZLE_0;
-			} else if (!requireNozzle0 && requireNozzle1) {
+			}
+			else if (!requireNozzle0 && requireNozzle1) {
 				nozzleUse = NozzleUseIndicator.NOZZLE_1;
-			} else {
+			}
+			else {
 				nozzleUse = NozzleUseIndicator.BOTH;
 			}
 		}
@@ -159,7 +178,7 @@ public class GCodeMacros {
 		return contents;
 	}
 
-	private static String cleanMacroName(String macroName) {
+	private String cleanMacroName(String macroName) {
 		return macroName.replaceFirst(macroDefinitionString, "").trim();
 	}
 
@@ -168,7 +187,7 @@ public class GCodeMacros {
 	 * @param macroName
 	 * @return
 	 */
-	private static ArrayList<String> appendMacroContents(ArrayList<String> contents, final ArrayList<String> parentMacros, final String macroName, Optional<PrinterType> typeCode, String headTypeCode, NozzleUseIndicator nozzleUse,
+	private ArrayList<String> appendMacroContents(ArrayList<String> contents, final ArrayList<String> parentMacros, final String macroName, Optional<PrinterType> typeCode, String headTypeCode, NozzleUseIndicator nozzleUse,
 			SafetyIndicator safeties) throws IOException, MacroLoadException {
 		String cleanedMacroName = cleanMacroName(macroName);
 
@@ -180,7 +199,7 @@ public class GCodeMacros {
 
 			parentMacros.add(cleanedMacroName);
 
-			try (FileReader fr = new FileReader(GCodeMacros.getFilename(cleanedMacroName, typeCode, headTypeCode, nozzleUse, safeties).toFile())) {
+			try (FileReader fr = new FileReader(getFilename(cleanedMacroName, typeCode, headTypeCode, nozzleUse, safeties).toFile())) {
 				Scanner scanner = new Scanner(fr);
 
 				while (scanner.hasNextLine()) {
@@ -201,12 +220,14 @@ public class GCodeMacros {
 					}
 				}
 				scanner.close();
-			} catch (FileNotFoundException ex) {
+			}
+			catch (FileNotFoundException ex) {
 				throw new MacroLoadException("Failure to load contents of macro file " + macroName + " : " + ex.getMessage());
 			}
 
 			parentMacros.remove(macroName);
-		} else {
+		}
+		else {
 			StringBuilder messageBuffer = new StringBuilder();
 			messageBuffer.append("Macro circular dependency detected in chain: ");
 			parentMacros.forEach(macro -> {
@@ -230,11 +251,11 @@ public class GCodeMacros {
 	 *
 	 * @param macroName
 	 */
-	private static void checkNoSpecialisedMacrosFound(String macroName) {
+	private void checkNoSpecialisedMacrosFound(String macroName) {
 
 	}
 
-	private static boolean existsMacrosForPrinterType(File macroDirectory, String macroName, Optional<PrinterType> typeCode) {
+	private boolean existsMacrosForPrinterType(File macroDirectory, String macroName, Optional<PrinterType> typeCode) {
 		if (typeCode.isPresent()) {
 			File subDirectory = new File(macroDirectory.getAbsolutePath() + File.separator + typeCode.get().getTypeCode());
 			if (subDirectory.exists()) {
@@ -260,7 +281,7 @@ public class GCodeMacros {
 	 * @return
 	 * @throws java.io.FileNotFoundException
 	 */
-	public static Path getFilename(String macroName, Optional<PrinterType> typeCode, String headTypeCode, NozzleUseIndicator nozzleUse, SafetyIndicator safeties) throws FileNotFoundException {
+	public Path getFilename(String macroName, Optional<PrinterType> typeCode, String headTypeCode, NozzleUseIndicator nozzleUse, SafetyIndicator safeties) throws FileNotFoundException {
 
 		assert typeCode != null;
 
@@ -277,7 +298,7 @@ public class GCodeMacros {
 
 		// if there is one or more macro for the given printer type than only check
 		// for macros in that directory  -ignore all base directory macros
-		Path macrosPath = OpenAutomakerEnv.get().getApplicationPath(MACROS);
+		Path macrosPath = macroPathPreference.getAppValue();
 		if (existsMacrosForPrinterType(macrosPath.toFile(), baseMacroName, typeCode))
 			macrosPath = macrosPath.resolve(typeCode.get().getTypeCode());
 
@@ -346,7 +367,7 @@ public class GCodeMacros {
 		//        }
 	}
 
-	protected static int scoreMacroFilename(String filename, String baseMacroName, String headTypeCode, NozzleUseIndicator nozzleUse, SafetyIndicator safeties) {
+	protected int scoreMacroFilename(String filename, String baseMacroName, String headTypeCode, NozzleUseIndicator nozzleUse, SafetyIndicator safeties) {
 		int score = 0;
 
 		String[] filenameSplit = filename.split("\\.");
@@ -371,13 +392,16 @@ public class GCodeMacros {
 						// Reject on the basis that the base part of the file name does not match the base macro name.
 						return -9999;
 					}
-				} else // (namePartCounter > 0)
+				}
+				else // (namePartCounter > 0)
 				{
 					if (NozzleUseIndicator.getEnumForFilenameCode(namePart) != null) {
 						fileNozzleUseIndicator = NozzleUseIndicator.getEnumForFilenameCode(namePart);
-					} else if (SafetyIndicator.getEnumForFilenameCode(namePart) != null) {
+					}
+					else if (SafetyIndicator.getEnumForFilenameCode(namePart) != null) {
 						fileSafetyIndicator = SafetyIndicator.getEnumForFilenameCode(namePart);
-					} else {
+					}
+					else {
 						//It wasn't a nozzle spec or a safety spec, so it must be a head...
 						fileHeadFile = namePart;
 					}
@@ -393,35 +417,42 @@ public class GCodeMacros {
 			if ((specifiedHeadFile == null && fileHeadFile == null) || (specifiedHeadFile != null && specifiedHeadFile.equals(fileHeadFile))
 					|| (specifiedHeadFile != null && specifiedHeadFile.equals(HeadContainer.defaultHeadID) && fileHeadFile == null)) {
 				score += 2;
-			} else if (specifiedHeadFile != null && fileHeadFile == null) {
+			}
+			else if (specifiedHeadFile != null && fileHeadFile == null) {
 				score += 1;
-			} else {
+			}
+			else {
 				score -= 2;
 			}
 
 			if ((specifiedNozzleUseIndicator == NozzleUseIndicator.DONT_CARE && fileNozzleUseIndicator == null) || (specifiedNozzleUseIndicator != NozzleUseIndicator.DONT_CARE && specifiedNozzleUseIndicator == fileNozzleUseIndicator)) {
 				score += 2;
-			} else if (specifiedNozzleUseIndicator != NozzleUseIndicator.DONT_CARE && fileNozzleUseIndicator == null) {
+			}
+			else if (specifiedNozzleUseIndicator != NozzleUseIndicator.DONT_CARE && fileNozzleUseIndicator == null) {
 				score += 1;
-			} else {
+			}
+			else {
 				score -= 2;
 			}
 
 			if ((specifiedSafetyIndicator == SafetyIndicator.DONT_CARE && fileSafetyIndicator == null) || (specifiedSafetyIndicator != SafetyIndicator.DONT_CARE && specifiedSafetyIndicator == fileSafetyIndicator)) {
 				score += 2;
-			} else if (specifiedSafetyIndicator != SafetyIndicator.DONT_CARE && fileSafetyIndicator == null) {
+			}
+			else if (specifiedSafetyIndicator != SafetyIndicator.DONT_CARE && fileSafetyIndicator == null) {
 				score += 1;
-			} else {
+			}
+			else {
 				score -= 2;
 			}
-		} else {
+		}
+		else {
 			LOGGER.warn("Couldn't score macro file: " + filename);
 		}
 
 		return score;
 	}
 
-	public static boolean isMacroExecutionDirective(String input) {
+	public boolean isMacroExecutionDirective(String input) {
 		return input.startsWith(macroDefinitionString);
 	}
 
@@ -439,7 +470,7 @@ public class GCodeMacros {
 	//        return macroName;
 	//    }
 
-	public static int getNumberOfOperativeLinesInMacro(String macroDirective, Optional<PrinterType> typeCode, String headType, boolean useNozzle0, boolean useNozzle1, boolean requireSafetyFeatures) {
+	public int getNumberOfOperativeLinesInMacro(String macroDirective, Optional<PrinterType> typeCode, String headType, boolean useNozzle0, boolean useNozzle1, boolean requireSafetyFeatures) {
 		int linesInMacro = 0;
 		String macro = cleanMacroName(macroDirective);
 		if (macro != null) {
@@ -450,7 +481,8 @@ public class GCodeMacros {
 						linesInMacro++;
 					}
 				}
-			} catch (IOException | MacroLoadException ex) {
+			}
+			catch (IOException | MacroLoadException ex) {
 				LOGGER.error("Error trying to get number of lines in macro " + macro);
 			}
 		}
@@ -458,16 +490,16 @@ public class GCodeMacros {
 		return linesInMacro;
 	}
 
-	public static void sendMacroLineByLine(Printer printer, Macro macro, Cancellable cancellable) throws IOException, MacroLoadException {
+	public void sendMacroLineByLine(Printer printer, Macro macro, Cancellable cancellable) throws IOException, MacroLoadException {
 		PrinterType typeCode = printer.findPrinterType();
 
-		ArrayList<String> macroLines = GCodeMacros.getMacroContents(macro.getMacroFileName(), Optional.of(typeCode), printer.headProperty().get().typeCodeProperty().get(), false, false, false);
+		ArrayList<String> macroLines = getMacroContents(macro.getMacroFileName(), Optional.of(typeCode), printer.headProperty().get().typeCodeProperty().get(), false, false, false);
 
 		for (String macroLine : macroLines) {
 			String lineToTransmit = SystemUtils.cleanGCodeForTransmission(macroLine);
 			if (lineToTransmit.length() > 0) {
 				printer.sendRawGCode(lineToTransmit, false);
-				if (PrinterUtils.waitOnBusy(printer, cancellable)) {
+				if (printerUtils.waitOnBusy(printer, cancellable)) {
 					return;
 				}
 			}
@@ -480,7 +512,7 @@ public class GCodeMacros {
 	 * @param commentCharacter
 	 * @return
 	 */
-	public static int countLinesInMacroFile(File aFile, String commentCharacter, Optional<PrinterType> typeCode) {
+	public int countLinesInMacroFile(File aFile, String commentCharacter, Optional<PrinterType> typeCode) {
 		return countLinesInMacroFile(aFile, commentCharacter, typeCode, null, false, false, false);
 	}
 
@@ -495,7 +527,7 @@ public class GCodeMacros {
 	 * @param requireSafetyFeatures
 	 * @return
 	 */
-	public static int countLinesInMacroFile(File aFile, String commentCharacter, Optional<PrinterType> typeCode, String headType, boolean useNozzle0, boolean useNozzle1, boolean requireSafetyFeatures) {
+	public int countLinesInMacroFile(File aFile, String commentCharacter, Optional<PrinterType> typeCode, String headType, boolean useNozzle0, boolean useNozzle1, boolean requireSafetyFeatures) {
 
 		// if typeCode is null then ensure that no alternative macros exist in subdirectory
 		LineNumberReader reader = null;
@@ -506,21 +538,25 @@ public class GCodeMacros {
 
 			while ((lineRead = reader.readLine()) != null) {
 				lineRead = lineRead.trim();
-				if (GCodeMacros.isMacroExecutionDirective(lineRead)) {
-					numberOfLines += GCodeMacros.getNumberOfOperativeLinesInMacro(lineRead, typeCode, headType, useNozzle0, useNozzle1, requireSafetyFeatures);
-				} else if (lineRead.startsWith(commentCharacter) == false && lineRead.equals("") == false) {
+				if (isMacroExecutionDirective(lineRead)) {
+					numberOfLines += getNumberOfOperativeLinesInMacro(lineRead, typeCode, headType, useNozzle0, useNozzle1, requireSafetyFeatures);
+				}
+				else if (lineRead.startsWith(commentCharacter) == false && lineRead.equals("") == false) {
 					numberOfLines++;
 				}
 			}
 			;
 			return numberOfLines;
-		} catch (Exception ex) {
+		}
+		catch (Exception ex) {
 			return -1;
-		} finally {
+		}
+		finally {
 			if (reader != null) {
 				try {
 					reader.close();
-				} catch (IOException ex) {
+				}
+				catch (IOException ex) {
 					LOGGER.error("Failed to close file during line number read: " + ex);
 				}
 			}

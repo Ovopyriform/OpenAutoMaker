@@ -1,21 +1,23 @@
 package celtech.roboxbase.comms;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.FIRMWARE;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.configuration.CoreMemory;
 import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterEdition;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.services.firmware.FirmwareLoadResult;
 import org.openautomaker.base.services.firmware.FirmwareLoadService;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.environment.MachineType;
 import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.application.RequiredFirmwareVersionPreference;
+import org.openautomaker.environment.preference.printer.LastFirmwareVersionPreference;
+import org.openautomaker.environment.preference.printer.LastSerialNumberPreference;
+import org.openautomaker.environment.preference.root.FirmwarePathPreference;
+
+import com.vdurmont.semver4j.Semver;
 
 import celtech.roboxbase.comms.async.AsyncWriteThread;
 import celtech.roboxbase.comms.async.CommandPacket;
@@ -35,15 +37,14 @@ import javafx.application.Platform;
 import javafx.concurrent.WorkerStateEvent;
 import javafx.scene.paint.Color;
 
-/**
- *
- * @author Ian
- */
 public abstract class CommandInterface extends Thread {
 
 	protected boolean keepRunning = true;
 
 	protected final Logger LOGGER = LogManager.getLogger();
+
+	private final Semver requiredFirmwareVersion;
+	protected Semver fFirmwareVersionInUse;
 
 	protected PrinterStatusConsumer controlInterface = null;
 	protected DetectedDevice printerHandle = null;
@@ -52,10 +53,11 @@ public abstract class CommandInterface extends Thread {
 	protected RoboxCommsState commsState = RoboxCommsState.FOUND;
 	protected PrinterID printerID = new PrinterID();
 
-	protected final FirmwareLoadService firmwareLoadService = new FirmwareLoadService();
-	protected String requiredFirmwareVersionString = "";
-	protected float requiredFirmwareVersion = 0;
-	protected float firmwareVersionInUse = 0;
+	protected final FirmwareLoadService firmwareLoadService;
+
+	//protected String requiredFirmwareVersionString = "";
+	//protected float requiredFirmwareVersion = 0;
+	//protected float firmwareVersionInUse = 0;
 
 	protected boolean suppressPrinterIDChecks = false;
 	protected int sleepBetweenStatusChecks = 1000;
@@ -74,6 +76,16 @@ public abstract class CommandInterface extends Thread {
 
 	private final AsyncWriteThread asyncWriteThread;
 
+	private final SystemNotificationManager systemNotificationManager;
+
+	private final FirmwarePathPreference firmwarePathPreference;
+	private final LastSerialNumberPreference lastSerialNumberPreference;
+	private final LastFirmwareVersionPreference lastFirmwareVersionPreference;
+
+	private PrinterContainer printerContainer;
+
+	private final OpenAutomakerEnv environment;
+
 	/**
 	 *
 	 * @param controlInterface
@@ -81,11 +93,29 @@ public abstract class CommandInterface extends Thread {
 	 * @param suppressPrinterIDChecks
 	 * @param sleepBetweenStatusChecks
 	 */
-	public CommandInterface(PrinterStatusConsumer controlInterface,
+	protected CommandInterface(
+			OpenAutomakerEnv environment,
+			SystemNotificationManager systemNotificationManager,
+			RequiredFirmwareVersionPreference requiredFirmwareVersionPreference,
+			FirmwarePathPreference firmwarePathPreference,
+			LastSerialNumberPreference lastSerialNumberPreference,
+			LastFirmwareVersionPreference lastFirmwareVersionPreference,
+			FirmwareLoadService firmwareLoadService,
+			PrinterContainer printerContainer,
+			PrinterStatusConsumer controlInterface,
 			DetectedDevice printerHandle,
 			boolean suppressPrinterIDChecks,
 			int sleepBetweenStatusChecks,
 			boolean localPrinter) {
+
+		this.environment = environment;
+		this.systemNotificationManager = systemNotificationManager;
+		this.firmwarePathPreference = firmwarePathPreference;
+		this.lastSerialNumberPreference = lastSerialNumberPreference;
+		this.lastFirmwareVersionPreference = lastFirmwareVersionPreference;
+		this.firmwareLoadService = firmwareLoadService;
+		this.printerContainer = printerContainer;
+
 		this.controlInterface = controlInterface;
 		this.printerHandle = printerHandle;
 		this.suppressPrinterIDChecks = suppressPrinterIDChecks;
@@ -98,16 +128,16 @@ public abstract class CommandInterface extends Thread {
 
 		asyncWriteThread = new AsyncWriteThread(this, printerHandle.getConnectionHandle());
 
-		// TODO: Always force firmware version to a long?
-		requiredFirmwareVersionString = OpenAutomakerEnv.get().getRequiredFirmwareVersion();
-		LOGGER.debug("Firmware property value:" + requiredFirmwareVersionString);
-		requiredFirmwareVersion = Float.valueOf(requiredFirmwareVersionString);
+		requiredFirmwareVersion = requiredFirmwareVersionPreference.getValue();
+
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("Firmware property value:" + requiredFirmwareVersion.getValue());
 
 		firmwareLoadService.setOnSucceeded((WorkerStateEvent t) -> {
 			FirmwareLoadResult result = (FirmwareLoadResult) t.getSource().getValue();
 			boolean firmwareUpdatedOK = false;
 			if (result.getStatus() == FirmwareLoadResult.SUCCESS) {
-				BaseLookup.getSystemNotificationHandler().showFirmwareUpgradeStatusNotification(result);
+				systemNotificationManager.showFirmwareUpgradeStatusNotification(result);
 				//                try
 				//                {
 				//                    printerToUse.transmitUpdateFirmware(result.getFirmwareID());
@@ -119,22 +149,21 @@ public abstract class CommandInterface extends Thread {
 			}
 
 			if (!firmwareUpdatedOK) {
-				BaseLookup.getSystemNotificationHandler().showFirmwareUpgradeStatusNotification(result);
+				systemNotificationManager.showFirmwareUpgradeStatusNotification(result);
 			}
 		});
 
 		firmwareLoadService.setOnFailed((WorkerStateEvent t) -> {
 			FirmwareLoadResult result = (FirmwareLoadResult) t.getSource().getValue();
-			BaseLookup.getSystemNotificationHandler().showFirmwareUpgradeStatusNotification(result);
+			systemNotificationManager.showFirmwareUpgradeStatusNotification(result);
 		});
 
-		BaseLookup.getSystemNotificationHandler().configureFirmwareProgressDialog(firmwareLoadService);
+		systemNotificationManager.configureFirmwareProgressDialog(firmwareLoadService);
 	}
 
 	@Override
 	public void run() {
-
-		OpenAutomakerEnv env = OpenAutomakerEnv.get();
+		//Semver firmwareVer = null;
 
 		while (keepRunning) {
 			switch (commsState) {
@@ -154,10 +183,7 @@ public abstract class CommandInterface extends Thread {
 						}
 					}
 					catch (PortNotFoundException ex) {
-						if (env.getMachineType() == MachineType.WINDOWS)
-							LOGGER.info("Port not ready for comms - windows needs time to settle...");
-						else
-							LOGGER.info("Port not ready for comms - non-windows - this is unusual");
+						LOGGER.info("Port not ready for comms - windows needs time to settle...  If you're not running on windoes this... is... bad...");
 						shutdown();
 					}
 					break;
@@ -181,11 +207,12 @@ public abstract class CommandInterface extends Thread {
 						firmwareResponse = printerToUse.readFirmwareVersion();
 						// Set the firmware version so that the system knows which response
 						// packet length to use.
-						firmwareVersionInUse = firmwareResponse.getFirmwareRevisionFloat();
+						fFirmwareVersionInUse = firmwareResponse.getFirmwareVersion();
 
-						if (requiredFirmwareVersion > 0 && firmwareVersionInUse != requiredFirmwareVersion) {
+						if (!fFirmwareVersionInUse.isEquivalentTo(requiredFirmwareVersion)) {
+
 							// The firmware version is different to that associated with AutoMaker
-							LOGGER.warn(String.format("Firmware version is %.0f and should be %.0f.", firmwareVersionInUse, requiredFirmwareVersion));
+							LOGGER.warn(String.format("Firmware version is %.0f and should be %.0f.", fFirmwareVersionInUse.getValue(), requiredFirmwareVersion.getValue()));
 
 							// Check that the printer ID is valid, as updating the firmware with a corrupt printer ID
 							// can cause serious problems.
@@ -196,42 +223,43 @@ public abstract class CommandInterface extends Thread {
 								break;
 							}
 
-								if (firmwareVersionInUse >= 691) {
-									// Is the SD card present?
-									try {
-										StatusRequest request = (StatusRequest) RoboxTxPacketFactory.createPacket(TxPacketTypeEnum.STATUS_REQUEST);
-										StatusResponse response = (StatusResponse) writeToPrinter(request, true);
-										if (!response.issdCardPresent()) {
-											LOGGER.warn("SD Card not present");
-											BaseLookup.getSystemNotificationHandler().processErrorPacketFromPrinter(FirmwareError.SD_CARD, printerToUse);
-											shutdown();
-											break;
-										}
-										else {
-											BaseLookup.getSystemNotificationHandler().clearAllDialogsOnDisconnect();
-										}
-									}
-									catch (RoboxCommsException ex) {
-										LOGGER.error("Failure during printer status request. " + ex.toString());
+							if (fFirmwareVersionInUse.getMajor() >= 691) {
+								// Is the SD card present?
+								try {
+									StatusRequest request = (StatusRequest) RoboxTxPacketFactory.createPacket(TxPacketTypeEnum.STATUS_REQUEST);
+									StatusResponse response = (StatusResponse) writeToPrinter(request, true);
+									if (!response.issdCardPresent()) {
+										LOGGER.warn("SD Card not present");
+										systemNotificationManager.processErrorPacketFromPrinter(FirmwareError.SD_CARD, printerToUse);
+										shutdown();
 										break;
 									}
+									else {
+										systemNotificationManager.clearAllDialogsOnDisconnect();
+									}
 								}
+								catch (RoboxCommsException ex) {
+									LOGGER.error("Failure during printer status request. " + ex.toString());
+									break;
+								}
+							}
 
-								if (firmwareVersionInUse < requiredFirmwareVersion) {
-									// Tell the user to update
-									loadRequiredFirmware = BaseLookup.getSystemNotificationHandler()
-											.askUserToUpdateFirmware(printerToUse);
-								}
-								else {
-									// If printer firmware is more than required, we ask the user if they are sure of the downgrade
-									loadRequiredFirmware = BaseLookup.getSystemNotificationHandler()
-											.showDowngradeFirmwareDialog(printerToUse);
-								}
+							if (fFirmwareVersionInUse.isLowerThan(requiredFirmwareVersion)) {
+								// Tell the user to update
+								loadRequiredFirmware = systemNotificationManager
+										.askUserToUpdateFirmware(printerToUse);
+							}
+							//TODO: This seems like it shouldn't happen.
+							else {
+								// If printer firmware is more than required, we ask the user if they are sure of the downgrade
+								loadRequiredFirmware = systemNotificationManager
+										.showDowngradeFirmwareDialog(printerToUse);
+							}
 						}
 
 						if (loadRequiredFirmware) {
 							loadingFirmware = true;
-							loadFirmware(env.getApplicationPath(FIRMWARE).resolve("robox_r" + requiredFirmwareVersionString + ".bin").toString());
+							loadFirmware(firmwarePathPreference.getValue().resolve("robox_r" + requiredFirmwareVersion.getMajor() + ".bin").toString());
 						}
 						else {
 							moveOnFromFirmwareCheck(firmwareResponse);
@@ -260,7 +288,7 @@ public abstract class CommandInterface extends Thread {
 								|| (printerName.length() > 0
 										&& printerName.charAt(0) == '\0')) {
 							LOGGER.debug("Connected to unknown printer - setting to RBX01");
-							BaseLookup.getSystemNotificationHandler().showNoPrinterIDDialog(printerToUse);
+							systemNotificationManager.showNoPrinterIDDialog(printerToUse);
 							printerName = PrinterContainer.defaultPrinterID;
 						}
 						else {
@@ -270,11 +298,11 @@ public abstract class CommandInterface extends Thread {
 						PrinterDefinitionFile printerConfigFile = null;
 
 						if (lastPrinterIDResponse.getModel() != null) {
-							printerConfigFile = PrinterContainer.getPrinterByID(lastPrinterIDResponse.getModel());
+							printerConfigFile = printerContainer.getPrinterByID(lastPrinterIDResponse.getModel());
 						}
 
 						if (printerConfigFile == null) {
-							printerConfigFile = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+							printerConfigFile = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 						}
 						printerToUse.setPrinterConfiguration(printerConfigFile);
 						for (PrinterEdition editionUnderExamination : printerConfigFile.getEditions()) {
@@ -297,7 +325,7 @@ public abstract class CommandInterface extends Thread {
 					LOGGER.debug("Resetting identity for " + printerHandle);
 					RoboxResetIDResult resetResult = RoboxResetIDResult.RESET_NOT_DONE;
 
-					resetResult = BaseLookup.getSystemNotificationHandler()
+					resetResult = systemNotificationManager
 							.askUserToResetPrinterID(printerToUse, lastPrinterIDResponse);
 
 					switch (resetResult) {
@@ -312,7 +340,7 @@ public abstract class CommandInterface extends Thread {
 						case RESET_NOT_DONE: // Not done - set a default.
 							LOGGER.debug("Set default ID for " + printerHandle);
 							commsState = RoboxCommsState.DETERMINING_PRINTER_STATUS;
-							printerToUse.setPrinterConfiguration(PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID));
+							printerToUse.setPrinterConfiguration(printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID));
 							break;
 						case RESET_CANCELLED:
 						case RESET_FAILED:
@@ -344,8 +372,13 @@ public abstract class CommandInterface extends Thread {
 								&& lastPrinterIDResponse.getAsFormattedString() != null) {
 							printerIDToUse = lastPrinterIDResponse.getAsFormattedString();
 						}
-						CoreMemory.getInstance().setLastPrinterSerial(printerIDToUse);
-						CoreMemory.getInstance().setLastPrinterFirmwareVersion(firmwareVersionInUse);
+
+						lastSerialNumberPreference.setValue(printerIDToUse);
+						lastFirmwareVersionPreference.setValue(fFirmwareVersionInUse);
+
+						// Two more preferences
+						//CoreMemory.getInstance().setLastPrinterSerial(printerIDToUse);
+						//CoreMemory.getInstance().setLastPrinterFirmwareVersion(firmwareVer);
 
 						commsState = RoboxCommsState.CONNECTED;
 					}

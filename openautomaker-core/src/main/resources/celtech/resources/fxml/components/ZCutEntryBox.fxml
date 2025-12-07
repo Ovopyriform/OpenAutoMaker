@@ -2,7 +2,7 @@
 
 <?import javafx.geometry.*?>
 <?import javafx.scene.*?>
-<?import celtech.coreUI.components.buttons.*?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButton?>
 <?import javafx.scene.shape.*?>
 <?import celtech.coreUI.components.*?>
 <?import javafx.scene.control.*?>

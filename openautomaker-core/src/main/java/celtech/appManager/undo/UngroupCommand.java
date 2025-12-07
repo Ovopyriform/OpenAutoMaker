@@ -21,10 +21,9 @@ import celtech.modelcontrol.ModelGroup;
  *
  * @author tony
  */
-public class UngroupCommand extends Command {
+public class UngroupCommand implements Command {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			UngroupCommand.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	ModelContainerProject project;
 	Map<Integer, Set<Groupable>> groupIds;

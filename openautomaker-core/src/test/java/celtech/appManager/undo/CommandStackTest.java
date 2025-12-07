@@ -3,25 +3,19 @@
  */
 package celtech.appManager.undo;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import celtech.ConfiguredTest;
-
-/**
- *
- * @author tony
- */
-public class CommandStackTest extends ConfiguredTest {
+public class CommandStackTest {
 
 	public class TestModel {
 		public int i = 0;
 	}
 
-	public class IncrementCommand extends Command {
+	public class IncrementCommand implements Command {
 
 		private TestModel testModel;
 		private int increment;

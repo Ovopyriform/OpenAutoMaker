@@ -8,9 +8,11 @@ import javafx.scene.effect.InnerShadow;
 import javafx.scene.effect.Lighting;
 
 /**
- *
+ * Appears to be unused
+ * 
  * @author Ian Hudson @ Liberty Systems Limited
  */
+@Deprecated
 public class ButtonController {
 
 	/**

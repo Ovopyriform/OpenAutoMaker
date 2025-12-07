@@ -1,108 +1,120 @@
 package org.openautomaker.base.configuration.datafileaccessors;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINTERS;
-
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.configuration.PrinterFileFilter;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.printer.PrinterDefsPathPreference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 
-/**
- *
- * @author ianhudson
- */
-public class PrinterContainer
-{
+@Singleton
+public class PrinterContainer {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    private static PrinterContainer instance = null;
-    private static ObservableList<PrinterDefinitionFile> completePrinterList;
-    private static ObservableMap<String, PrinterDefinitionFile> completePrinterMap;
-    private static final ObjectMapper mapper = new ObjectMapper();
+	private static final String DOT_ROBOX_PRINTER = ".roboxprinter";
 
-    public static final String defaultPrinterID = "RBX01";
+	private ObservableList<PrinterDefinitionFile> completePrinterList;
+	private ObservableMap<String, PrinterDefinitionFile> completePrinterMap;
 
-    private PrinterContainer()
-    {
-        completePrinterList = FXCollections.observableArrayList();
-        completePrinterMap = FXCollections.observableHashMap();
-		File printerDirHandle = OpenAutomakerEnv.get().getApplicationPath(PRINTERS).toFile();
-        File[] printerFiles = printerDirHandle.listFiles(new PrinterFileFilter());
-        if (printerFiles == null)
-        {
-			LOGGER.error("Error loading printer list from \"" + printerDirHandle.getAbsolutePath() + "\"");
-        }
-        else
-        {
-            ArrayList<PrinterDefinitionFile> printers = ingestPrinters(printerFiles);
-            completePrinterList.addAll(printers);
-        }
-        mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
-    }
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    private ArrayList<PrinterDefinitionFile> ingestPrinters(File[] printerFilesToIngest)
-    {
-        ArrayList<PrinterDefinitionFile> printerList = new ArrayList<>();
+	public static final String defaultPrinterID = "RBX01";
 
-        for (File printerFile : printerFilesToIngest)
-        {
-            try
-            {
-                PrinterDefinitionFile printerData = mapper.readValue(printerFile, PrinterDefinitionFile.class);
+	//    private PrinterContainer()
+	//    {
+	//		mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
+	//
+	//        completePrinterList = FXCollections.observableArrayList();
+	//        completePrinterMap = FXCollections.observableHashMap();
+	//
+	//		Path printerDefsPath = new PrinterDefsPathPreference().getValue();
+	//
+	//		File[] printerFiles = printerDefsPath.toFile().listFiles(new FileFilter() {
+	//			@Override
+	//			public boolean accept(File file) {
+	//				return file.getPath().endsWith(DOT_ROBOX_PRINTER);
+	//			}
+	//		});
+	//
+	//		if (printerFiles == null)
+	//			LOGGER.error("Could not load printer definitions from: " + printerDefsPath.toString());
+	//
+	//		List<PrinterDefinitionFile> printerDefs = ingestPrinters(printerFiles);
+	//		completePrinterList = FXCollections.observableList(printerDefs);
+	//    }
 
-                printerList.add(printerData);
-                completePrinterMap.put(printerData.getTypeCode(), printerData);
+	@Inject
+	protected PrinterContainer(
+			PrinterDefsPathPreference printerDefsPathPreference) {
 
-            } catch (IOException ex)
-            {
-				LOGGER.error("Error loading printer " + printerFile.getAbsolutePath());
-            }
-        }
+		completePrinterList = FXCollections.observableArrayList();
+		completePrinterMap = FXCollections.observableHashMap();
 
-        return printerList;
-    }
+		Path printerDefsPath = printerDefsPathPreference.getValue();
 
-    public static PrinterContainer getInstance()
-    {
-        if (instance == null)
-        {
-            instance = new PrinterContainer();
-        }
+		File[] printerFiles = printerDefsPath.toFile().listFiles(new FileFilter() {
+			@Override
+			public boolean accept(File file) {
+				return file.getPath().endsWith(DOT_ROBOX_PRINTER);
+			}
+		});
 
-        return instance;
-    }
+		if (printerFiles == null)
+			LOGGER.error("Could not load printer definitions from: " + printerDefsPath.toString());
 
-    public static PrinterDefinitionFile getPrinterByID(String printerID)
-    {
-        if (instance == null)
-        {
-            PrinterContainer.getInstance();
-        }
+		List<PrinterDefinitionFile> printerDefs = ingestPrinters(printerFiles);
+		completePrinterList = FXCollections.observableList(printerDefs);
+	}
 
-        PrinterDefinitionFile returnedPrinter = completePrinterMap.get(printerID);
-        return returnedPrinter;
-    }
+	private List<PrinterDefinitionFile> ingestPrinters(File[] printerDefFiles) {
+		List<PrinterDefinitionFile> printerList = new ArrayList<>();
 
-    public static ObservableList<PrinterDefinitionFile> getCompletePrinterList()
-    {
-        if (instance == null)
-        {
-            instance = new PrinterContainer();
-        }
+		if (printerDefFiles == null)
+			return printerList;
 
-        return completePrinterList;
-    }
+		for (File printerDefFile : printerDefFiles) {
+
+			try {
+				PrinterDefinitionFile printerData = mapper.readValue(printerDefFile, PrinterDefinitionFile.class);
+
+				printerList.add(printerData);
+				completePrinterMap.put(printerData.getTypeCode(), printerData);
+			}
+			catch (IOException ex) {
+				LOGGER.error("Error loading printer " + printerDefFile.getAbsolutePath());
+			}
+		}
+
+		return printerList;
+	}
+
+	//	@Deprecated
+	//	public static PrinterContainer getInstance() {
+	//		return instance;
+	//	}
+
+	//TODO: Should not be static
+	public PrinterDefinitionFile getPrinterByID(String printerID) {
+		PrinterDefinitionFile returnedPrinter = completePrinterMap.get(printerID);
+		return returnedPrinter;
+	}
+
+	//TODO: should not be static
+	public ObservableList<PrinterDefinitionFile> getCompletePrinterList() {
+		return completePrinterList;
+	}
 }

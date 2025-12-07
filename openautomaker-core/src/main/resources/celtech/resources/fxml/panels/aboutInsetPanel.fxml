@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import celtech.coreUI.components.buttons.GraphicButton?>
-<?import celtech.coreUI.components.buttons.GraphicButtonWithLabel?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButton?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel?>
 <?import java.lang.String?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.Group?>

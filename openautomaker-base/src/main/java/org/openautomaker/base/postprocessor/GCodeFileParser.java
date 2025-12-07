@@ -128,6 +128,7 @@ public class GCodeFileParser {
 
 				String[] lineParts = commentSplit[0].trim().split(" ");
 
+				//TODO: revisit all the switches and if/else statements
 				for (String partToConsider : lineParts) {
 					if (partToConsider != null) {
 						if (partToConsider.length() > 0) {
@@ -306,17 +307,6 @@ public class GCodeFileParser {
 							event.setComment(comment);
 						}
 
-						// TODO: Does cura4 need an extrusion task?
-						switch (slicerType) {
-							case CURA:
-								if (currentExtrusionTask != null) {
-									event.setExtrusionTask(currentExtrusionTask);
-								}
-								break;
-							default:
-								break;
-						}
-
 						eventToOutput = event;
 					}
 					else {
@@ -358,15 +348,6 @@ public class GCodeFileParser {
 					eventToOutput = event;
 				}
 				else if (comment != null && !gCodeEvent) {
-					if (slicerType == Slicer.CURA) {
-						// Pre-post processing enrichment for Cura - extrusion type is in the comments...
-						ExtrusionTask foundExtrusionTask = ExtrusionTask.lookupExtrusionTaskFromComment(
-								slicerType, comment);
-
-						if (foundExtrusionTask != null) {
-							currentExtrusionTask = foundExtrusionTask;
-						}
-					}
 
 					CommentEvent event = new CommentEvent();
 					event.setComment(comment);

@@ -7,8 +7,11 @@ import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.openautomaker.ui.inject.undo.CutCommandFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
 
-import celtech.Lookup;
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.appManager.ModelContainerProject;
 import celtech.appManager.Project;
 import celtech.modelcontrol.Groupable;
@@ -22,6 +25,7 @@ import celtech.modelcontrol.ScaleableThreeD;
 import celtech.modelcontrol.ScaleableTwoD;
 import celtech.modelcontrol.Translateable;
 import celtech.modelcontrol.TranslateableTwoD;
+import jakarta.inject.Inject;
 import javafx.scene.shape.MeshView;
 
 /**
@@ -53,9 +57,18 @@ public class UndoableProject {
 		commandStack.do_(command);
 	}
 
-	public UndoableProject(Project project) {
+	private final CutCommandFactory cutCommandFactory;
+
+	@Inject
+	public UndoableProject(
+			ProjectGUIStates projectGUIStates,
+			CutCommandFactory cutCommandFactory,
+			@Assisted Project project) {
+
+		this.cutCommandFactory = cutCommandFactory;
+
 		this.project = project;
-		commandStack = Lookup.getProjectGUIState(project).getCommandStack();
+		commandStack = projectGUIStates.get(project).getCommandStack();
 	}
 
 	public void translateModelsXTo(Set<TranslateableTwoD> modelContainers, double x) {
@@ -181,6 +194,7 @@ public class UndoableProject {
 		}
 	}
 
+	//TOOO: All commands need a factory
 	public void addModel(ProjectifiableThing modelContainer) {
 		Command addModelCommand = new AddModelCommand(project, modelContainer);
 		commandStack.do_(addModelCommand);
@@ -230,7 +244,7 @@ public class UndoableProject {
 
 	public void cut(Set<ModelContainer> modelContainers, float cutHeightValue) {
 		if (project instanceof ModelContainerProject) {
-			Command cutCommand = new CutCommand(((ModelContainerProject) project), modelContainers, cutHeightValue);
+			Command cutCommand = cutCommandFactory.create(((ModelContainerProject) project), modelContainers, cutHeightValue);
 			commandStack.do_(cutCommand);
 		}
 	}

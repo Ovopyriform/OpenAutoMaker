@@ -10,6 +10,9 @@ import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.RectangularBounds;
 import org.openautomaker.base.utils.twod.ShapeToWorldTransformer;
 
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
+
 import celtech.coreUI.visualisation.Edge;
 import celtech.coreUI.visualisation.ScreenExtents;
 import celtech.modelcontrol.ItemState;
@@ -43,19 +46,30 @@ public class ShapeContainer extends ProjectifiableThing implements Serializable,
 
 	private List<Shape> shapes = new ArrayList<>();
 
+	@AssistedInject
 	public ShapeContainer() {
+
 		super();
 		initialise();
 	}
 
-	public ShapeContainer(File modelFile) {
+	@AssistedInject
+	public ShapeContainer(
+			@Assisted File modelFile) {
+
 		super(modelFile);
 		initialise();
 		initialiseTransforms();
 	}
 
-	public ShapeContainer(String name, List<Shape> shapes) {
+	@AssistedInject
+	public ShapeContainer(
+			@Assisted String name,
+			@Assisted List<Shape> shapes) {
+
 		super();
+
+		//Why is this different than when providing a file?
 		setModelName(name);
 
 		if (shapes.size() > 1) {
@@ -71,8 +85,13 @@ public class ShapeContainer extends ProjectifiableThing implements Serializable,
 		initialiseTransforms();
 	}
 
-	public ShapeContainer(String name, Shape shape) {
+	@AssistedInject
+	public ShapeContainer(
+			@Assisted String name,
+			@Assisted Shape shape) {
+
 		super();
+
 		setModelName(name);
 
 		this.getChildren().add(shape);

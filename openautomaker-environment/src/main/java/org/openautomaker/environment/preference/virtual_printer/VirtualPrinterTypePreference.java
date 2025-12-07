@@ -1,13 +1,19 @@
 package org.openautomaker.environment.preference.virtual_printer;
 
 import java.util.List;
+import java.util.prefs.Preferences;
 
 import org.openautomaker.environment.PrinterType;
-import org.openautomaker.environment.preference.AbsPreference;
+import org.openautomaker.environment.preference.APreference;
 
-public class VirtualPrinterTypePreference extends AbsPreference<PrinterType> {
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
-	public VirtualPrinterTypePreference() {
+@Singleton
+public class VirtualPrinterTypePreference extends APreference<PrinterType> {
+
+	@Inject
+	protected VirtualPrinterTypePreference() {
 		super();
 	}
 
@@ -17,12 +23,18 @@ public class VirtualPrinterTypePreference extends AbsPreference<PrinterType> {
 	}
 
 	@Override
-	public PrinterType get() {
+	public PrinterType getValue() {
 		return PrinterType.valueOf(getUserNode().get(getKey(), PrinterType.ROBOX_PRO.name()));
 	}
 
 	@Override
-	public void set(PrinterType printerType) {
+	public void setValue(PrinterType printerType) {
 		getUserNode().put(getKey(), printerType.name());
 	}
+
+	@Override
+	protected Preferences getNode() {
+		return getUserNode();
+	}
+
 }

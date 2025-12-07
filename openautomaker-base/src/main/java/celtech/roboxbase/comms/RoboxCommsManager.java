@@ -1,31 +1,40 @@
 package celtech.roboxbase.comms;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.prefs.PreferenceChangeEvent;
-import java.util.prefs.PreferenceChangeListener;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.camera.CameraInfo;
+import org.openautomaker.base.comms.print_server.RemotePrinterDetector;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.device.USBDirectoryManager;
+import org.openautomaker.base.inject.comms.HardwareCommandInterfaceFactory;
+import org.openautomaker.base.inject.comms.RoboxRemoteCommandInterfaceFactory;
+import org.openautomaker.base.inject.comms.VirtualPrinterCommandInterfaceFactory;
+import org.openautomaker.base.inject.printer_control.HardwarePrinterFactory;
 import org.openautomaker.base.printerControl.model.HardwarePrinter;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterConnection;
 import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.MachineType;
 import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.camera.SearchForRemoteCamerasPreference;
+import org.openautomaker.environment.preference.printer.DetectLoadedFilamentPreference;
 import org.openautomaker.environment.preference.virtual_printer.VirtualPrinterEnabledPreference;
 import org.openautomaker.environment.preference.virtual_printer.VirtualPrinterHeadPreference;
 import org.openautomaker.environment.preference.virtual_printer.VirtualPrinterTypePreference;
+import org.openautomaker.javafx.FXProperty;
 
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
 import celtech.roboxbase.comms.rx.StatusResponse;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
@@ -36,15 +45,11 @@ import javafx.collections.ObservableMap;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-//TODO: revisit how this manages printers.  Seems like encapsulation is out of whack
+@Singleton
+//TODO: revisit how this manages printers.  Should probably be a Service?
 public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 
 	private static final Logger LOGGER = LogManager.getLogger();
-
-	// Used to manage the virtual printer rather than relying on UI listeners.
-	private VirtualPrinterEnabledPreference fVirtualPrinterEnabledPreference;
-	private VirtualPrinterHeadPreference fVirtualPrinterHeadPreference;
-	private VirtualPrinterTypePreference fVirtualPrinterTypePreference;
 
 	private UUID fVirtualPrinterHandle = null;
 
@@ -57,10 +62,6 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	private static RoboxCommsManager instance = null;
 
 	private boolean keepRunning = true;
-
-	private final String printerToSearchFor = "Robox";
-	private final String roboxVendorID = "16D0";
-	private final String roboxProductID = "081B";
 
 	private final ObservableMap<DetectedDevice, Printer> activePrinters = FXCollections.observableHashMap();
 	private final ObservableList<CameraInfo> activeCameras = FXCollections.observableArrayList();
@@ -77,7 +78,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 
 	private boolean doNotCheckForPresenceOfHead = false;
 	private BooleanProperty detectLoadedFilamentOverride = new SimpleBooleanProperty(true);
-	private BooleanProperty searchForRemoteCamerasProperty = new SimpleBooleanProperty(false);
+	private BooleanProperty dearchForRemoteCamerasProperty = new SimpleBooleanProperty(false);
 
 	// Set to true when an attempt is made to connect another printer when the maximum number
 	// of printers have already been connected. It will be set to false again when a printer is
@@ -86,74 +87,123 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	// printers decreases.
 	private BooleanProperty tooManyRoboxAttachedProperty = new SimpleBooleanProperty(true);
 
-	private RoboxCommsManager(Path pathToBinaries,
-			boolean suppressPrinterIDChecks,
-			boolean doNotCheckForPresenceOfHead,
-			BooleanProperty detectLoadedFilamentProperty,
-			BooleanProperty searchForRemoteCamerasProperty) {
+	//	private RoboxCommsManager(boolean suppressPrinterIDChecks, boolean doNotCheckForPresenceOfHead,
+	//			BooleanProperty detectLoadedFilamentProperty, BooleanProperty searchForRemoteCamerasProperty) {
+	//
+	//		configureVirtualPrinterPreferenceListeners();
+	//
+	//		this.fSuppressPrinterIDChecks = suppressPrinterIDChecks;
+	//		this.fDoNotCheckForPresenceOfHead = doNotCheckForPresenceOfHead;
+	//		this.fDetectLoadedFilamentOverride = detectLoadedFilamentProperty;
+	//		this.fDearchForRemoteCamerasProperty = searchForRemoteCamerasProperty;
+	//
+	//		this.setDaemon(true);
+	//		this.setName("Robox Comms Manager");
+	//		this.setPriority(6);
+	//
+	//		usbSerialDeviceDetector = new SerialDeviceDetector(roboxVendorID, roboxProductID, printerToSearchFor);
+	//		remotePrinterDetector = new RemotePrinterDetector();
+	//
+	//		remoteCameraDetector = new RemoteCameraDetector();
+	//
+	//		tooManyRoboxAttachedProperty.set(false);
+	//	}
 
-		configureVirtualPrinterPreferenceListeners();
+	private final PrinterManager printerManager;
+	private final CameraManager cameraManager;
+	private final USBDirectoryManager usbDirectoryManager;
 
-		this.suppressPrinterIDChecks = suppressPrinterIDChecks;
-		this.doNotCheckForPresenceOfHead = doNotCheckForPresenceOfHead;
-		this.detectLoadedFilamentOverride = detectLoadedFilamentProperty;
-		this.searchForRemoteCamerasProperty = searchForRemoteCamerasProperty;
+	private final VirtualPrinterHeadPreference virtualPrinterHeadPreference;
+	private final VirtualPrinterTypePreference virtualPrinterTypePreference;
+	private final VirtualPrinterCommandInterfaceFactory virtualPrinterCommandInterfaceFactory;
+
+	private final HardwareCommandInterfaceFactory hardwareCommandInterfaceFactory;
+	private final RoboxRemoteCommandInterfaceFactory roboxRemoteCommandInterfaceFactory;
+	private final HardwarePrinterFactory hardwarePrinterFactory;
+
+	private final I18N i18n;
+
+	private final OpenAutomakerEnv environment;
+
+	@Inject
+	protected RoboxCommsManager(
+			OpenAutomakerEnv environment,
+			VirtualPrinterEnabledPreference virtualPrinterEnabledPreference,
+			VirtualPrinterHeadPreference virtualPrinterHeadPreference,
+			VirtualPrinterTypePreference virtualPrinterTypePreference,
+			VirtualPrinterCommandInterfaceFactory virtualPrinterCommandInterfaceFactory,
+			HardwareCommandInterfaceFactory hardwareCommandInterfaceFactory,
+			RoboxRemoteCommandInterfaceFactory roboxRemoteCommandInterfaceFactory,
+			DetectLoadedFilamentPreference detectLoadedFilamentPreference,
+			SearchForRemoteCamerasPreference searchForRemoteCamerasPreference,
+			SerialDeviceDetector serialDeviceDetector,
+			RemotePrinterDetector remotePrinterDetector,
+			RemoteCameraDetector remoteCameraDetector,
+			PrinterManager printerManager,
+			CameraManager cameraManager,
+			USBDirectoryManager usbDirectoryManager,
+			HardwarePrinterFactory hardwarePrinterFactory,
+			I18N i18n) {
+
+		suppressPrinterIDChecks = false;
+		doNotCheckForPresenceOfHead = false;
+
+		this.environment = environment;
+		this.virtualPrinterHeadPreference = virtualPrinterHeadPreference;
+		this.virtualPrinterTypePreference = virtualPrinterTypePreference;
+		this.virtualPrinterCommandInterfaceFactory = virtualPrinterCommandInterfaceFactory;
+
+		this.hardwareCommandInterfaceFactory = hardwareCommandInterfaceFactory;
+		this.roboxRemoteCommandInterfaceFactory = roboxRemoteCommandInterfaceFactory;
+
+		this.hardwarePrinterFactory = hardwarePrinterFactory;
+
+		this.i18n = i18n;
+
+		//These being BooleanProperties is a little odd
+		this.detectLoadedFilamentOverride = FXProperty.bind(detectLoadedFilamentPreference);
+		this.dearchForRemoteCamerasProperty = FXProperty.bind(searchForRemoteCamerasPreference);
 
 		this.setDaemon(true);
 		this.setName("Robox Comms Manager");
 		this.setPriority(6);
 
-		usbSerialDeviceDetector = new SerialDeviceDetector(pathToBinaries, roboxVendorID, roboxProductID, printerToSearchFor);
-		remotePrinterDetector = new RemotePrinterDetector();
+		this.usbSerialDeviceDetector = serialDeviceDetector;
+		this.remotePrinterDetector = remotePrinterDetector;
+		this.remoteCameraDetector = remoteCameraDetector;
 
-		remoteCameraDetector = new RemoteCameraDetector();
+		this.printerManager = printerManager;
+		this.cameraManager = cameraManager;
+
+		this.usbDirectoryManager = usbDirectoryManager;
 
 		tooManyRoboxAttachedProperty.set(false);
-	}
 
-	/**
-	 * Configures the preferences and listeners for the virtual printer
-	 */
-	private void configureVirtualPrinterPreferenceListeners() {
-		// Configure the virtual printer type from the preference
-		fVirtualPrinterTypePreference = new VirtualPrinterTypePreference();
-		fVirtualPrinterTypePreference.addChangeListener(new PreferenceChangeListener() {
-			@Override
-			public void preferenceChange(PreferenceChangeEvent evt) {
-				// Refresh the preference
-				fVirtualPrinterTypePreference = new VirtualPrinterTypePreference();
-				refreshVirtualPrinter();
-			}
+		// To accommodate statics for the moment.
+		instance = this;
+
+		// Setup the virtual printer
+		virtualPrinterTypePreference.addChangeListener((evt) -> {
+			refreshVirtualPrinter();
 		});
 
-		// Configure the virtual printer head from the preference
-		fVirtualPrinterHeadPreference = new VirtualPrinterHeadPreference();
-		fVirtualPrinterHeadPreference.addChangeListener(new PreferenceChangeListener() {
-			@Override
-			public void preferenceChange(PreferenceChangeEvent evt) {
-				fVirtualPrinterHeadPreference = new VirtualPrinterHeadPreference();
-				refreshVirtualPrinter();
-			}
-
+		virtualPrinterHeadPreference.addChangeListener((evt) -> {
+			refreshVirtualPrinter();
 		});
 
-		// Configure the virtual printer from the preferences
-		fVirtualPrinterEnabledPreference = new VirtualPrinterEnabledPreference();
-		if (fVirtualPrinterEnabledPreference.get())
+		if (virtualPrinterEnabledPreference.getValue())
 			addVirtualPrinter(true);
 
-		fVirtualPrinterEnabledPreference.addChangeListener(new PreferenceChangeListener() {
-			@Override
-			public void preferenceChange(PreferenceChangeEvent evt) {
-				fVirtualPrinterEnabledPreference = new VirtualPrinterEnabledPreference();
-				if (fVirtualPrinterEnabledPreference.get()) {
-					addVirtualPrinter(true);
-					return;
-				}
-
-				removeAllDummyPrinters();
+		virtualPrinterEnabledPreference.addChangeListener((evt) -> {
+			if (virtualPrinterEnabledPreference.getValue()) {
+				addVirtualPrinter(true);
+				return;
 			}
+
+			removeAllDummyPrinters();
 		});
+
+		instance = this;
 	}
 
 	/**
@@ -171,20 +221,8 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	 *
 	 * @return
 	 */
+	@Deprecated
 	public static RoboxCommsManager getInstance() {
-		return instance;
-	}
-
-	/**
-	 *
-	 * @param pathToBinaries
-	 * @return
-	 */
-	public static RoboxCommsManager getInstance(Path pathToBinaries) {
-		if (instance == null) {
-			instance = new RoboxCommsManager(pathToBinaries, false, false, new SimpleBooleanProperty(true), new SimpleBooleanProperty(false));
-		}
-
 		return instance;
 	}
 
@@ -196,20 +234,16 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	 * @param searchForRemoteCameras
 	 * @return
 	 */
-	public static RoboxCommsManager getInstance(Path pathToBinaries,
-			boolean doNotCheckForHeadPresence,
-			boolean detectLoadedFilament,
-			boolean searchForRemoteCameras) {
-		if (instance == null) {
-			instance = new RoboxCommsManager(pathToBinaries,
-					false,
-					doNotCheckForHeadPresence,
-					new SimpleBooleanProperty(detectLoadedFilament),
-					new SimpleBooleanProperty(searchForRemoteCameras));
-		}
-
-		return instance;
-	}
+	//	public static RoboxCommsManager getInstance(boolean doNotCheckForHeadPresence,
+	//			boolean detectLoadedFilament,
+	//			boolean searchForRemoteCameras) {
+	//		if (instance == null) {
+	//			instance = new RoboxCommsManager(false, doNotCheckForHeadPresence,
+	//					new SimpleBooleanProperty(detectLoadedFilament), new SimpleBooleanProperty(searchForRemoteCameras));
+	//		}
+	//
+	//		return instance;
+	//	}
 
 	/**
 	 *
@@ -219,17 +253,10 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	 * @param searchForRemoteCameras
 	 * @return
 	 */
-	public static RoboxCommsManager getInstance(Path pathToBinaries,
-			boolean doNotCheckForHeadPresence,
+	@Deprecated
+	public static RoboxCommsManager getInstance(boolean doNotCheckForHeadPresence,
 			BooleanProperty detectLoadedFilamentProperty,
 			BooleanProperty searchForRemoteCamerasProperty) {
-		if (instance == null) {
-			instance = new RoboxCommsManager(pathToBinaries,
-					false,
-					doNotCheckForHeadPresence,
-					detectLoadedFilamentProperty,
-					searchForRemoteCamerasProperty);
-		}
 
 		return instance;
 	}
@@ -274,32 +301,32 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 
 		switch (detectedPrinter.getConnectionType()) {
 			case SERIAL:
-				newPrinter = new HardwarePrinter(this, new HardwareCommandInterface(
+				newPrinter = hardwarePrinterFactory.create(this, hardwareCommandInterfaceFactory.create(
 						this, detectedPrinter, suppressPrinterIDChecks,
 						sleepBetweenStatusChecksMS), filamentLoadedGetter,
 						doNotCheckForPresenceOfHead);
 				newPrinter.setPrinterConnection(PrinterConnection.LOCAL);
 				break;
 			case ROBOX_REMOTE:
-				RoboxRemoteCommandInterface commandInterface = new RoboxRemoteCommandInterface(
+				RoboxRemoteCommandInterface commandInterface = roboxRemoteCommandInterfaceFactory.create(
 						this, (RemoteDetectedPrinter) detectedPrinter, suppressPrinterIDChecks,
 						sleepBetweenStatusChecksMS);
 
-				newPrinter = new HardwarePrinter(this, commandInterface, filamentLoadedGetter,
+				newPrinter = hardwarePrinterFactory.create(this, commandInterface, filamentLoadedGetter,
 						doNotCheckForPresenceOfHead);
 				newPrinter.setPrinterConnection(PrinterConnection.REMOTE);
 				break;
 			case DUMMY:
 				//TODO: If we keep a reference to the dummy printer interface surely we can change things on the fly?
-				DummyPrinterCommandInterface dummyCommandInterface = new DummyPrinterCommandInterface(this,
+				VirtualPrinterCommandInterface dummyCommandInterface = virtualPrinterCommandInterfaceFactory.create(this,
 						detectedPrinter,
 						suppressPrinterIDChecks,
 						sleepBetweenStatusChecksMS,
-						new I18N().t("preferences.customPrinter"),
-						fVirtualPrinterTypePreference.get().getTypeCode());
+						i18n.t("preferences.customPrinter"),
+						virtualPrinterTypePreference.getValue().getTypeCode());
 
-				dummyCommandInterface.setupHead(fVirtualPrinterHeadPreference.get());
-				newPrinter = new HardwarePrinter(this, dummyCommandInterface, filamentLoadedGetter,
+				dummyCommandInterface.setupHead(virtualPrinterHeadPreference.getValue());
+				newPrinter = hardwarePrinterFactory.create(this, dummyCommandInterface, filamentLoadedGetter,
 						doNotCheckForPresenceOfHead);
 				//                
 				//                if(detectedPrinter.getConnectionHandle().equals(CUSTOM_CONNECTION_HANDLE)) 
@@ -326,7 +353,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 				missingCameras.add(c);
 		});
 		missingCameras.forEach((c) -> {
-			BaseLookup.cameraDisconnected(c);
+			cameraManager.cameraDisconnected(c);
 			activeCameras.remove(c);
 		});
 	}
@@ -334,7 +361,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 	private void assessCandidateCamera(CameraInfo candidateCamera) {
 		if (!activeCameras.contains(candidateCamera)) {
 			activeCameras.add(candidateCamera);
-			BaseLookup.cameraConnected(candidateCamera);
+			cameraManager.cameraConnected(candidateCamera);
 		}
 	}
 
@@ -353,7 +380,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 			List<DetectedDevice> directlyAttachedDevices = usbSerialDeviceDetector.searchForDevices();
 			List<DetectedDevice> remotelyAttachedDevices = remotePrinterDetector.searchForDevices();
 
-			if (searchForRemoteCamerasProperty.get()) {
+			if (dearchForRemoteCamerasProperty.get()) {
 				// Cache camera info
 				List<CameraInfo> remotelyAttachedCameras = remoteCameraDetector.searchForDevices();
 				removeMissingCameras(remotelyAttachedCameras);
@@ -366,7 +393,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 					// on the server. Although slightly inefficent, this doesn't matter
 					// as all cameras will be removed.
 					c.getServer().setCameraDetected(false);
-					BaseLookup.cameraDisconnected(c);
+					cameraManager.cameraDisconnected(c);
 				});
 				activeCameras.clear();
 			}
@@ -389,10 +416,10 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 				assessCandidatePrinter(printerToConnect);
 			}
 
-			if (OpenAutomakerEnv.get().getMachineType() == MachineType.LINUX) {
+			if (environment.getMachineType() == MachineType.LINUX) {
 				// check if there are any usb drives mounted
 				File mediaDir = new File(MOUNTED_MEDIA_FILE_PATH);
-				BaseLookup.retainAndAddUSBDirectories(mediaDir.listFiles());
+				usbDirectoryManager.addAllUSBDirectories(mediaDir.listFiles());
 			}
 
 			long endOfRunTime = System.currentTimeMillis();
@@ -417,7 +444,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 		keepRunning = false;
 
 		List<Printer> printersToShutdown = new ArrayList<>();
-		BaseLookup.getConnectedPrinters().forEach(printer -> {
+		printerManager.getConnectedPrinters().forEach(printer -> {
 			printersToShutdown.add(printer);
 		});
 
@@ -442,7 +469,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 		Printer printerHusk = activePrinters.get(detectedPrinter);
 		printerHusk.connectionEstablished();
 
-		BaseLookup.printerConnected(printerHusk);
+		printerManager.printerConnected(printerHusk);
 	}
 
 	/**
@@ -458,7 +485,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 			printerToRemove.shutdown();
 		}
 
-		BaseLookup.printerDisconnected(printerToRemove);
+		printerManager.printerDisconnected(printerToRemove);
 
 		if (activePrinters.containsKey(printerHandle)) {
 			if (activePrinters.get(printerHandle) != null
@@ -491,7 +518,7 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 
 		//        dummyPrinterCounter++;
 		//        String actualPrinterPort = isCustomPrinter ? CUSTOM_CONNECTION_HANDLE : dummyPrinterPort + " " + dummyPrinterCounter;
-		//        dummyPrinterName = isCustomPrinter ? OpenAutomakerEnv.getI18N().t("preferences.customPrinter") : "DP " + dummyPrinterCounter;
+		//        dummyPrinterName = isCustomPrinter ? i18n.tInst("preferences.customPrinter") : "DP " + dummyPrinterCounter;
 		//        DetectedDevice printerHandle = new DetectedDevice(DeviceDetector.DeviceConnectionType.DUMMY,
 		//                actualPrinterPort);
 		//        assessCandidatePrinter(printerHandle);
@@ -534,21 +561,21 @@ public class RoboxCommsManager extends Thread implements PrinterStatusConsumer {
 		sleepBetweenStatusChecksMS = milliseconds;
 	}
 
-	private void deviceNoLongerPresent(DetectedDevice detectedDevice) {
-		Printer printerToDisconnect = activePrinters.get(detectedDevice);
-		if (printerToDisconnect != null) {
-			CommandInterface commandInterface = printerToDisconnect.getCommandInterface();
-			if (commandInterface != null) {
-				commandInterface.shutdown();
-			}
-			else {
-				LOGGER.info("CI was null");
-			}
-		}
-		else {
-			LOGGER.info("not in active list");
-		}
-	}
+	//	private void deviceNoLongerPresent(DetectedDevice detectedDevice) {
+	//		Printer printerToDisconnect = activePrinters.get(detectedDevice);
+	//		if (printerToDisconnect != null) {
+	//			CommandInterface commandInterface = printerToDisconnect.getCommandInterface();
+	//			if (commandInterface != null) {
+	//				commandInterface.shutdown();
+	//			}
+	//			else {
+	//				LOGGER.info("CI was null");
+	//			}
+	//		}
+	//		else {
+	//			LOGGER.info("not in active list");
+	//		}
+	//	}
 
 	public BooleanProperty tooManyRoboxAttachedProperty() {
 		return tooManyRoboxAttachedProperty;

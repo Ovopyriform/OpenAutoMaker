@@ -1,7 +1,5 @@
 package celtech.appManager;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -13,7 +11,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import org.openautomaker.base.utils.SystemUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
 
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
@@ -34,12 +33,14 @@ public class ProjectHeader implements Serializable {
 	private Path projectPath = null;
 	private final ObjectProperty<Date> lastModifiedDate = new SimpleObjectProperty<>();
 
-	public ProjectHeader() {
+	public ProjectHeader(
+			ProjectsPathPreference projectsPathPreference,
+			I18N i18n) {
 		projectUUID = SystemUtils.generate16DigitID();
 		Date now = new Date();
-		projectNameProperty = new SimpleStringProperty(OpenAutomakerEnv.getI18N().t("projectLoader.untitled")
+		projectNameProperty = new SimpleStringProperty(i18n.t("projectLoader.untitled")
 				+ formatter.format(now));
-		projectPath = OpenAutomakerEnv.get().getUserPath(PROJECTS);
+		projectPath = projectsPathPreference.getValue();
 		lastModifiedDate.set(now);
 	}
 

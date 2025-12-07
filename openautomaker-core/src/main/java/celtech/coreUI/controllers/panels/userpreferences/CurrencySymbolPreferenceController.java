@@ -2,9 +2,10 @@ package celtech.coreUI.controllers.panels.userpreferences;
 
 import org.openautomaker.environment.CurrencySymbol;
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.preference.CurrencySymbolPreference;
+import org.openautomaker.environment.preference.l10n.CurrencySymbolPreference;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.scene.control.ComboBox;
@@ -20,9 +21,8 @@ import javafx.util.Callback;
  */
 public class CurrencySymbolPreferenceController implements PreferencesInnerPanelController.Preference {
 
-	private final ComboBox<CurrencySymbol> fControl;
-
-	private final CurrencySymbolPreference fCurrencySymbolPreference;
+	private final ComboBox<CurrencySymbol> control;
+	private final I18N i18n;
 
 	private class CurrencySymbolListCell extends ListCell<CurrencySymbol> {
 		@Override
@@ -38,30 +38,33 @@ public class CurrencySymbolPreferenceController implements PreferencesInnerPanel
 		}
 	}
 
-	public CurrencySymbolPreferenceController() {
+	@Inject
+	public CurrencySymbolPreferenceController(
+			I18N i18n,
+			CurrencySymbolPreference currencySymbolPreference) {
 
-		fCurrencySymbolPreference = new CurrencySymbolPreference();
+		this.i18n = i18n;
 
-		fControl = new ComboBox<>();
-		fControl.getStyleClass().add("cmbCleanCombo");
-		fControl.setMinWidth(200);
-		fControl.autosize();
+		control = new ComboBox<>();
+		control.getStyleClass().add("cmbCleanCombo");
+		control.setMinWidth(200);
+		control.autosize();
 
-		fControl.setItems(FXCollections.observableList(fCurrencySymbolPreference.values()));
+		control.setItems(FXCollections.observableList(currencySymbolPreference.values()));
 
 		// Setup display
 		Callback<ListView<CurrencySymbol>, ListCell<CurrencySymbol>> cellFactory = (listView) -> new CurrencySymbolListCell();
-		fControl.setCellFactory(cellFactory);
-		fControl.setButtonCell(cellFactory.call(null));
+		control.setCellFactory(cellFactory);
+		control.setButtonCell(cellFactory.call(null));
 		
-		SelectionModel<CurrencySymbol> selectionModel = fControl.getSelectionModel();
+		SelectionModel<CurrencySymbol> selectionModel = control.getSelectionModel();
 
 		//Set initial value
-		selectionModel.select(fCurrencySymbolPreference.get());
+		selectionModel.select(currencySymbolPreference.getValue());
 
 		//Listen for changes
 		selectionModel.selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-			fCurrencySymbolPreference.set(newValue);
+			currencySymbolPreference.setValue(newValue);
 		});
 	}
 
@@ -75,17 +78,17 @@ public class CurrencySymbolPreferenceController implements PreferencesInnerPanel
 
 	@Override
 	public Control getControl() {
-		return fControl;
+		return control;
 	}
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.currencySymbol");
+		return i18n.t("preferences.currencySymbol");
 	}
 
 	@Override
 	public void disableProperty(ObservableValue<Boolean> disableProperty) {
-		fControl.disableProperty().unbind();
-		fControl.disableProperty().bind(disableProperty);
+		control.disableProperty().unbind();
+		control.disableProperty().bind(disableProperty);
 	}
 }

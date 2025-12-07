@@ -3,6 +3,10 @@ package celtech.coreUI.components;
 
 import java.io.IOException;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
+import jakarta.inject.Inject;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.ToggleGroup;
@@ -23,9 +27,12 @@ public class TooltipGraphic extends HBox {
 
 	private ToggleGroup buttonGroup = new ToggleGroup();
 
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
 	public TooltipGraphic() {
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/tooltipGraphic.fxml"));
+		GuiceContext.get().injectMembers(this);
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/components/tooltipGraphic.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

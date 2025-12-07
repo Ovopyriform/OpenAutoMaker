@@ -12,115 +12,108 @@ import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.application.Platform;
 
 /**
  *
  * @author ianhudson
  */
-public class InterAppCommsThread extends Thread
-{
+@Singleton
+public class InterAppCommsThread extends Thread {
 
 	private static final Logger LOGGER = LogManager.getLogger();
-    private boolean keepRunning = true;
-    private ServerSocket initialServerSocket;
-    private Socket serverSocket = null;
-    private final ObjectMapper mapper = new ObjectMapper();
-    private InterAppCommsConsumer commsConsumer = null;
 
-    public InterAppCommsThread()
-    {
-        this.setName("InterAppComms");
-    }
+	private boolean keepRunning = true;
+	private ServerSocket initialServerSocket;
+	private Socket serverSocket = null;
+	private final ObjectMapper mapper = new ObjectMapper();
+	private InterAppCommsConsumer commsConsumer = null;
 
-    @Override
-    public void run()
-    {
-        while (keepRunning)
-        {
-            try
-            {
-                serverSocket = initialServerSocket.accept();
+	@Inject
+	public InterAppCommsThread() {
+		this.setName("InterAppComms");
+	}
 
-                InterAppRequest interAppRequest = mapper.readValue(serverSocket.getInputStream(), InterAppRequest.class);
-                if (interAppRequest != null)
-                {
+	@Override
+	public void run() {
+		while (keepRunning) {
+			try {
+				serverSocket = initialServerSocket.accept();
+
+				AbstractInterAppRequest interAppRequest = mapper.readValue(serverSocket.getInputStream(), AbstractInterAppRequest.class);
+				if (interAppRequest != null) {
 					LOGGER.info("Was InterApp data:" + interAppRequest.toString());
 
-                    if (commsConsumer != null)
-                    {
-                        commsConsumer.incomingComms(interAppRequest);
-                    }
-                }
+					if (commsConsumer != null) {
+						commsConsumer.incomingComms(interAppRequest);
+					}
+				}
 
-            } catch (IOException ex)
-            {
-                // Get a "SocketException - socket closed" when the thread is terminated.
-                if (keepRunning)
+			}
+			catch (IOException ex) {
+				// Get a "SocketException - socket closed" when the thread is terminated.
+				if (keepRunning)
 					LOGGER.error("Error trying to listen for InterApp comms");
-            }
-        }
-    }
+			}
+		}
+	}
 
-    public InterAppStartupStatus letUsBegin(InterAppRequest interAppCommsRequest, InterAppCommsConsumer commsConsumer)
-    {
-        this.commsConsumer = commsConsumer;
+	public InterAppStartupStatus letUsBegin(AbstractInterAppRequest interAppCommsRequest, InterAppCommsConsumer commsConsumer) {
+		this.commsConsumer = commsConsumer;
 
-        InterAppStartupStatus status = InterAppStartupStatus.OTHER_ERROR;
+		InterAppStartupStatus status = InterAppStartupStatus.OTHER_ERROR;
 
-        try
-        {
-            //Bind to localhost adapter with a zero connection queue 
-            initialServerSocket = new ServerSocket(InterAppConfiguration.PORT, 0, InetAddress.getLoopbackAddress());
+		try {
+			//Bind to localhost adapter with a zero connection queue 
+			initialServerSocket = new ServerSocket(InterAppConfiguration.PORT, 0, InetAddress.getLoopbackAddress());
 
-            status = InterAppStartupStatus.STARTED_OK;
-            this.start();
+			status = InterAppStartupStatus.STARTED_OK;
+			this.start();
 
-        } catch (BindException e)
-        {
-            // If we had any load params then
+		}
+		catch (BindException e) {
+			// If we had any load params then
 			LOGGER.info("AutoMaker asked to start but instance is already running.");
-            status = InterAppStartupStatus.ALREADY_RUNNING_COULDNT_CONTACT;
+			status = InterAppStartupStatus.ALREADY_RUNNING_COULDNT_CONTACT;
 
-            try
-            {
-                Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), InterAppConfiguration.PORT);
-                OutputStreamWriter out = new OutputStreamWriter(clientSocket.getOutputStream(), InterAppConfiguration.charSetToUse);
+			try {
+				Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), InterAppConfiguration.PORT);
+				OutputStreamWriter out = new OutputStreamWriter(clientSocket.getOutputStream(), InterAppConfiguration.charSetToUse);
 
-                String dataToOutput = mapper.writeValueAsString(interAppCommsRequest);
+				String dataToOutput = mapper.writeValueAsString(interAppCommsRequest);
 
-                out.write(dataToOutput);
-                out.flush();
+				out.write(dataToOutput);
+				out.flush();
 
-                clientSocket.close();
+				clientSocket.close();
 				LOGGER.debug("Told my sibling about the params I was passed");
-                status = InterAppStartupStatus.ALREADY_RUNNING_CONTACT_MADE;
-            } catch (IOException ex)
-            {
+				status = InterAppStartupStatus.ALREADY_RUNNING_CONTACT_MADE;
+			}
+			catch (IOException ex) {
 				LOGGER.error("IOException when contacting sibling:" + ex.getMessage());
-            } finally
-            {
-                Platform.exit();
-            }
-        } catch (IOException e)
-        {
+			}
+			finally {
+				Platform.exit();
+			}
+		}
+		catch (IOException e) {
 			LOGGER.error("Unexpected error whilst attempting to check if another app is running");
-            e.printStackTrace();
-            Platform.exit();
-        }
+			e.printStackTrace();
+			Platform.exit();
+		}
 
-        return status;
-    }
+		return status;
+	}
 
-    public void shutdown()
-    {
-        keepRunning = false;
-        try
-        {
-            initialServerSocket.close();
-        } catch (IOException ex)
-        {
+	public void shutdown() {
+		keepRunning = false;
+		try {
+			initialServerSocket.close();
+		}
+		catch (IOException ex) {
 			LOGGER.error("Error whilst closing inter app comms socket", ex);
-        }
-    }
+		}
+	}
 }

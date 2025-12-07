@@ -1,19 +1,20 @@
 package celtech.coreUI.controllers.utilityPanels;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.openautomaker.base.camera.CameraInfo;
+import org.openautomaker.base.comms.print_server.PrintServerConnection.CameraTag;
 import org.openautomaker.base.configuration.CoreMemory;
+import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.fileRepresentation.CameraProfile;
+import org.openautomaker.base.device.CameraManager;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.base.task_executor.TaskExecutor;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.roboxbase.comms.RemoteDetectedPrinter;
-import celtech.roboxbase.comms.DetectedServer.CameraTag;
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 
@@ -37,6 +38,26 @@ public class SnapshotPanelController extends SnapshotController {
 		selectCameraAndProfile(newValue.getCameraProfileName(), newValue.getCameraName());
 	};
 
+	private final SelectedPrinter selectedPrinter;
+	private final ApplicationStatus applicationStatus;
+	private final CoreMemory coreMemory;
+
+	@Inject
+	protected SnapshotPanelController(
+			CoreMemory coreMemory,
+			CameraManager cameraManager,
+			TaskExecutor taskExecutor,
+			ApplicationStatus applicationStatus,
+			SelectedPrinter selectedPrinter,
+			CameraProfileContainer cameraProfileContainer) {
+
+		super(cameraManager, taskExecutor, cameraProfileContainer);
+
+		this.coreMemory = coreMemory;
+		this.selectedPrinter = selectedPrinter;
+		this.applicationStatus = applicationStatus;
+	}
+
 	/**
 	 * Initializes the controller class.
 	 *
@@ -44,17 +65,18 @@ public class SnapshotPanelController extends SnapshotController {
 	 * @param rb
 	 */
 	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
+		super.initialize();
 		viewWidthFixed = true;
-		super.initialize(url, rb);
-		Lookup.getSelectedPrinterProperty().addListener((ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
+		selectedPrinter.addListener((ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
 			if (connectedPrinter != null)
 				unbindFromPrinter(connectedPrinter);
 
 			if (newValue != null)
 				bindToPrinter(newValue);
 		});
-		ApplicationStatus.getInstance().modeProperty().addListener(applicationModeChangeListener);
+
+		applicationStatus.modeProperty().addListener(applicationModeChangeListener);
 	}
 
 	private void unbindFromPrinter(Printer printer) {
@@ -97,14 +119,14 @@ public class SnapshotPanelController extends SnapshotController {
 	}
 
 	private void controlSnapshotTask() {
-		if (ApplicationStatus.getInstance().modeProperty().get() == ApplicationMode.STATUS &&
-				connectedServer != null &&
-				connectedServer.getCameraDetected()) {
+		//TODO: Return early rather than if/else
+		if (applicationStatus.getMode() == ApplicationMode.STATUS && connectedServer != null && connectedServer.getCameraDetected()) {
 			repopulateCameraProfileChooser();
 			repopulateCameraChooser();
-			if (snapshotTask == null) {
+
+			if (snapshotTask == null)
 				takeSnapshot();
-			}
+
 		}
 		else {
 			if (snapshotTask != null) {
@@ -119,7 +141,7 @@ public class SnapshotPanelController extends SnapshotController {
 		super.selectProfile(profile);
 		if (connectedServer != null && profile != null && selectedCamera != null) {
 			connectedServer.setCameraTag(profile.getProfileName(), selectedCamera.getCameraName());
-			CoreMemory.getInstance().updateRoboxRoot(connectedServer);
+			coreMemory.updateRoboxRoot(connectedServer);
 		}
 	}
 
@@ -128,7 +150,7 @@ public class SnapshotPanelController extends SnapshotController {
 		super.selectCamera(camera);
 		if (connectedServer != null && selectedProfile != null && camera != null) {
 			connectedServer.setCameraTag(selectedProfile.getProfileName(), camera.getCameraName());
-			CoreMemory.getInstance().updateRoboxRoot(connectedServer);
+			coreMemory.updateRoboxRoot(connectedServer);
 		}
 	}
 }

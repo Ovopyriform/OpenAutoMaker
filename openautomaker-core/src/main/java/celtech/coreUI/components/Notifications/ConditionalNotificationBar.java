@@ -1,18 +1,15 @@
 package celtech.coreUI.components.Notifications;
 
-import org.openautomaker.base.appManager.NotificationType;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.base.notification_manager.NotificationType;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
 
-import celtech.Lookup;
+import jakarta.inject.Inject;
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 
-/**
- *
- * @author Ian
- */
 public class ConditionalNotificationBar extends AppearingNotificationBar {
 
 	private ObservableValue<Boolean> appearanceCondition;
@@ -32,8 +29,17 @@ public class ConditionalNotificationBar extends AppearingNotificationBar {
 		}
 	};
 
+	@Inject
+	private I18N i18n;
+
+	@Inject
+	private NotificationDisplay notificationDisplay;
+
 	public ConditionalNotificationBar(String message, NotificationType notificationType) {
-		notificationDescription.replaceText(OpenAutomakerEnv.getI18N().t(message));
+
+		GuiceContext.get().injectMembers(this);
+
+		notificationDescription.replaceText(i18n.t(message));
 		setType(notificationType);
 	}
 
@@ -69,7 +75,7 @@ public class ConditionalNotificationBar extends AppearingNotificationBar {
 
 	@Override
 	public void show() {
-		Lookup.getNotificationDisplay().addStepCountedNotificationBar(this);
+		notificationDisplay.addStepCountedNotificationBar(this);
 		startSlidingInToView();
 	}
 
@@ -79,7 +85,7 @@ public class ConditionalNotificationBar extends AppearingNotificationBar {
 
 	@Override
 	public void finishedSlidingOutOfView() {
-		Lookup.getNotificationDisplay().removeStepCountedNotificationBar(this);
+		notificationDisplay.removeStepCountedNotificationBar(this);
 	}
 
 	@Override

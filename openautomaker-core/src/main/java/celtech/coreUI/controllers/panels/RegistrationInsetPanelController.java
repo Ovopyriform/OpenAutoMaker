@@ -1,26 +1,31 @@
 
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import celtech.appManager.ApplicationStatus;
+import jakarta.inject.Inject;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 
 /**
  *
  * @author tony
  */
-public class RegistrationInsetPanelController implements Initializable {
+public class RegistrationInsetPanelController {
 	@FXML
 	void backwardPressed(ActionEvent event) {
-		ApplicationStatus.getInstance().returnToLastMode();
+		applicationStatus.returnToLastMode();
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	private final ApplicationStatus applicationStatus;
+
+	@Inject
+	protected RegistrationInsetPanelController(
+			ApplicationStatus applicationStatus) {
+
+		this.applicationStatus = applicationStatus;
+	}
+
+	public void initialize() {
 
 	}
 

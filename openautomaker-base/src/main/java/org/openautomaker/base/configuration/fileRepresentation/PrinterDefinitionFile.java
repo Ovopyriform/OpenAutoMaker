@@ -8,6 +8,7 @@ import org.openautomaker.environment.PrinterType;
  *
  * @author Ian
  */
+//TODO: Rename to PrinterDefinition?
 public class PrinterDefinitionFile
 {
 

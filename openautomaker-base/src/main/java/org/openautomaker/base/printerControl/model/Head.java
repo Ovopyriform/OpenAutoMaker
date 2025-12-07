@@ -12,7 +12,10 @@ import org.openautomaker.base.configuration.fileRepresentation.NozzleHeaterData;
 import org.openautomaker.base.utils.InvalidChecksumException;
 import org.openautomaker.base.utils.SystemUtils;
 import org.openautomaker.base.utils.Math.MathUtils;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 
 import celtech.roboxbase.comms.rx.HeadEEPROMDataResponse;
 import javafx.beans.property.BooleanProperty;
@@ -35,689 +38,615 @@ import javafx.collections.ObservableList;
  *
  * @author ianhudson
  */
-public class Head implements Cloneable, RepairableComponent
-{
+public class Head implements Cloneable, RepairableComponent {
 
-    public enum HeadType
-    {
+	//TODO: Look at taking enum out of head class
+	public enum HeadType {
 
-        STYLUS_HEAD("stylusHead"),
-        SINGLE_MATERIAL_HEAD("singleMaterialHead"),
-        DUAL_MATERIAL_HEAD("dualMaterialHead");
+		STYLUS_HEAD("stylusHead"),
+		SINGLE_MATERIAL_HEAD("singleMaterialHead"),
+		DUAL_MATERIAL_HEAD("dualMaterialHead");
 
-        private final String helpText;
+		private final String key;
 
-        HeadType(String helpText)
-        {
-            this.helpText = helpText;
-        }
+		HeadType(String key) {
+			this.key = key;
+		}
 
-        @Override
-        public String toString()
-        {
-            return OpenAutomakerEnv.getI18N().t("headType." + helpText);
-        }
+		@Override
+		public String toString() {
+			return "headType." + key;
+		}
 
-    }
+	}
 
-    public enum ValveType
-    {
+	public enum ValveType {
 
-        FITTED,
-        NOT_FITTED;
-    }
+		FITTED,
+		NOT_FITTED;
+	}
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-    protected ObjectProperty<HeadType> headType = new SimpleObjectProperty<>(
-            HeadType.SINGLE_MATERIAL_HEAD);
-    protected ObjectProperty<ValveType> valveType = new SimpleObjectProperty<>(
-            ValveType.FITTED);
+	protected ObjectProperty<HeadType> headType = new SimpleObjectProperty<>(HeadType.SINGLE_MATERIAL_HEAD);
+	protected ObjectProperty<ValveType> valveType = new SimpleObjectProperty<>(ValveType.FITTED);
 
-    protected final FloatProperty zReductionProperty = new SimpleFloatProperty(0);
-    
-    protected final FloatProperty headXPosition = new SimpleFloatProperty(0);
-    protected final FloatProperty headYPosition = new SimpleFloatProperty(0);
-    protected final FloatProperty headZPosition = new SimpleFloatProperty(0);
-    protected final FloatProperty BPosition = new SimpleFloatProperty(0);
-    protected final IntegerProperty nozzleInUse = new SimpleIntegerProperty(0);
+	protected final FloatProperty zReductionProperty = new SimpleFloatProperty(0);
 
-    protected final StringProperty typeCode = new SimpleStringProperty("");
-    protected final StringProperty name = new SimpleStringProperty("");
-    protected final StringProperty uniqueID = new SimpleStringProperty("");
-    protected final FloatProperty headHours = new SimpleFloatProperty(0);
+	protected final FloatProperty headXPosition = new SimpleFloatProperty(0);
+	protected final FloatProperty headYPosition = new SimpleFloatProperty(0);
+	protected final FloatProperty headZPosition = new SimpleFloatProperty(0);
+	protected final FloatProperty BPosition = new SimpleFloatProperty(0);
+	protected final IntegerProperty nozzleInUse = new SimpleIntegerProperty(0);
 
-    protected final StringProperty weekNumber = new SimpleStringProperty("");
-    protected final StringProperty yearNumber = new SimpleStringProperty("");
-    protected final StringProperty PONumber = new SimpleStringProperty("");
-    protected final StringProperty serialNumber = new SimpleStringProperty("");
-    protected final StringProperty checksum = new SimpleStringProperty("");
+	protected final StringProperty typeCode = new SimpleStringProperty("");
+	protected final StringProperty name = new SimpleStringProperty("");
+	protected final StringProperty uniqueID = new SimpleStringProperty("");
+	protected final FloatProperty headHours = new SimpleFloatProperty(0);
 
-    protected final ObservableList<NozzleHeater> nozzleHeaters = FXCollections.observableArrayList();
-    protected final ObservableList<Nozzle> nozzles = FXCollections.observableArrayList();
+	protected final StringProperty weekNumber = new SimpleStringProperty("");
+	protected final StringProperty yearNumber = new SimpleStringProperty("");
+	protected final StringProperty PONumber = new SimpleStringProperty("");
+	protected final StringProperty serialNumber = new SimpleStringProperty("");
+	protected final StringProperty checksum = new SimpleStringProperty("");
 
-    protected final BooleanProperty dataChanged = new SimpleBooleanProperty();
+	protected final ObservableList<NozzleHeater> nozzleHeaters = FXCollections.observableArrayList();
+	protected final ObservableList<Nozzle> nozzles = FXCollections.observableArrayList();
 
-    public Head()
-    {
-    }
+	protected final BooleanProperty dataChanged = new SimpleBooleanProperty();
 
-    public Head(HeadFile headData)
-    {
-        updateFromHeadFileData(headData);
-    }
+	private final HeadContainer headContainer;
 
-    protected static Head createHead(HeadEEPROMDataResponse headResponse)
-    {
-        Head createdHead = null;
+	private final I18N i18n;
 
-        HeadFile headData = HeadContainer.getHeadByID(headResponse.getHeadTypeCode());
-        if (headData != null)
-        {
-            createdHead = new Head(headData);
-            createdHead.updateFromEEPROMData(headResponse);
-        } else
-        {
+	@AssistedInject
+	protected Head(
+			I18N i18n,
+			HeadContainer headContainer) {
+		this.i18n = i18n;
+		this.headContainer = headContainer;
+	}
+
+	@AssistedInject
+	protected Head(
+			I18N i18n,
+			HeadContainer headContainer,
+			@Assisted HeadFile headData) {
+
+		this(i18n, headContainer);
+		updateFromHeadFileData(headData);
+	}
+
+	//This method replaces the static factory method previously used.  Delegate Factory to Guice
+	@AssistedInject
+	protected Head(
+			I18N i18n,
+			HeadContainer headContainer,
+			@Assisted HeadEEPROMDataResponse headResponse) {
+
+		this(i18n, headContainer);
+
+		HeadFile headData = headContainer.getHeadByID(headResponse.getHeadTypeCode());
+
+		if (headData == null) {
 			LOGGER.error("Attempt to create head with invalid or absent type code");
-        }
+			return;
+		}
 
-        return createdHead;
-    }
+		updateFromHeadFileData(headData);
+		updateFromEEPROMData(headResponse);
+	}
 
-    protected NozzleHeater makeNozzleHeater(NozzleHeaterData nozzleHeaterData)
-    {
-        return new NozzleHeater(nozzleHeaterData.getMaximum_temperature_C(),
-                nozzleHeaterData.getBeta(),
-                nozzleHeaterData.getTcal(),
-                0, 0, 0, 0, "");
-    }
+	protected NozzleHeater makeNozzleHeater(NozzleHeaterData nozzleHeaterData) {
+		return new NozzleHeater(nozzleHeaterData.getMaximum_temperature_C(),
+				nozzleHeaterData.getBeta(),
+				nozzleHeaterData.getTcal(),
+				0, 0, 0, 0, "");
+	}
 
-    private void updateFromHeadFileData(HeadFile headData)
-    {
-        updateFromHeadFileData(headData, true);
-    }
+	private void updateFromHeadFileData(HeadFile headData) {
+		updateFromHeadFileData(headData, true);
+	}
 
-    private void updateFromHeadFileData(HeadFile headData, boolean flagDataChanged)
-    {
-        setTypeCode(headData.getTypeCode());
-        valveType.set(headData.getValves());
-        
-        zReductionProperty.set(headData.getZReduction());
-        
-        nozzleHeaters.clear();
-        headData.getNozzleHeaters().stream().
-                map((nozzleHeaterData) -> makeNozzleHeater(nozzleHeaterData))
-                .forEach((newNozzleHeater) ->
-                        {
-                            nozzleHeaters.add(newNozzleHeater);
-                });
+	private void updateFromHeadFileData(HeadFile headData, boolean flagDataChanged) {
+		setTypeCode(headData.getTypeCode());
+		valveType.set(headData.getValves());
 
-        nozzles.clear();
-        headData.getNozzles().stream().
-                map((nozzleData) -> new Nozzle(nozzleData.getDiameter(),
-                                nozzleData.getDefaultXOffset(),
-                                nozzleData.getDefaultYOffset(),
-                                nozzleData.getDefaultZOffset(),
-                                nozzleData.getDefaultBOffset())).
-                forEach((newNozzle) ->
-                        {
-                            nozzles.add(newNozzle);
-                });
+		zReductionProperty.set(headData.getZReduction());
 
-        if (flagDataChanged)
-        {
-            dataChanged.set(!dataChanged.get());
-        }
-    }
+		nozzleHeaters.clear();
+		headData.getNozzleHeaters().stream().map((nozzleHeaterData) -> makeNozzleHeater(nozzleHeaterData))
+				.forEach((newNozzleHeater) -> {
+					nozzleHeaters.add(newNozzleHeater);
+				});
 
-    private Head(String typeCode,
-            String friendlyName,
-            String uniqueID,
-            float headHours,
-            List<NozzleHeater> nozzleHeaters,
-            List<Nozzle> nozzles)
-    {
-        setTypeCode(typeCode);
-        this.name.set(friendlyName);
-        this.uniqueID.set(uniqueID);
-        this.headHours.set(headHours);
-        this.nozzleHeaters.addAll(nozzleHeaters);
-        this.nozzles.addAll(nozzles);
-    }
+		nozzles.clear();
+		headData.getNozzles().stream().map((nozzleData) -> new Nozzle(nozzleData.getDiameter(),
+				nozzleData.getDefaultXOffset(),
+				nozzleData.getDefaultYOffset(),
+				nozzleData.getDefaultZOffset(),
+				nozzleData.getDefaultBOffset())).forEach((newNozzle) -> {
+					nozzles.add(newNozzle);
+				});
 
-    public StringProperty typeCodeProperty()
-    {
-        return typeCode;
-    }
+		if (flagDataChanged) {
+			dataChanged.set(!dataChanged.get());
+		}
+	}
 
-    public StringProperty nameProperty()
-    {
-        return name;
-    }
+	// Private constructor used for clone only
+	private Head(
+			I18N i18n,
+			HeadContainer headContainer,
+			String typeCode,
+			String friendlyName,
+			String uniqueID,
+			float headHours,
+			List<NozzleHeater> nozzleHeaters,
+			List<Nozzle> nozzles) {
 
-    public ObjectProperty<HeadType> headTypeProperty()
-    {
-        return headType;
-    }
-    
-     public ObjectProperty<ValveType> valveTypeProperty()
-    {
-        return valveType;
-    }
-     
-    public ReadOnlyFloatProperty getZReductionProperty() 
-    {
-        return zReductionProperty;
-    }
+		this(i18n,headContainer);
 
-    public StringProperty uniqueIDProperty()
-    {
-        return uniqueID;
-    }
+		setTypeCode(typeCode);
+		this.name.set(friendlyName);
+		this.uniqueID.set(uniqueID);
+		this.headHours.set(headHours);
+		this.nozzleHeaters.addAll(nozzleHeaters);
+		this.nozzles.addAll(nozzles);
+	}
 
-    public FloatProperty headHoursProperty()
-    {
-        return headHours;
-    }
+	public StringProperty typeCodeProperty() {
+		return typeCode;
+	}
 
-    public ObservableList<NozzleHeater> getNozzleHeaters()
-    {
-        return nozzleHeaters;
-    }
+	public StringProperty nameProperty() {
+		return name;
+	}
 
-    public ObservableList<Nozzle> getNozzles()
-    {
-        return nozzles;
-    }
+	public ObjectProperty<HeadType> headTypeProperty() {
+		return headType;
+	}
 
-    public ReadOnlyFloatProperty bPositionProperty()
-    {
-        return BPosition;
-    }
+	public ObjectProperty<ValveType> valveTypeProperty() {
+		return valveType;
+	}
 
-    public ReadOnlyIntegerProperty nozzleInUseProperty()
-    {
-        return nozzleInUse;
-    }
+	public ReadOnlyFloatProperty getZReductionProperty() {
+		return zReductionProperty;
+	}
 
-    public ReadOnlyFloatProperty headXPositionProperty()
-    {
-        return headXPosition;
-    }
+	public StringProperty uniqueIDProperty() {
+		return uniqueID;
+	}
 
-    public ReadOnlyFloatProperty headYPositionProperty()
-    {
-        return headYPosition;
-    }
+	public FloatProperty headHoursProperty() {
+		return headHours;
+	}
 
-    public ReadOnlyFloatProperty headZPositionProperty()
-    {
-        return headZPosition;
-    }
+	public ObservableList<NozzleHeater> getNozzleHeaters() {
+		return nozzleHeaters;
+	}
 
-    public ReadOnlyBooleanProperty dataChangedProperty()
-    {
-        return dataChanged;
-    }
+	public ObservableList<Nozzle> getNozzles() {
+		return nozzles;
+	}
 
-    public String getWeekNumber()
-    {
-        return weekNumber.get();
-    }
+	public ReadOnlyFloatProperty bPositionProperty() {
+		return BPosition;
+	}
 
-    public void setWeekNumber(String value)
-    {
-        weekNumber.set(value);
-    }
+	public ReadOnlyIntegerProperty nozzleInUseProperty() {
+		return nozzleInUse;
+	}
 
-    public String getYearNumber()
-    {
-        return yearNumber.get();
-    }
+	public ReadOnlyFloatProperty headXPositionProperty() {
+		return headXPosition;
+	}
 
-    public void setYearNumber(String value)
-    {
-        yearNumber.set(value);
-    }
+	public ReadOnlyFloatProperty headYPositionProperty() {
+		return headYPosition;
+	}
 
-    public String getPONumber()
-    {
-        return PONumber.get();
-    }
+	public ReadOnlyFloatProperty headZPositionProperty() {
+		return headZPosition;
+	}
 
-    public void setPONumber(String value)
-    {
-        PONumber.set(value);
-    }
+	public ReadOnlyBooleanProperty dataChangedProperty() {
+		return dataChanged;
+	}
 
-    public String getSerialNumber()
-    {
-        return serialNumber.get();
-    }
+	public String getWeekNumber() {
+		return weekNumber.get();
+	}
 
-    public void setSerialNumber(String value)
-    {
-        serialNumber.set(value);
-    }
+	public void setWeekNumber(String value) {
+		weekNumber.set(value);
+	}
 
-    public String getChecksum()
-    {
-        return checksum.get();
-    }
+	public String getYearNumber() {
+		return yearNumber.get();
+	}
 
-    public void setChecksum(String value)
-    {
-        checksum.set(value);
-    }
+	public void setYearNumber(String value) {
+		yearNumber.set(value);
+	}
 
-    @Override
-    public String toString()
-    {
-        return name.get();
-    }
+	public String getPONumber() {
+		return PONumber.get();
+	}
 
-    @Override
-    public Head clone()
-    {
-        ArrayList<NozzleHeater> newNozzleHeaters = new ArrayList<>();
-        ArrayList<Nozzle> newNozzles = new ArrayList<>();
+	public void setPONumber(String value) {
+		PONumber.set(value);
+	}
 
-        nozzleHeaters.stream().
-                forEach((nozzleHeater) ->
-                        {
-                            newNozzleHeaters.add(nozzleHeater.clone());
-                });
+	public String getSerialNumber() {
+		return serialNumber.get();
+	}
 
-        nozzles.stream().
-                forEach((nozzle) ->
-                        {
-                            newNozzles.add(nozzle.clone());
-                });
+	public void setSerialNumber(String value) {
+		serialNumber.set(value);
+	}
 
-        Head clone = new Head(
-                typeCode.get(),
-                name.get(),
-                uniqueID.get(),
-                headHours.get(),
-                newNozzleHeaters,
-                newNozzles
-        );
+	public String getChecksum() {
+		return checksum.get();
+	}
 
-        return clone;
-    }
+	public void setChecksum(String value) {
+		checksum.set(value);
+	}
 
-    private void setTypeCode(String typeCode)
-    {
-        this.typeCode.set(typeCode);
+	@Override
+	public String toString() {
+		return name.get();
+	}
 
-        HeadFile headFile = HeadContainer.getHeadByID(typeCode);
-        if (headFile != null)
-        {
-            headType.set(HeadContainer.getHeadByID(typeCode).getType());
-        } else
-        {
-            headType.set(null);
-        }
-    }
+	@Override
+	public Head clone() {
+		ArrayList<NozzleHeater> newNozzleHeaters = new ArrayList<>();
+		ArrayList<Nozzle> newNozzles = new ArrayList<>();
 
-    public final void updateFromEEPROMData(HeadEEPROMDataResponse eepromData)
-    {
-        if (!eepromData.getHeadTypeCode().equals(typeCode.get()))
-        {
-            updateFromHeadFileData(HeadContainer.getHeadByID(eepromData.getHeadTypeCode()), false);
-        }
-        uniqueID.set(eepromData.getUniqueID());
-        weekNumber.set(eepromData.getWeekNumber());
-        yearNumber.set(eepromData.getYearNumber());
-        PONumber.set(eepromData.getPONumber());
-        serialNumber.set(eepromData.getSerialNumber());
-        checksum.set(eepromData.getChecksum());
-        headHours.set(eepromData.getHeadHours());
+		nozzleHeaters.stream().forEach((nozzleHeater) -> {
+			newNozzleHeaters.add(nozzleHeater.clone());
+		});
 
-        for (int i = 0; i < nozzleHeaters.size(); i++)
-        {
-            nozzleHeaters.get(i).beta.set(eepromData.getThermistorBeta());
-            nozzleHeaters.get(i).tcal.set(eepromData.getThermistorTCal());
-            nozzleHeaters.get(i).lastFilamentTemperature.
-                    set(eepromData.getLastFilamentTemperature(i));
-            nozzleHeaters.get(i).maximumTemperature.set(eepromData.getMaximumTemperature());
-            nozzleHeaters.get(i).filamentID.set(eepromData.getFilamentID(i));
-        }
+		nozzles.stream().forEach((nozzle) -> {
+			newNozzles.add(nozzle.clone());
+		});
 
-        if (nozzles.size() > 0)
-        {
-            nozzles.get(0).xOffset.set(eepromData.getNozzle1XOffset());
-            nozzles.get(0).yOffset.set(eepromData.getNozzle1YOffset());
-            nozzles.get(0).zOffset.set(eepromData.getNozzle1ZOffset());
-            nozzles.get(0).bOffset.set(eepromData.getNozzle1BOffset());
-        }
+		Head clone = new Head(i18n, headContainer,
+				typeCode.get(),
+				name.get(),
+				uniqueID.get(),
+				headHours.get(),
+				newNozzleHeaters,
+				newNozzles);
 
-        if (nozzles.size() == 2)
-        {
-            nozzles.get(1).xOffset.set(eepromData.getNozzle2XOffset());
-            nozzles.get(1).yOffset.set(eepromData.getNozzle2YOffset());
-            nozzles.get(1).zOffset.set(eepromData.getNozzle2ZOffset());
-            nozzles.get(1).bOffset.set(eepromData.getNozzle2BOffset());
-        }
+		return clone;
+	}
 
-        dataChanged.set(!dataChanged.get());
-    }
+	private void setTypeCode(String typeCode) {
+		this.typeCode.set(typeCode);
 
-    public boolean matchesEEPROMData(HeadEEPROMData response)
-    {
-        boolean matches = false;
+		HeadFile headFile = headContainer.getHeadByID(typeCode);
+		if (headFile != null) {
+			headType.set(headContainer.getHeadByID(typeCode).getType());
+		}
+		else {
+			headType.set(null);
+		}
+	}
 
-        if (response.getHeadTypeCode().equals(typeCodeProperty().get()))
-        {
-            matches = response.getHeadHours() == headHoursProperty().get()
-                    && response.getUniqueID().equals(uniqueIDProperty().get());
+	public final void updateFromEEPROMData(HeadEEPROMDataResponse eepromData) {
+		if (!eepromData.getHeadTypeCode().equals(typeCode.get())) {
+			updateFromHeadFileData(headContainer.getHeadByID(eepromData.getHeadTypeCode()), false);
+		}
+		uniqueID.set(eepromData.getUniqueID());
+		weekNumber.set(eepromData.getWeekNumber());
+		yearNumber.set(eepromData.getYearNumber());
+		PONumber.set(eepromData.getPONumber());
+		serialNumber.set(eepromData.getSerialNumber());
+		checksum.set(eepromData.getChecksum());
+		headHours.set(eepromData.getHeadHours());
 
-            if (getNozzleHeaters().size() > 0)
-            {
-                matches &= response.getMaximumTemperature() == getNozzleHeaters().get(0).maximumTemperatureProperty().get()
-                        && response.getThermistorBeta() == getNozzleHeaters().get(0).betaProperty().get()
-                        && response.getThermistorTCal() == getNozzleHeaters().get(0).tCalProperty().get();
-            }
+		for (int i = 0; i < nozzleHeaters.size(); i++) {
+			nozzleHeaters.get(i).beta.set(eepromData.getThermistorBeta());
+			nozzleHeaters.get(i).tcal.set(eepromData.getThermistorTCal());
+			nozzleHeaters.get(i).lastFilamentTemperature.set(eepromData.getLastFilamentTemperature(i));
+			nozzleHeaters.get(i).maximumTemperature.set(eepromData.getMaximumTemperature());
+			nozzleHeaters.get(i).filamentID.set(eepromData.getFilamentID(i));
+		}
 
-            if (getNozzles().size() > 0)
-            {
-                matches &= response.getNozzle1BOffset() == getNozzles().get(0).bOffsetProperty().get()
-                        && response.getNozzle1XOffset() == getNozzles().get(0).xOffsetProperty().get()
-                        && response.getNozzle1YOffset() == getNozzles().get(0).yOffsetProperty().get()
-                        && response.getNozzle1ZOffset() == getNozzles().get(0).zOffsetProperty().get();
-            }
+		if (nozzles.size() > 0) {
+			nozzles.get(0).xOffset.set(eepromData.getNozzle1XOffset());
+			nozzles.get(0).yOffset.set(eepromData.getNozzle1YOffset());
+			nozzles.get(0).zOffset.set(eepromData.getNozzle1ZOffset());
+			nozzles.get(0).bOffset.set(eepromData.getNozzle1BOffset());
+		}
 
-            if (getNozzles().size() > 1)
-            {
-                matches &= response.getNozzle2BOffset() == getNozzles().get(1).bOffsetProperty().get()
-                        && response.getNozzle2XOffset() == getNozzles().get(1).xOffsetProperty().get()
-                        && response.getNozzle2YOffset() == getNozzles().get(1).yOffsetProperty().get()
-                        && response.getNozzle2ZOffset() == getNozzles().get(1).zOffsetProperty().get();
-            }
-        }
-        return matches;
-    }
+		if (nozzles.size() == 2) {
+			nozzles.get(1).xOffset.set(eepromData.getNozzle2XOffset());
+			nozzles.get(1).yOffset.set(eepromData.getNozzle2YOffset());
+			nozzles.get(1).zOffset.set(eepromData.getNozzle2ZOffset());
+			nozzles.get(1).bOffset.set(eepromData.getNozzle2BOffset());
+		}
 
-    @Override
-    public RepairResult bringDataInBounds()
-    {
-        float epsilon = 1e-5f;
+		dataChanged.set(!dataChanged.get());
+	}
 
-        RepairResult result = RepairResult.NO_REPAIR_NECESSARY;
+	public boolean matchesEEPROMData(HeadEEPROMData response) {
+		boolean matches = false;
 
-        HeadFile referenceHeadData = HeadContainer.getHeadByID(typeCode.get());
-        if (referenceHeadData != null)
-        {
-            // Iterate through the nozzle heaters and check for differences
-            for (int i = 0; i < getNozzleHeaters().size(); i++)
-            {
-                NozzleHeater nozzleHeater = getNozzleHeaters().get(i);
-                NozzleHeaterData nozzleHeaterData = referenceHeadData.getNozzleHeaters().get(i);
+		if (response.getHeadTypeCode().equals(typeCodeProperty().get())) {
+			matches = response.getHeadHours() == headHoursProperty().get()
+					&& response.getUniqueID().equals(uniqueIDProperty().get());
 
-                if (MathUtils.compareDouble(nozzleHeater.maximumTemperatureProperty().get(),
-                        nozzleHeaterData.getMaximum_temperature_C(), epsilon)
-                        != MathUtils.EQUAL)
-                {
-                    nozzleHeater.maximumTemperature.set(nozzleHeaterData.getMaximum_temperature_C());
-                    result = RepairResult.REPAIRED_WRITE_ONLY;
-                }
+			if (getNozzleHeaters().size() > 0) {
+				matches &= response.getMaximumTemperature() == getNozzleHeaters().get(0).maximumTemperatureProperty().get()
+						&& response.getThermistorBeta() == getNozzleHeaters().get(0).betaProperty().get()
+						&& response.getThermistorTCal() == getNozzleHeaters().get(0).tCalProperty().get();
+			}
 
-                if (Math.abs(nozzleHeater.tCalProperty().get() - nozzleHeaterData.getTcal())
-                        > epsilon)
-                {
-                    nozzleHeater.tcal.set(nozzleHeaterData.getTcal());
-                    result = RepairResult.REPAIRED_WRITE_ONLY;
-                }
+			if (getNozzles().size() > 0) {
+				matches &= response.getNozzle1BOffset() == getNozzles().get(0).bOffsetProperty().get()
+						&& response.getNozzle1XOffset() == getNozzles().get(0).xOffsetProperty().get()
+						&& response.getNozzle1YOffset() == getNozzles().get(0).yOffsetProperty().get()
+						&& response.getNozzle1ZOffset() == getNozzles().get(0).zOffsetProperty().get();
+			}
 
-                if (Math.abs(nozzleHeater.betaProperty().get() - nozzleHeaterData.getBeta())
-                        > epsilon)
-                {
-                    nozzleHeater.beta.set(nozzleHeaterData.getBeta());
-                    result = RepairResult.REPAIRED_WRITE_ONLY;
-                }
-            }
+			if (getNozzles().size() > 1) {
+				matches &= response.getNozzle2BOffset() == getNozzles().get(1).bOffsetProperty().get()
+						&& response.getNozzle2XOffset() == getNozzles().get(1).xOffsetProperty().get()
+						&& response.getNozzle2YOffset() == getNozzles().get(1).yOffsetProperty().get()
+						&& response.getNozzle2ZOffset() == getNozzles().get(1).zOffsetProperty().get();
+			}
+		}
+		return matches;
+	}
 
-            // Now for the nozzles...
-            for (int i = 0; i < getNozzles().size(); i++)
-            {
-                Nozzle nozzle = getNozzles().get(i);
-                NozzleData nozzleData = referenceHeadData.getNozzles().get(i);
+	@Override
+	public RepairResult bringDataInBounds() {
+		float epsilon = 1e-5f;
 
-                if (nozzle.xOffsetProperty().get() < nozzleData.getMinXOffset() || nozzle.
-                        xOffsetProperty().get() > nozzleData.getMaxXOffset())
-                {
-                    nozzle.xOffset.set(nozzleData.getDefaultXOffset());
-                    result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
-                }
+		RepairResult result = RepairResult.NO_REPAIR_NECESSARY;
 
-                if (nozzle.yOffsetProperty().get() < nozzleData.getMinYOffset() || nozzle.
-                        yOffsetProperty().get() > nozzleData.getMaxYOffset())
-                {
-                    nozzle.yOffset.set(nozzleData.getDefaultYOffset());
-                    result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
-                }
+		HeadFile referenceHeadData = headContainer.getHeadByID(typeCode.get());
+		if (referenceHeadData != null) {
+			// Iterate through the nozzle heaters and check for differences
+			for (int i = 0; i < getNozzleHeaters().size(); i++) {
+				NozzleHeater nozzleHeater = getNozzleHeaters().get(i);
+				NozzleHeaterData nozzleHeaterData = referenceHeadData.getNozzleHeaters().get(i);
 
-                if (nozzle.zOffsetProperty().get() < nozzleData.getMinZOffset() || nozzle.
-                        zOffsetProperty().get() > nozzleData.getMaxZOffset())
-                {
-                    nozzle.zOffset.set(nozzleData.getDefaultZOffset());
-                    result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
-                }
+				if (MathUtils.compareDouble(nozzleHeater.maximumTemperatureProperty().get(),
+						nozzleHeaterData.getMaximum_temperature_C(), epsilon) != MathUtils.EQUAL) {
+					nozzleHeater.maximumTemperature.set(nozzleHeaterData.getMaximum_temperature_C());
+					result = RepairResult.REPAIRED_WRITE_ONLY;
+				}
 
-                if (nozzle.bOffsetProperty().get() < nozzleData.getMinBOffset() || nozzle.
-                        bOffsetProperty().get() > nozzleData.getMaxBOffset())
-                {
-                    nozzle.bOffset.set(nozzleData.getDefaultBOffset());
-                    result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
-                }
-            }
+				if (Math.abs(nozzleHeater.tCalProperty().get() - nozzleHeaterData.getTcal()) > epsilon) {
+					nozzleHeater.tcal.set(nozzleHeaterData.getTcal());
+					result = RepairResult.REPAIRED_WRITE_ONLY;
+				}
+
+				if (Math.abs(nozzleHeater.betaProperty().get() - nozzleHeaterData.getBeta()) > epsilon) {
+					nozzleHeater.beta.set(nozzleHeaterData.getBeta());
+					result = RepairResult.REPAIRED_WRITE_ONLY;
+				}
+			}
+
+			// Now for the nozzles...
+			for (int i = 0; i < getNozzles().size(); i++) {
+				Nozzle nozzle = getNozzles().get(i);
+				NozzleData nozzleData = referenceHeadData.getNozzles().get(i);
+
+				if (nozzle.xOffsetProperty().get() < nozzleData.getMinXOffset() || nozzle.xOffsetProperty().get() > nozzleData.getMaxXOffset()) {
+					nozzle.xOffset.set(nozzleData.getDefaultXOffset());
+					result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
+				}
+
+				if (nozzle.yOffsetProperty().get() < nozzleData.getMinYOffset() || nozzle.yOffsetProperty().get() > nozzleData.getMaxYOffset()) {
+					nozzle.yOffset.set(nozzleData.getDefaultYOffset());
+					result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
+				}
+
+				if (nozzle.zOffsetProperty().get() < nozzleData.getMinZOffset() || nozzle.zOffsetProperty().get() > nozzleData.getMaxZOffset()) {
+					nozzle.zOffset.set(nozzleData.getDefaultZOffset());
+					result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
+				}
+
+				if (nozzle.bOffsetProperty().get() < nozzleData.getMinBOffset() || nozzle.bOffsetProperty().get() > nozzleData.getMaxBOffset()) {
+					nozzle.bOffset.set(nozzleData.getDefaultBOffset());
+					result = RepairResult.REPAIRED_WRITE_AND_RECALIBRATE;
+				}
+			}
 
 			LOGGER.debug("Head data bounds check - result is " + result.name());
-        } else
-        {
+		}
+		else {
 			LOGGER.warn("Head bounds check requested but reference data could not be obtained.");
-        }
+		}
 
-        if (result != RepairResult.NO_REPAIR_NECESSARY)
-        {
-            dataChanged.set(!dataChanged.get());
-        }
+		if (result != RepairResult.NO_REPAIR_NECESSARY) {
+			dataChanged.set(!dataChanged.get());
+		}
 
-        return result;
-    }
+		return result;
+	}
 
-    @Override
-    public void resetToDefaults()
-    {
-        HeadFile referenceHeadData = HeadContainer.getHeadByID(typeCode.get());
-        if (referenceHeadData != null)
-        {
-            typeCode.set(referenceHeadData.getTypeCode());
+	@Override
+	public void resetToDefaults() {
+		HeadFile referenceHeadData = headContainer.getHeadByID(typeCode.get());
+		if (referenceHeadData != null) {
+			typeCode.set(referenceHeadData.getTypeCode());
 
-            int nozzleHeaterIndex = 0;
-            for (NozzleHeater heater : nozzleHeaters)
-            {
-                NozzleHeaterData heaterData
-                        = referenceHeadData.getNozzleHeaters().get(nozzleHeaterIndex);
-                heater.maximumTemperature.set(heaterData.getMaximum_temperature_C());
-                heater.beta.set(heaterData.getBeta());
-                heater.tcal.set(heaterData.getTcal());
-                heater.lastFilamentTemperature.set(0);
-                heater.nozzleFirstLayerTargetTemperature.set(0);
-                heater.nozzleTargetTemperature.set(0);
-                heater.nozzleTemperature.set(0);
-                heater.filamentID.set("");
+			int nozzleHeaterIndex = 0;
+			for (NozzleHeater heater : nozzleHeaters) {
+				NozzleHeaterData heaterData = referenceHeadData.getNozzleHeaters().get(nozzleHeaterIndex);
+				heater.maximumTemperature.set(heaterData.getMaximum_temperature_C());
+				heater.beta.set(heaterData.getBeta());
+				heater.tcal.set(heaterData.getTcal());
+				heater.lastFilamentTemperature.set(0);
+				heater.nozzleFirstLayerTargetTemperature.set(0);
+				heater.nozzleTargetTemperature.set(0);
+				heater.nozzleTemperature.set(0);
+				heater.filamentID.set("");
 
-                nozzleHeaterIndex++;
-            }
+				nozzleHeaterIndex++;
+			}
 
-            int nozzleIndex = 0;
-            for (Nozzle nozzle : nozzles)
-            {
-                NozzleData nozzleData
-                        = referenceHeadData.getNozzles().get(nozzleIndex);
+			int nozzleIndex = 0;
+			for (Nozzle nozzle : nozzles) {
+				NozzleData nozzleData = referenceHeadData.getNozzles().get(nozzleIndex);
 
-                nozzle.diameter.set(nozzleData.getDiameter());
-                nozzle.xOffset.set(nozzleData.getDefaultXOffset());
-                nozzle.yOffset.set(nozzleData.getDefaultYOffset());
-                nozzle.zOffset.set(nozzleData.getDefaultZOffset());
-                nozzle.bOffset.set(nozzleData.getDefaultBOffset());
-                nozzle.BPosition.set(0);
+				nozzle.diameter.set(nozzleData.getDiameter());
+				nozzle.xOffset.set(nozzleData.getDefaultXOffset());
+				nozzle.yOffset.set(nozzleData.getDefaultYOffset());
+				nozzle.zOffset.set(nozzleData.getDefaultZOffset());
+				nozzle.bOffset.set(nozzleData.getDefaultBOffset());
+				nozzle.BPosition.set(0);
 
-                nozzleIndex++;
-            }
+				nozzleIndex++;
+			}
 
-            dataChanged.set(!dataChanged.get());
+			dataChanged.set(!dataChanged.get());
 
 			LOGGER.info("Reset head to defaults with data set - " + referenceHeadData.getTypeCode());
-        } else
-        {
+		}
+		else {
 			LOGGER.warn(
-                    "Attempt to reset head to defaults failed - reference data cannot be derived");
-        }
-    }
+					"Attempt to reset head to defaults failed - reference data cannot be derived");
+		}
+	}
 
-    public static boolean isTypeCodeValid(String typeCode)
-    {
-        boolean typeCodeIsValid = false;
+	public static boolean isTypeCodeValid(String typeCode) {
+		boolean typeCodeIsValid = false;
 
-        if (typeCode != null && typeCode.length() == 8)
-            typeCodeIsValid = typeCode.matches("R[BX][0-9a-zA-Z]{3}-[0-9a-zA-Z]{2}");
-        return typeCodeIsValid;
-    }
+		if (typeCode != null && typeCode.length() == 8)
+			typeCodeIsValid = typeCode.matches("R[BX][0-9a-zA-Z]{3}-[0-9a-zA-Z]{2}");
+		return typeCodeIsValid;
+	}
 
-    public static boolean isTypeCodeInDatabase(String typeCode)
-    {
-        boolean typeCodeIsInDatabase = false;
+	//Moved to HeadContainer, the *actual* database
+	//	public boolean isTypeCodeInDatabase(String typeCode) {
+	//		boolean typeCodeIsInDatabase = false;
+	//
+	//		if (typeCode != null
+	//				&& headContainer.getHeadByID(typeCode) != null) {
+	//			typeCodeIsInDatabase = true;
+	//		}
+	//
+	//		return typeCodeIsInDatabase;
+	//	}
 
-        if (typeCode != null
-                && HeadContainer.getHeadByID(typeCode) != null)
-        {
-            typeCodeIsInDatabase = true;
-        }
+	@Override
+	public void allocateRandomID() {
+		String idToCreate = typeCode.get() + SystemUtils.generate16DigitID().substring(typeCode.get().length());
+		uniqueID.set(idToCreate);
 
-        return typeCodeIsInDatabase;
-    }
+		dataChanged.set(!dataChanged.get());
+	}
 
-    @Override
-    public void allocateRandomID()
-    {
-        String idToCreate = typeCode.get() + SystemUtils.generate16DigitID().substring(typeCode.
-                get().length());
-        uniqueID.set(idToCreate);
+	public void setUniqueID(String typeCodeInput,
+			String weekNumberInput,
+			String yearNumberInput,
+			String poNumberInput,
+			String serialNumberInput,
+			String checksumInput) {
+		typeCode.set(typeCodeInput);
+		weekNumber.set(weekNumberInput);
+		yearNumber.set(yearNumberInput);
+		PONumber.set(poNumberInput);
+		serialNumber.set(serialNumberInput);
+		checksum.set(checksumInput);
 
-        dataChanged.set(!dataChanged.get());
-    }
+		uniqueID.set(typeCodeInput + weekNumberInput + yearNumberInput + poNumberInput + serialNumberInput + checksumInput);
 
-    public void setUniqueID(String typeCodeInput,
-            String weekNumberInput,
-            String yearNumberInput,
-            String poNumberInput,
-            String serialNumberInput,
-            String checksumInput)
-    {
-        typeCode.set(typeCodeInput);
-        weekNumber.set(weekNumberInput);
-        yearNumber.set(yearNumberInput);
-        PONumber.set(poNumberInput);
-        serialNumber.set(serialNumberInput);
-        checksum.set(checksumInput);
-        
-        uniqueID.set(typeCodeInput + weekNumberInput + yearNumberInput + poNumberInput + serialNumberInput + checksumInput);
-        
-        dataChanged.set(!dataChanged.get());
-    }
+		dataChanged.set(!dataChanged.get());
+	}
 
-    public static String getFormattedSerial(String typeCode,
-            String weekNumber,
-            String yearNumber,
-            String poNumber,
-            String serialNumber,
-            String checksum)
-    {
-        StringBuilder formattedHeadSerial = new StringBuilder();
-        formattedHeadSerial.append(typeCode);
-        formattedHeadSerial.append("-");
-        formattedHeadSerial.append(weekNumber);
-        formattedHeadSerial.append(yearNumber);
-        formattedHeadSerial.append("-");
-        formattedHeadSerial.append(poNumber);
-        formattedHeadSerial.append("-");
-        formattedHeadSerial.append(serialNumber);
-        formattedHeadSerial.append("-");
-        formattedHeadSerial.append(checksum);
+	public static String getFormattedSerial(String typeCode,
+			String weekNumber,
+			String yearNumber,
+			String poNumber,
+			String serialNumber,
+			String checksum) {
+		StringBuilder formattedHeadSerial = new StringBuilder();
+		formattedHeadSerial.append(typeCode);
+		formattedHeadSerial.append("-");
+		formattedHeadSerial.append(weekNumber);
+		formattedHeadSerial.append(yearNumber);
+		formattedHeadSerial.append("-");
+		formattedHeadSerial.append(poNumber);
+		formattedHeadSerial.append("-");
+		formattedHeadSerial.append(serialNumber);
+		formattedHeadSerial.append("-");
+		formattedHeadSerial.append(checksum);
 
-        return formattedHeadSerial.toString();
-    }
+		return formattedHeadSerial.toString();
+	}
 
-    public String getFormattedSerial()
-    {
-        return getFormattedSerial(typeCodeProperty().get(),
-                getWeekNumber(),
-                getYearNumber(),
-                getPONumber(),
-                getSerialNumber(),
-                getChecksum());
-}
+	public String getFormattedSerial() {
+		return getFormattedSerial(typeCodeProperty().get(),
+				getWeekNumber(),
+				getYearNumber(),
+				getPONumber(),
+				getSerialNumber(),
+				getChecksum());
+	}
 
-    public static boolean validateSerial(String typeCodeInput,
-            String weekNumberInput,
-            String yearNumberInput,
-            String poNumberInput,
-            String serialNumberInput,
-            String checksumInput)
-    {
-        boolean everythingIsGroovy = true;
+	public static boolean validateSerial(String typeCodeInput,
+			String weekNumberInput,
+			String yearNumberInput,
+			String poNumberInput,
+			String serialNumberInput,
+			String checksumInput) {
+		boolean everythingIsGroovy = true;
 
-        if (typeCodeInput != null
-                && weekNumberInput != null
-                && yearNumberInput != null
-                && poNumberInput != null
-                && serialNumberInput != null
-                && checksumInput != null)
-        {
-            everythingIsGroovy = isTypeCodeValid(typeCodeInput);
+		if (typeCodeInput != null
+				&& weekNumberInput != null
+				&& yearNumberInput != null
+				&& poNumberInput != null
+				&& serialNumberInput != null
+				&& checksumInput != null) {
+			everythingIsGroovy = isTypeCodeValid(typeCodeInput);
 
-            try
-            {
-                everythingIsGroovy &= weekNumberInput.length() == 2;
-                int weekVal = Integer.valueOf(weekNumberInput);
+			try {
+				everythingIsGroovy &= weekNumberInput.length() == 2;
+				int weekVal = Integer.valueOf(weekNumberInput);
 
-                everythingIsGroovy &= yearNumberInput.length() == 2;
-                int yearVal = Integer.valueOf(yearNumberInput);
+				everythingIsGroovy &= yearNumberInput.length() == 2;
+				int yearVal = Integer.valueOf(yearNumberInput);
 
-                everythingIsGroovy &= poNumberInput.length() == 7;
-                int poVal = Integer.valueOf(poNumberInput);
+				everythingIsGroovy &= poNumberInput.length() == 7;
+				int poVal = Integer.valueOf(poNumberInput);
 
-                everythingIsGroovy &= serialNumberInput.length() == 4;
-                int serialVal = Integer.valueOf(serialNumberInput);
+				everythingIsGroovy &= serialNumberInput.length() == 4;
+				int serialVal = Integer.valueOf(serialNumberInput);
 
-                everythingIsGroovy &= checksumInput.length() == 1;
-                int checksumVal = Integer.valueOf(checksumInput);
+				everythingIsGroovy &= checksumInput.length() == 1;
+				int checksumVal = Integer.valueOf(checksumInput);
 
-                String stringToChecksum = typeCodeInput
-                        + weekNumberInput
-                        + yearNumberInput
-                        + poNumberInput
-                        + serialNumberInput;
-                try
-                {
-                    char checkDigit = SystemUtils.generateUPSModulo10Checksum(stringToChecksum.replaceAll("-", ""));
-                    everythingIsGroovy &= checksumInput.charAt(0) == checkDigit;
-                } catch (InvalidChecksumException ex)
-                {
-                    everythingIsGroovy = false;
-                }
+				String stringToChecksum = typeCodeInput
+						+ weekNumberInput
+						+ yearNumberInput
+						+ poNumberInput
+						+ serialNumberInput;
+				try {
+					char checkDigit = SystemUtils.generateUPSModulo10Checksum(stringToChecksum.replaceAll("-", ""));
+					everythingIsGroovy &= checksumInput.charAt(0) == checkDigit;
+				}
+				catch (InvalidChecksumException ex) {
+					everythingIsGroovy = false;
+				}
 
-            } catch (NumberFormatException ex)
-            {
-                everythingIsGroovy = false;
-            }
-        } else
-        {
-            everythingIsGroovy = false;
-        }
+			}
+			catch (NumberFormatException ex) {
+				everythingIsGroovy = false;
+			}
+		}
+		else {
+			everythingIsGroovy = false;
+		}
 
-        return everythingIsGroovy;
-    }
+		return everythingIsGroovy;
+	}
 }

@@ -1,6 +1,3 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.appManager.undo;
 
 import org.apache.logging.log4j.LogManager;
@@ -18,12 +15,10 @@ import javafx.collections.ObservableList;
 /**
  * The CommandStack is a stack of Commands that has an index into the current stack position. When an undo is applied the Command at the current index is undone, and the index is reduced by 1.
  *
- * @author tony
  */
 public class CommandStack {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			CommandStack.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final BooleanProperty canUndo = new SimpleBooleanProperty();
 	private final BooleanProperty canRedo = new SimpleBooleanProperty();

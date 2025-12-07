@@ -1,35 +1,43 @@
 package celtech.coreUI;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.MODELS;
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ResourceBundle;
 import java.util.Set;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.fileRepresentation.CameraProfile;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterIdentity;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.environment.I18N;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.FirstUsePreference;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
 import org.openautomaker.environment.preference.advanced.ShowGCodeConsolePreference;
+import org.openautomaker.environment.preference.application.FirstUsePreference;
+import org.openautomaker.environment.preference.application.VersionPreference;
+import org.openautomaker.environment.preference.modeling.ModelsPathPreference;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.ui.StageManager;
+import org.openautomaker.ui.component.layout_status_menu_strip.LayoutStatusMenuStrip;
+import org.openautomaker.ui.component.printer_side_panel.PrinterSidePanel;
+import org.openautomaker.ui.inject.project.ModelContainerProjectFactory;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedProject;
+import org.openautomaker.ui.state.SelectedSpinnerControl;
 
-import celtech.Lookup;
+import com.google.inject.Injector;
+
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
-import celtech.appManager.ModelContainerProject;
 import celtech.appManager.Project;
 import celtech.appManager.ProjectCallback;
 import celtech.appManager.ProjectManager;
@@ -44,7 +52,7 @@ import celtech.coreUI.components.Notifications.NotificationArea;
 import celtech.coreUI.controllers.InfoScreenIndicatorController;
 import celtech.coreUI.controllers.PrinterStatusPageController;
 import celtech.coreUI.controllers.panels.LibraryMenuPanelController;
-import celtech.coreUI.controllers.panels.PreviewManager;
+import celtech.coreUI.controllers.panels.PreviewManagerController;
 import celtech.coreUI.controllers.panels.PurgeInsetPanelController;
 import celtech.coreUI.keycommands.HiddenKey;
 import celtech.coreUI.keycommands.KeyCommandListener;
@@ -52,8 +60,10 @@ import celtech.coreUI.keycommands.UnhandledKeyListener;
 import celtech.coreUI.visualisation.ModelLoader;
 import celtech.coreUI.visualisation.ProjectSelection;
 import celtech.modelcontrol.ProjectifiableThing;
-import celtech.roboxbase.comms.DummyPrinterCommandInterface;
 import celtech.roboxbase.comms.RoboxCommsManager;
+import celtech.roboxbase.comms.VirtualPrinterCommandInterface;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
@@ -65,7 +75,6 @@ import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXMLLoader;
-import javafx.fxml.Initializable;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.PerspectiveCamera;
@@ -95,22 +104,17 @@ import javafx.stage.Stage;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
+@Singleton
 public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListener, UnhandledKeyListener, SpinnerControl,
 		ProjectCallback {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private final AdvancedModePreference fAdvancedModePreference;
-	private final ShowGCodeConsolePreference fShowGCodeConsolePreference;
-
 	private static final int START_SCALING_WINDOW_HEIGHT = 700;
 	private static final double MINIMUM_SCALE_FACTOR = 0.7;
 
-	private static ApplicationStatus applicationStatus;
-	private static ProjectManager projectManager;
-
 	private static DisplayManager instance;
-	private static Stage mainStage;
+	//private static Stage mainStage;
 	private static Scene scene;
 
 	private HBox mainHolder;
@@ -118,7 +122,7 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	private final HashMap<ApplicationMode, Pane> insetPanels;
 	private final AnchorPane rhPanel;
 	private final VBox projectTabPaneHolder;
-	private final HashMap<ApplicationMode, Initializable> insetPanelControllers;
+	private final HashMap<ApplicationMode, Object> insetPanelControllers;
 	private VBox sidePanel;
 
 	private static AnchorPane interchangeablePanelAreaWithNotificationArea;
@@ -143,7 +147,7 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	private Pane spinnerContainer;
 	private Spinner spinner;
 
-	private final NotificationArea notificationArea = new NotificationArea();
+	private final NotificationArea notificationArea;
 
 	//Display scaling
 	private BooleanProperty nodesMayHaveMoved;
@@ -163,58 +167,149 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 
 	// This is here solely so it shutdown can be called on it when the application closes.
 	// If other things need to be added, it should be changed to a more generic callback mechanism.
-	private PreviewManager previewManager = null;
+	private PreviewManagerController previewManager = null;
 
-	private DisplayManager() {
-		fAdvancedModePreference = new AdvancedModePreference();
-		fShowGCodeConsolePreference = new ShowGCodeConsolePreference();
+	//Remove this 
+	//	private DisplayManager() {
+	//		fAdvancedModePreference = new AdvancedModePreference();
+	//		fShowGCodeConsolePreference = new ShowGCodeConsolePreference();
+	//
+	//		this.rootStackPane = new StackPane();
+	//		this.nodesMayHaveMoved = new SimpleBooleanProperty(false);
+	//		this.insetPanelControllers = new HashMap<>();
+	//		this.insetPanels = new HashMap<>();
+	//		//applicationStatus = applicationStatus;
+	//		projectManager = ProjectManager.getInstance();
+	//		this.projectTabPaneHolder = new VBox();
+	//		AnchorPane.setBottomAnchor(projectTabPaneHolder, 0.0);
+	//		AnchorPane.setTopAnchor(projectTabPaneHolder, 0.0);
+	//		AnchorPane.setLeftAnchor(projectTabPaneHolder, 0.0);
+	//		AnchorPane.setRightAnchor(projectTabPaneHolder, 0.0);
+	//		this.rhPanel = new AnchorPane();
+	//		//		 LOGGER.debug("Starting AutoMaker - initialising display manager...");
+	//		//		 LOGGER.debug("Starting AutoMaker - machine type is " + BaseConfiguration.getMachineType());
+	//	}
+
+	private final Injector injector;
+	private final AdvancedModePreference advancedModePreference;
+	private final ShowGCodeConsolePreference showGCodeConsolePreference;
+	private final ModelsPathPreference modelsPathPreference;
+	private final VersionPreference versionPreference;
+	private final FirstUsePreference firstUsePreference;
+	private final I18N i18n;
+	private final FXMLLoaderFactory fxmlLoaderFactory;
+	private final TaskExecutor taskExecutor;
+	private final SelectedPrinter selectedPrinter;
+	private final SelectedProject selectedProject;
+	private final ApplicationStatus applicationStatus;
+	private final ProjectManager projectManager;
+	private final UndoableProjectFactory undoableProjectFactory;
+	private final ProjectGUIStates projectGUIStates;
+
+	private final RoboxCommsManager roboxCommsManager;
+
+	private final SelectedSpinnerControl selectedSpinnerControl;
+
+	private final ModelContainerProjectFactory modelContainerProjectFactory;
+	private final ModelLoader modelLoader;
+	private final StageManager stageManager;
+	private final ProjectsPathPreference projectsPathPreference;
+
+	@Inject
+	protected DisplayManager(
+			Injector injector,
+			AdvancedModePreference advancedModePreference,
+			ShowGCodeConsolePreference showGCodeConsolePreference,
+			ModelsPathPreference modelsPathPreference,
+			VersionPreference versionPreference,
+			FirstUsePreference firstUsePreference,
+			I18N i18n,
+			ApplicationStatus applicationStatus,
+			FXMLLoaderFactory fxmlLoaderFactory,
+			TaskExecutor taskExecutor,
+			SelectedPrinter selectedPrinter,
+			SelectedProject selectedProject,
+			ProjectManager projectManager,
+			UndoableProjectFactory undoableProjectFactory,
+			ProjectGUIStates projectGUIStates,
+			RoboxCommsManager roboxCommsManager,
+			SelectedSpinnerControl selectedSpinnerControl,
+			ModelContainerProjectFactory modelContainerProjectFactory,
+			ModelLoader modelLoader,
+			NotificationArea notificationArea,
+			StageManager stageManager,
+			ProjectsPathPreference projectsPathPreference) {
+
+		this.injector = injector;
+		
+		this.advancedModePreference = advancedModePreference;
+		this.showGCodeConsolePreference = showGCodeConsolePreference;
+		this.modelsPathPreference = modelsPathPreference;
+		this.versionPreference = versionPreference;
+		this.firstUsePreference = firstUsePreference;
+
+		this.i18n = i18n;
+
+		this.fxmlLoaderFactory = fxmlLoaderFactory;
+		this.taskExecutor = taskExecutor;
+		this.applicationStatus = applicationStatus;
+		this.selectedPrinter = selectedPrinter;
+		this.selectedProject = selectedProject;
+		this.projectManager = projectManager;
+		this.undoableProjectFactory = undoableProjectFactory;
+		this.projectGUIStates = projectGUIStates;
+		this.roboxCommsManager = roboxCommsManager;
+		this.selectedSpinnerControl = selectedSpinnerControl;
+		this.modelContainerProjectFactory = modelContainerProjectFactory;
+		this.modelLoader = modelLoader;
+		this.notificationArea = notificationArea;
+		this.stageManager = stageManager;
+		this.projectsPathPreference = projectsPathPreference;
 
 		this.rootStackPane = new StackPane();
 		this.nodesMayHaveMoved = new SimpleBooleanProperty(false);
 		this.insetPanelControllers = new HashMap<>();
 		this.insetPanels = new HashMap<>();
-		applicationStatus = ApplicationStatus.getInstance();
-		projectManager = ProjectManager.getInstance();
+
 		this.projectTabPaneHolder = new VBox();
 		AnchorPane.setBottomAnchor(projectTabPaneHolder, 0.0);
 		AnchorPane.setTopAnchor(projectTabPaneHolder, 0.0);
 		AnchorPane.setLeftAnchor(projectTabPaneHolder, 0.0);
 		AnchorPane.setRightAnchor(projectTabPaneHolder, 0.0);
 		this.rhPanel = new AnchorPane();
-		//		 LOGGER.debug("Starting AutoMaker - initialising display manager...");
-		//		 LOGGER.debug("Starting AutoMaker - machine type is " + BaseConfiguration.getMachineType());
+
+		instance = this;
 	}
 
 	// This is here solely so shutdown can be called on it when the application closes.
-	public void setPreviewManager(PreviewManager previewManager) {
+	public void setPreviewManager(PreviewManagerController previewManager) {
 		this.previewManager = previewManager;
 	}
 
 	private void loadProjectsAtStartup() {
 		LOGGER.debug("start load projects");
-		// Load up any projects that were open last time we shut down....
-		ProjectManager pm = ProjectManager.getInstance();
-		List<Project> preloadedProjects = pm.getOpenProjects();
+
+		List<Project> preloadedProjects = projectManager.getOpenProjects();
 
 		for (int projectNumber = preloadedProjects.size() - 1; projectNumber >= 0; projectNumber--) {
 			Project project = preloadedProjects.get(projectNumber);
-			ProjectTab newProjectTab = new ProjectTab(project, tabDisplay.widthProperty(),
-					tabDisplay.heightProperty(), true);
+			ProjectTab newProjectTab = new ProjectTab(project, tabDisplay.widthProperty(), tabDisplay.heightProperty(), true);
 			tabDisplay.getTabs().add(1, newProjectTab);
 		}
+
 		LOGGER.debug("end load projects");
 	}
 
 	public void showAndSelectPrintProfile(RoboxProfile roboxProfile) {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.LIBRARY);
-		Initializable initializable = insetPanelControllers.get(ApplicationMode.LIBRARY);
+		applicationStatus.setMode(ApplicationMode.LIBRARY);
+		Object initializable = insetPanelControllers.get(ApplicationMode.LIBRARY);
 		LibraryMenuPanelController controller = (LibraryMenuPanelController) initializable;
 		controller.showAndSelectPrintProfile(roboxProfile);
 	}
 
 	public void showAndSelectCameraProfile(CameraProfile profile) {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.LIBRARY);
-		Initializable initializable = insetPanelControllers.get(ApplicationMode.LIBRARY);
+		applicationStatus.setMode(ApplicationMode.LIBRARY);
+		Object initializable = insetPanelControllers.get(ApplicationMode.LIBRARY);
 		LibraryMenuPanelController controller = (LibraryMenuPanelController) initializable;
 		controller.showAndSelectCameraProfile(profile);
 	}
@@ -278,16 +373,13 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 			}
 	}
 
+	/**
+	 * TODO: Deprecated. Only left for compatibility for now. Remove
+	 * 
+	 * @return Instance of the display manager created by Guice
+	 */
+	@Deprecated
 	public static DisplayManager getInstance() {
-		if (instance == null) {
-			try {
-				instance = new DisplayManager();
-			}
-			catch (Exception ex) {
-				ex.printStackTrace();
-			}
-		}
-
 		return instance;
 	}
 
@@ -310,31 +402,30 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		spinner.stopSpinning();
 	}
 
+	//TODO: Seems most of this config can be done without a stage.  Why wait until the stage is ready.  Can do this in the init.
 	public void configureDisplayManager(Stage mainStage, String applicationName,
 			String modelsToLoadAtStartup_projectName,
 			List<String> modelsToLoadAtStartup,
 			boolean dontGroupStartupModels) {
-		LOGGER.debug("start configure display manager");
-		DisplayManager.mainStage = mainStage;
-		mainStage.setTitle(applicationName + " - "
-				+ OpenAutomakerEnv.get().getVersion());
-		//		BaseConfiguration.setTitleAndVersion(OpenAutomakerEnv.getI18N().t(
-		//				"application.title")
-		//				+ " - " + BaseConfiguration.getApplicationVersion());
 
-		ResourceBundle resourceBundle = new I18N().getResourceBundle();
+		LOGGER.debug("start configure display manager");
+
+		stageManager.setMainStage(mainStage);
+
+		mainStage.setTitle(applicationName + " - " + versionPreference.getValue().getValue());
 
 		rootAnchorPane = new AnchorPane();
 
 		rootStackPane.getChildren().add(rootAnchorPane);
 
+		// This seems odd
 		spinnerContainer = new Pane();
 		spinnerContainer.setMouseTransparent(true);
 		spinnerContainer.setPickOnBounds(false);
 		spinner = new Spinner();
 		spinner.setVisible(false);
 		spinnerContainer.getChildren().add(spinner);
-		Lookup.setSpinnerControl(this);
+		selectedSpinnerControl.set(this);
 
 		AnchorPane.setBottomAnchor(rootAnchorPane, 0.0);
 		AnchorPane.setLeftAnchor(rootAnchorPane, 0.0);
@@ -362,15 +453,13 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		sidePanelContainer = new StackPane();
 		HBox.setHgrow(sidePanelContainer, Priority.NEVER);
 
-		try {
-			URL fxmlFileName = getClass().getResource(ApplicationConfiguration.fxmlPanelResourcePath + "printerStatusSidePanel.fxml");
-			LOGGER.debug("About to load side panel fxml: " + fxmlFileName);
-			FXMLLoader sidePanelLoader = new FXMLLoader(fxmlFileName, resourceBundle);
-			sidePanel = (VBox) sidePanelLoader.load();
-		}
-		catch (Exception ex) {
-			LOGGER.error("Couldn't load side panel", ex);
-		}
+		//		try {
+		sidePanel = new PrinterSidePanel();
+		//		}
+		//		catch (Exception ex) {
+		//			LOGGER.error("Couldn't load side panel", ex);
+		//		}
+
 		sidePanelContainer.getChildren().add(sidePanel);
 
 		mainHolder.getChildren().add(sidePanelContainer);
@@ -411,23 +500,20 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		AnchorPane.setLeftAnchor(tabDisplay, 0.0);
 		AnchorPane.setRightAnchor(tabDisplay, 0.0);
 
-
 		// The printer status tab will always be visible - the page is static
 		try {
 
-			FXMLLoader printerStatusPageLoader = new FXMLLoader(getClass().getResource(
+			FXMLLoader printerStatusPageLoader = fxmlLoaderFactory.create(getClass().getResource(
 					ApplicationConfiguration.fxmlResourcePath
-							+ "PrinterStatusPage.fxml"),
-					resourceBundle);
+							+ "PrinterStatusPage.fxml"));
 			AnchorPane printerStatusPage = printerStatusPageLoader.load();
 			PrinterStatusPageController printerStatusPageController = printerStatusPageLoader.getController();
 			printerStatusPageController.configure(projectTabPaneHolder);
 
 			printerStatusTab = new Tab();
-			FXMLLoader printerStatusPageLabelLoader = new FXMLLoader(getClass().getResource(
+			FXMLLoader printerStatusPageLabelLoader = fxmlLoaderFactory.create(getClass().getResource(
 					ApplicationConfiguration.fxmlResourcePath
-							+ "infoScreenIndicator.fxml"),
-					resourceBundle);
+							+ "infoScreenIndicator.fxml"));
 			VBox printerStatusLabelGroup = printerStatusPageLabelLoader.load();
 			infoScreenIndicatorController = printerStatusPageLabelLoader.getController();
 			printerStatusTab.setGraphic(printerStatusLabelGroup);
@@ -489,18 +575,23 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		applicationStatus.setMode(ApplicationMode.STATUS);
 
 		try {
-			URL menuStripURL = getClass().getResource(ApplicationConfiguration.fxmlPanelResourcePath
-					+ "LayoutStatusMenuStrip.fxml");
-			FXMLLoader menuStripLoader = new FXMLLoader(menuStripURL, resourceBundle);
-			VBox menuStripControls = (VBox) menuStripLoader.load();
-			menuStripControls.prefWidthProperty().bind(projectTabPaneHolder.widthProperty());
-			projectTabPaneHolder.getChildren().add(menuStripControls);
+			LayoutStatusMenuStrip layoutStatusMenuStrip = new LayoutStatusMenuStrip();
+			layoutStatusMenuStrip.prefWidthProperty().bind(projectTabPaneHolder.widthProperty());
+			projectTabPaneHolder.getChildren().add(layoutStatusMenuStrip);
+
+			//			//TODO:  Make this a componen
+			//			URL menuStripURL = getClass().getResource(ApplicationConfiguration.fxmlPanelResourcePath
+			//					+ "LayoutStatusMenuStrip.fxml");
+			//			FXMLLoader menuStripLoader = fxmlLoaderFactory.create(menuStripURL);
+			//			VBox menuStripControls = (VBox) menuStripLoader.load();
+			//			menuStripControls.prefWidthProperty().bind(projectTabPaneHolder.widthProperty());
+			//			projectTabPaneHolder.getChildren().add(menuStripControls);
 		}
-		catch (IOException ex) {
+		catch (Exception ex) {
 			LOGGER.error("Failed to load menu strip controls", ex);
 		}
 
-		modelLoadDialog = new ProgressDialog(ModelLoader.modelLoaderService);
+		modelLoadDialog = new ProgressDialog(modelLoader.getModelLoaderService());
 
 		scene = new Scene(rootStackPane, ApplicationConfiguration.DEFAULT_WIDTH,
 				ApplicationConfiguration.DEFAULT_HEIGHT);
@@ -548,7 +639,8 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 			}
 		});
 
-		HiddenKey hiddenKeyThing = new HiddenKey();
+		//TODO: Look at this.  It's a bit odd.
+		HiddenKey hiddenKeyThing = new HiddenKey(selectedPrinter);
 		hiddenKeyThing.addCommandSequence(addDummyPrinterCommand);
 		hiddenKeyThing.addCommandWithParameterSequence(dummyCommandPrefix);
 		hiddenKeyThing.addKeyCommandListener(this);
@@ -588,12 +680,13 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		LOGGER.debug("end configure display manager");
 	}
 
+	// TODO: This should be in the file menu
 	private void openProject() {
 		FileChooser projectChooser = new FileChooser();
 		projectChooser.getExtensionFilters().addAll(
 				new FileChooser.ExtensionFilter("Robox Project", "*.robox"));
-		projectChooser.setInitialDirectory(OpenAutomakerEnv.get().getUserPath(PROJECTS).toFile());
-		List<File> files = projectChooser.showOpenMultipleDialog(getMainStage());
+		projectChooser.setInitialDirectory(projectsPathPreference.getValue().toFile());
+		List<File> files = projectChooser.showOpenMultipleDialog(stageManager.getMainStage());
 		if (files != null && !files.isEmpty()) {
 			files.forEach(projectFile -> {
 				loadProject(projectFile);
@@ -602,18 +695,25 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	}
 
 	private void setupPanelsForMode(ApplicationMode mode) {
+
+		URL fxmlFileName = getClass().getResource(mode.getInsetPanelFXMLName());
+		if (fxmlFileName == null)
+			return;
+
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("About to load inset panel fxml: " + fxmlFileName.toString());
+
 		try {
-			URL fxmlFileName = getClass().getResource(mode.getInsetPanelFXMLName());
-			if (fxmlFileName != null) {
-				LOGGER.debug("About to load inset panel fxml: " + fxmlFileName);
-				FXMLLoader insetPanelLoader = new FXMLLoader(fxmlFileName, new I18N().getResourceBundle());
-				insetPanelLoader.setController(mode.getControllerClass().newInstance());
-				Pane insetPanel = (Pane) insetPanelLoader.load();
-				Initializable insetPanelController = insetPanelLoader.getController();
-				insetPanel.setId(mode.name());
-				insetPanels.put(mode, insetPanel);
-				insetPanelControllers.put(mode, insetPanelController);
-			}
+			FXMLLoader insetPanelLoader = fxmlLoaderFactory.create(fxmlFileName);
+
+			//TODO: nope.  These all need a common interface.  Create a factory for mode Controllers
+			insetPanelLoader.setController(injector.getInstance(mode.getControllerClass()));
+
+			Pane insetPanel = (Pane) insetPanelLoader.load();
+			Object insetPanelController = insetPanelLoader.getController();
+			insetPanel.setId(mode.name());
+			insetPanels.put(mode, insetPanel);
+			insetPanelControllers.put(mode, insetPanelController);
 		}
 		catch (Exception ex) {
 			insetPanels.put(mode, null);
@@ -623,11 +723,10 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	}
 
 	private ProjectTab createAndAddNewProjectTab() {
-		ProjectTab projectTab = new ProjectTab(tabDisplay.widthProperty(),
-				tabDisplay.heightProperty());
+		ProjectTab projectTab = new ProjectTab(tabDisplay.widthProperty(), tabDisplay.heightProperty());
 		tabDisplay.getTabs().add(tabDisplay.getTabs().size() - 1, projectTab);
 		tabDisplaySelectionModel.select(projectTab);
-		Lookup.setSelectedProject(null);
+		selectedProject.set(null);
 		return projectTab;
 	}
 
@@ -647,9 +746,9 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		return nRectangle;
 	}
 
-	public static Stage getMainStage() {
-		return mainStage;
-	}
+	//	public Stage getMainStage() {
+	//		return mainStage;
+	//	}
 
 	public ProjectTab getTabForProject(Project project) {
 		ProjectTab pTab = null;
@@ -689,13 +788,13 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		if (applicationStatus.getMode() == ApplicationMode.LAYOUT) {
 			Tab currentTab = tabDisplaySelectionModel.getSelectedItem();
 			if (currentTab instanceof ProjectTab) {
-				Project project = Lookup.getSelectedProjectProperty().get();
-				UndoableProject undoableProject = new UndoableProject(project);
+				Project project = selectedProject.get();
+				UndoableProject undoableProject = undoableProjectFactory.create(project);
 				switch (event.getCode()) {
 					case DELETE:
 					case BACK_SPACE:
-						if (Lookup.getProjectGUIState(project) != null) {
-							if (Lookup.getProjectGUIState(project).getProjectGUIRules().canRemoveOrDuplicateSelection().get()) {
+						if (projectGUIStates.get(project) != null) {
+							if (projectGUIStates.get(project).getProjectGUIRules().canRemoveOrDuplicateSelection().get()) {
 								deleteSelectedModels(project, undoableProject);
 							}
 						}
@@ -728,10 +827,10 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 				}
 			}
 		}
-		else if (applicationStatus.getMode() == ApplicationMode.STATUS && fAdvancedModePreference.get()) {
+		else if (applicationStatus.getMode() == ApplicationMode.STATUS && advancedModePreference.getValue()) {
 			switch (event.getCode()) {
 				case G:
-					fShowGCodeConsolePreference.set(true);
+					showGCodeConsolePreference.setValue(true);
 					break;
 				default:
 					break;
@@ -740,19 +839,19 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	}
 
 	private void selectAllModels(Project project) {
-		ProjectSelection projectSelection = Lookup.getProjectGUIState(project).getProjectSelection();
+		ProjectSelection projectSelection = projectGUIStates.get(project).getProjectSelection();
 		for (ProjectifiableThing modelContainer : project.getTopLevelThings()) {
 			projectSelection.addSelectedItem(modelContainer);
 		}
 	}
 
 	private void deleteSelectedModels(Project project, UndoableProject undoableProject) {
-		Set<ProjectifiableThing> selectedModels = Lookup.getProjectGUIState(project).getProjectSelection().getSelectedModelsSnapshot();
+		Set<ProjectifiableThing> selectedModels = projectGUIStates.get(project).getProjectSelection().getSelectedModelsSnapshot();
 		undoableProject.deleteModels(selectedModels);
 	}
 
 	private void undoCommand(Project project) {
-		CommandStack commandStack = Lookup.getProjectGUIState(project).getCommandStack();
+		CommandStack commandStack = projectGUIStates.get(project).getCommandStack();
 		if (commandStack.getCanUndo().get()) {
 			try {
 				commandStack.undo();
@@ -764,7 +863,7 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 	}
 
 	private void redoCommand(Project project) {
-		CommandStack commandStack = Lookup.getProjectGUIState(project).getCommandStack();
+		CommandStack commandStack = projectGUIStates.get(project).getCommandStack();
 		if (commandStack.getCanRedo().get()) {
 			try {
 				commandStack.redo();
@@ -831,14 +930,14 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		switch (commandSequence) {
 			case addDummyPrinterCommand:
 				//TODO: When is this called?  Seems dummy printers are added all over the shop
-				RoboxCommsManager.getInstance().addVirtualPrinter(false);
+				roboxCommsManager.addVirtualPrinter(false);
 				handled = true;
 				break;
 			case dummyCommandPrefix:
-				Printer currentPrinter = Lookup.getSelectedPrinterProperty().get();
+				Printer currentPrinter = selectedPrinter.get();
 				PrinterIdentity pid = currentPrinter.getPrinterIdentity();
 				if (pid.printeryearOfManufactureProperty().get().equals(
-						DummyPrinterCommandInterface.dummyYear)) {
+						VirtualPrinterCommandInterface.dummyYear)) {
 					currentPrinter.sendRawGCode(
 							capturedParameter.replaceAll("/", " ").trim().toUpperCase(), true);
 					handled = true;
@@ -859,13 +958,9 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		try {
 			Project p = projectManager.getProjectIfOpen(FilenameUtils.getBaseName(projectFile.getName()))
 					.orElseGet(() -> {
-						Project newProject = ProjectManager.loadProject(projectFile.getAbsolutePath());
+						Project newProject = projectManager.loadProject(projectFile.toPath());
 						if (newProject != null) {
-							ProjectTab newProjectTab = new ProjectTab(newProject,
-									tabDisplay.widthProperty(),
-									tabDisplay.heightProperty(),
-									false);
-
+							ProjectTab newProjectTab = new ProjectTab(newProject, tabDisplay.widthProperty(), tabDisplay.heightProperty(), false);
 							tabDisplay.getTabs().add(tabDisplay.getTabs().size() - 1, newProjectTab);
 						}
 						return newProject;
@@ -918,7 +1013,7 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		basePane.setOnDragEntered((DragEvent event) -> {
 			/* the drag-and-drop gesture entered the target */
 			/* show to the user that it is an actual gesture target */
-			if (ApplicationStatus.getInstance().modeProperty().getValue() == ApplicationMode.LAYOUT) {
+			if (applicationStatus.modeProperty().getValue() == ApplicationMode.LAYOUT) {
 				if (event.getGestureSource() != basePane) {
 					Dragboard dragboard = event.getDragboard();
 					if (dragboard.hasFiles()) {
@@ -998,63 +1093,62 @@ public class DisplayManager implements EventHandler<KeyEvent>, KeyCommandListene
 		}
 
 		Runnable loaderRunnable = () -> {
-			Project newProject = new ModelContainerProject();
+			Project newProject = modelContainerProjectFactory.create();
 			newProject.setProjectName(projectName);
 
-			ModelLoader loader = new ModelLoader();
-			loader.loadExternalModels(newProject, listOfFiles, false, null, false);
-			ProjectTab projectTab = new ProjectTab(newProject, tabDisplay.widthProperty(),
-					tabDisplay.heightProperty(), false);
+			modelLoader.loadExternalModels(newProject, listOfFiles, false, null, false);
+
+			ProjectTab projectTab = new ProjectTab(newProject, tabDisplay.widthProperty(), tabDisplay.heightProperty(), false);
+
 			tabDisplay.getTabs().add(tabDisplay.getTabs().size() - 1, projectTab);
 			tabDisplay.getSelectionModel().select(projectTab);
 		};
 
-		if (new FirstUsePreference().get()) {
-			File firstUsePrintFile = OpenAutomakerEnv.get().getApplicationPath(MODELS).resolve("RBX_ROBOT_MM.stl").toFile();
+		if (firstUsePreference.getValue()) {
+			File firstUsePrintFile = modelsPathPreference.getAppValue().resolve("RBX_ROBOT_MM.stl").toFile();
 
-			Project newProject = new ModelContainerProject();
-			newProject.setProjectName(new I18N().t("myFirstPrintTitle"));
+			Project newProject = modelContainerProjectFactory.create();
+			newProject.setProjectName(i18n.t("myFirstPrintTitle"));
 
 			List<File> fileToLoad = new ArrayList<>();
 			fileToLoad.add(firstUsePrintFile);
-			ModelLoader loader = new ModelLoader();
 
 			if (listOfFiles.size() > 0) {
 				ChangeListener<Boolean> firstUseModelLoadListener = new ChangeListener<>() {
 					@Override
 					public void changed(ObservableValue<? extends Boolean> ov, Boolean wasRunning, Boolean isRunning) {
 						if (wasRunning && !isRunning) {
-							BaseLookup.getTaskExecutor().runOnGUIThread(loaderRunnable);
-							loader.modelLoadingProperty().removeListener(this);
+							taskExecutor.runOnGUIThread(loaderRunnable);
+							modelLoader.modelLoadingProperty().removeListener(this);
 						}
 					}
 				};
 
-				loader.modelLoadingProperty().addListener(firstUseModelLoadListener);
+				modelLoader.modelLoadingProperty().addListener(firstUseModelLoadListener);
 			}
-			loader.loadExternalModels(newProject, fileToLoad, false, null, false);
+			modelLoader.loadExternalModels(newProject, fileToLoad, false, null, false);
 
-			ProjectTab projectTab = new ProjectTab(newProject, tabDisplay.widthProperty(),
-					tabDisplay.heightProperty(), false);
+			ProjectTab projectTab = new ProjectTab(newProject, tabDisplay.widthProperty(), tabDisplay.heightProperty(), false);
+
 			tabDisplay.getTabs().add(1, projectTab);
 
-			new FirstUsePreference().set(false);
+			firstUsePreference.setValue(false);
 		}
 		else if (listOfFiles.size() > 0) {
-			BaseLookup.getTaskExecutor().runOnGUIThread(loaderRunnable);
+			taskExecutor.runOnGUIThread(loaderRunnable);
 		}
 	}
 
 	@Override
 	public void modelAddedToProject(Project project) {
-		if (tabDisplay.getSelectionModel().getSelectedItem() instanceof ProjectTab) {
-			((ProjectTab) tabDisplay.getSelectionModel().getSelectedItem()).modelAddedToProject(project);
-		}
 
-		if (Lookup.getSelectedProjectProperty().get() == null
-				|| Lookup.getSelectedProjectProperty().get() != project) {
-			Lookup.setSelectedProject(project);
-		}
+		if (tabDisplay.getSelectionModel().getSelectedItem() instanceof ProjectTab)
+			((ProjectTab) tabDisplay.getSelectionModel().getSelectedItem()).modelAddedToProject(project);
+
+		Project selProj = selectedProject.get();
+		if (selProj == null || selProj != project)
+			selectedProject.set(project);
+
 	}
 
 	public void initialiseBlank3DProject() {

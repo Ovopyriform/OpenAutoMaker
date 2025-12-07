@@ -2,26 +2,34 @@ package celtech;
 
 import java.io.File;
 
+import org.openautomaker.ui.inject.model.ModelContainerFactory;
+
 import celtech.modelcontrol.ModelContainer;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 
-/**
- *
- * @author Ian
- */
+@Singleton
 public class TestUtils {
+
+	private final ModelContainerFactory modelContainerFactory;
+
+	@Inject
+	protected TestUtils(ModelContainerFactory modelContainerFactory) {
+		this.modelContainerFactory = modelContainerFactory;
+	}
 
 	public ModelContainer makeModelContainer(boolean useExtruder0) {
 		MeshView meshView = new MeshView(new Shape3DRectangle(2, 3));
-		ModelContainer modelContainer = new ModelContainer(new File("testModel"), meshView);
+		ModelContainer modelContainer = modelContainerFactory.create(new File("testModel"), meshView);
 		modelContainer.setUseExtruder0(useExtruder0);
 		return modelContainer;
 	}
 
 	public ModelContainer makeModelContainer(boolean useExtruder0, int x, int y) {
 		MeshView meshView = new MeshView(new Shape3DRectangle(x, y));
-		ModelContainer modelContainer = new ModelContainer(new File("testModel"), meshView);
+		ModelContainer modelContainer = modelContainerFactory.create(new File("testModel"), meshView);
 		modelContainer.setUseExtruder0(useExtruder0);
 		return modelContainer;
 	}

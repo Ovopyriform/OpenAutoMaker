@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import celtech.coreUI.components.buttons.GraphicButton?>
+<?import org.openautomaker.ui.component.graphic_button.GraphicButton?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ProgressBar?>

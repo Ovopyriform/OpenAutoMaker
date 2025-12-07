@@ -4,16 +4,10 @@ package celtech.coreUI.components.Notifications;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.fxml.Initializable;
 
-/**
- *
- * @author ian
- */
-public class GenericProgressBar extends AppearingProgressBar implements Initializable {
+public class GenericProgressBar extends AppearingProgressBar {
 
-	private final ChangeListener<Boolean> displayBarChangeListener = (ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) -> {
+	private final ChangeListener<Boolean> displayBarChangeListener = (observable, newValue, oldValue) -> {
 		displayBar(newValue);
 	};
 

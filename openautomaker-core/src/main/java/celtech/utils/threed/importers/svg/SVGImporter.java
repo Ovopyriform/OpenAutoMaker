@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.importers.twod.svg.SVGConverterConfiguration;
 import org.openautomaker.base.importers.twod.svg.metadata.Units;
+import org.openautomaker.ui.inject.importer.ShapeContainerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -29,6 +30,7 @@ import celtech.coreUI.visualisation.metaparts.ModelLoadResult;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResultType;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.services.modelLoader.ModelLoaderTask;
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.SVGPath;
@@ -40,9 +42,17 @@ import javafx.scene.shape.Shape;
  */
 public class SVGImporter {
 
-	private static final Logger LOGGER = LogManager.getLogger(SVGImporter.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private ModelLoaderTask parentTask = null;
 	private DoubleProperty percentProgressProperty = null;
+
+	public final ShapeContainerFactory shapeContainerFactory;
+
+	@Inject
+	protected SVGImporter(ShapeContainerFactory shapeContainerFactory) {
+		this.shapeContainerFactory = shapeContainerFactory;
+	}
 
 	public ModelLoadResult loadFile(ModelLoaderTask parentTask, File modelFile,
 			DoubleProperty percentProgressProperty) {
@@ -190,7 +200,7 @@ public class SVGImporter {
 			LOGGER.error("Failed to process SVG file " + modelFile.getAbsolutePath(), ex);
 		}
 
-		ShapeContainer renderableSVG = new ShapeContainer(modelFile.getName(), shapes);
+		ShapeContainer renderableSVG = shapeContainerFactory.create(modelFile.getName(), shapes);
 
 		//        renderableSVG.setMetaparts(metaparts);
 		Set<ProjectifiableThing> renderableSVGs = new HashSet<>();

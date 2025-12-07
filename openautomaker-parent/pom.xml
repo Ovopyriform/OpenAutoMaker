@@ -16,17 +16,23 @@
 	</organization>
 
 	<modules>
+
+		<module>../openautomaker-guice</module>
+		<module>../openautomaker-test-library</module>
 		<module>../openautomaker-test-environment</module>
-		<module>../openautomaker-i18n</module>
 		<module>../openautomaker-environment</module>
 		<module>../openautomaker</module>
 		<module>../openautomaker-base</module>
 		<module>../openautomaker-core</module>
+		<module>../openautomaker-discovery</module>
+		<module>../openautomaker-javafx</module>
+
 
 		<!-- Separate apps.  Should have separate packaging -->
 		<!--module>../openautomaker-gcodeviewer</module>
 		<module>../openautomaker-root</module>
 		<module>../openautomaker-root-ui</module -->
+		<module>../openautomaker-i18n</module>
 	</modules>
 
 	<properties>
@@ -34,7 +40,7 @@
 		<maven.clean.version>3.2.0</maven.clean.version>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
-		<maven.compiler.version>3.11.0</maven.compiler.version>
+		<maven.compiler.version>3.13.0</maven.compiler.version>
 		<maven.dependency.version>3.6.0</maven.dependency.version>
 		<maven.jar.version>3.3.0</maven.jar.version>
 		<maven.resources.version>3.3.1</maven.resources.version>
@@ -61,12 +67,42 @@
 			</dependency>
 			<dependency>
 				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-guice</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
 				<artifactId>openautomaker-base</artifactId>
 				<version>1.0-SNAPSHOT</version>
 			</dependency>
 			<dependency>
 				<groupId>org.openautomaker</groupId>
 				<artifactId>openautomaker-core</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-environment</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-test-library</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-test-environment</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-javafx</artifactId>
+				<version>1.0-SNAPSHOT</version>
+			</dependency>
+			<dependency>
+				<groupId>org.openautomaker</groupId>
+				<artifactId>openautomaker-i18n</artifactId>
 				<version>1.0-SNAPSHOT</version>
 			</dependency>
 			<dependency>
@@ -89,19 +125,9 @@
 				<scope>import</scope>
 			</dependency>
 			<dependency>
-				<groupId>org.openautomaker</groupId>
-				<artifactId>openautomaker-environment</artifactId>
-				<version>1.0-SNAPSHOT</version>
-			</dependency>
-			<dependency>
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-lang3</artifactId>
 				<version>3.12.0</version>
-			</dependency>
-			<dependency>
-				<groupId>org.openautomaker</groupId>
-				<artifactId>openautomaker-i18n</artifactId>
-				<version>1.0-SNAPSHOT</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.commons</groupId>
@@ -194,11 +220,6 @@
 				<version>${jackson.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.openautomaker</groupId>
-				<artifactId>openautomaker-test-environment</artifactId>
-				<version>1.0-SNAPSHOT</version>
-			</dependency>
-			<dependency>
 				<groupId>io.dropwizard</groupId>
 				<artifactId>dropwizard-bom</artifactId>
 				<version>4.0.0</version>
@@ -225,6 +246,47 @@
 				<artifactId>guiceberry</artifactId>
 				<version>${local.guiceberry.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>com.vdurmont</groupId>
+				<artifactId>semver4j</artifactId>
+				<version>3.1.0</version>
+			</dependency>
+			<dependency>
+				<groupId>com.gluonhq</groupId>
+				<artifactId>ignite-guice</artifactId>
+				<version>1.2.1</version>
+			</dependency>
+			<dependency>
+				<groupId>com.google.inject.extensions</groupId>
+				<artifactId>guice-assistedinject</artifactId>
+				<version>7.0.0</version>
+			</dependency>
+			<dependency>
+				<groupId>jakarta.platform</groupId>
+				<artifactId>jakarta.jakartaee-api</artifactId>
+				<version>10.0.0</version>
+			</dependency>
+			<dependency>
+				<groupId>org.projectlombok</groupId>
+				<artifactId>lombok</artifactId>
+				<version>1.18.38</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>jakarta.annotation</groupId>
+				<artifactId>jakarta.annotation-api</artifactId>
+				<version>3.0.0</version>
+			</dependency>
+			<dependency>
+				<groupId>org.testfx</groupId>
+				<artifactId>testfx-junit5</artifactId>
+				<version>4.0.18</version>
+			</dependency>
+			<dependency>
+				<groupId>org.assertj</groupId>
+				<artifactId>assertj-core</artifactId>
+				<version>3.13.2</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 	<build>
@@ -235,6 +297,22 @@
 				<version>${os-maven.version}</version>
 			</extension>
 		</extensions>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<configuration>
+					<filesets>
+						<fileset>
+							<directory>.</directory>
+							<includes>
+								<include>OpenAutomaker-*.dmg</include>
+							</includes>
+						</fileset>
+					</filesets>
+				</configuration>
+			</plugin>
+		</plugins>
 		<pluginManagement>
 			<plugins>
 				<plugin>
@@ -257,11 +335,11 @@
 					<version>${maven.jar.version}</version>
 				</plugin>
 				<plugin>
-                	<groupId>org.apache.maven.plugins</groupId>
-                	<artifactId>maven-dependency-plugin</artifactId>
-                	<version>${maven.dependency.version}</version>
-                </plugin>
-                <plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-dependency-plugin</artifactId>
+					<version>${maven.dependency.version}</version>
+				</plugin>
+				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-shade-plugin</artifactId>
 					<version>${maven.shade.version}</version>

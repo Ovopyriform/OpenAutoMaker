@@ -1,9 +1,7 @@
 package org.openautomaker.base.configuration.datafileaccessors;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_PROFILES;
-
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,41 +13,53 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSetting;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSettings;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.printer.PrintProfilesPathPreference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.util.Pair;
 
-/**
- *
- * @author George Salter
- */
+@Singleton
 public class PrintProfileSettingsContainer {
+	//TODO: Revisit this class
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
 	private static final String PRINT_PROFILE_SETTINGS_JSON = "print_profile_settings.json";
 
-	private static PrintProfileSettingsContainer instance;
+	//private static PrintProfileSettingsContainer instance;
 
 	private static Map<Slicer, PrintProfileSettings> printProfileSettings;
 	private static Map<Slicer, PrintProfileSettings> defaultPrintProfileSettings;
 
-	private PrintProfileSettingsContainer() {
+	private final PrintProfilesPathPreference printProfilesPathPreference;
+
+	private final I18N i18n;
+
+	@Inject
+	protected PrintProfileSettingsContainer(
+			PrintProfilesPathPreference printProfilesPathPreference,
+			I18N i18n) {
+
+		this.printProfilesPathPreference = printProfilesPathPreference;
+		this.i18n = i18n;
+
 		printProfileSettings = new HashMap<>();
 		defaultPrintProfileSettings = new HashMap<>();
 		loadPrintProfileSettingsFile();
+
+		//instance = this;
 	}
 
-	public static PrintProfileSettingsContainer getInstance() {
-		if (instance == null) {
-			instance = new PrintProfileSettingsContainer();
-		}
-		return instance;
-	}
+	//	@Deprecated
+	//	public static PrintProfileSettingsContainer getInstance() {
+	//		return instance;
+	//	}
 
 	public PrintProfileSettings getPrintProfileSettingsForSlicer(Slicer slicerType) {
 		return printProfileSettings.get(slicerType);
@@ -66,7 +76,7 @@ public class PrintProfileSettingsContainer {
 		List<Pair<PrintProfileSetting, String>> newSettingsList = newSettings.getAllEditableSettingsWithSections();
 
 		originalSettingsList.forEach(settingToSection -> {
-			String sectionTitle = OpenAutomakerEnv.getI18N().t(settingToSection.getValue());
+			String sectionTitle = i18n.t(settingToSection.getValue());
 			PrintProfileSetting originalSetting = settingToSection.getKey();
 
 			// From the new settings find one with the same id and different vaue from the old setting
@@ -84,7 +94,7 @@ public class PrintProfileSettingsContainer {
 					changedValuesMap.get(sectionTitle).add(possibleChangedSetting.get());
 				}
 				else {
-					changedValuesMap.put(sectionTitle, new ArrayList(Arrays.asList(possibleChangedSetting.get())));
+					changedValuesMap.put(sectionTitle, new ArrayList<>(Arrays.asList(possibleChangedSetting.get())));
 				}
 			}
 		});
@@ -92,29 +102,27 @@ public class PrintProfileSettingsContainer {
 		return changedValuesMap;
 	}
 
-	public static void loadPrintProfileSettingsFile() {
+	public void loadPrintProfileSettingsFile() {
 		ObjectMapper objectMapper = new ObjectMapper();
 		objectMapper.registerModule(new Jdk8Module());
 
 		//Loop through enumeration and create all print profile settings.
 		for (Slicer slicerType : Slicer.values()) {
 
-			File profileSettingsFile = OpenAutomakerEnv.get()
-					.getApplicationPath(PRINT_PROFILES)
-					.resolve(slicerType.getPathModifier())
-					.resolve(PRINT_PROFILE_SETTINGS_JSON)
-					.toFile();
+			Path printProfileSettingsPath = printProfilesPathPreference
+					.getAppPathForSlicer(slicerType)
+					.resolve(PRINT_PROFILE_SETTINGS_JSON);
 
 			if (LOGGER.isDebugEnabled())
-				LOGGER.debug("Loading print profile '" + slicerType.getFriendlyName() + "' from [" + profileSettingsFile.toString() + "]");
+				LOGGER.debug("Loading print profile: " + printProfileSettingsPath.toString());
 
 			try {
-				PrintProfileSettings profileSettings = objectMapper.readValue(profileSettingsFile, PrintProfileSettings.class);
+				PrintProfileSettings profileSettings = objectMapper.readValue(printProfileSettingsPath.toFile(), PrintProfileSettings.class);
 				printProfileSettings.put(slicerType, profileSettings);
 				defaultPrintProfileSettings.put(slicerType, profileSettings);
 			}
 			catch (IOException e) {
-				LOGGER.error("Could not load profile for '" + slicerType.getFriendlyName() + "'", e);
+				LOGGER.error("Could not load profile: " + printProfileSettingsPath.toString(), e);
 			}
 		}
 	}

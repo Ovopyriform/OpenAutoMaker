@@ -1,7 +1,5 @@
 package celtech.appManager;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.awt.Dimension;
 import java.awt.geom.Rectangle2D;
 import java.io.BufferedInputStream;
@@ -26,11 +24,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.RoboxProfile;
+import org.openautomaker.base.configuration.datafileaccessors.CameraProfileContainer;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
 import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterDefinitionFile;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
 import org.openautomaker.base.configuration.fileRepresentation.SupportType;
+import org.openautomaker.base.device.CameraManager;
+import org.openautomaker.base.inject.configuration.file_representation.PrinterSettingsOverridesFactory;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Head.HeadType;
 import org.openautomaker.base.printerControl.model.Printer;
@@ -38,14 +39,17 @@ import org.openautomaker.base.utils.RectangularBounds;
 import org.openautomaker.base.utils.Math.packing.core.Bin;
 import org.openautomaker.base.utils.Math.packing.core.BinPacking;
 import org.openautomaker.base.utils.Math.packing.primitives.MArea;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.Slicer;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
+import org.openautomaker.ui.state.SelectedPrinter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
-import celtech.Lookup;
 import celtech.configuration.ApplicationConfiguration;
 import celtech.configuration.fileRepresentation.ModelContainerProjectFile;
 import celtech.configuration.fileRepresentation.ProjectFile;
@@ -57,6 +61,7 @@ import celtech.modelcontrol.ProjectifiableThing;
 import celtech.modelcontrol.RotatableThreeD;
 import celtech.modelcontrol.RotatableTwoD;
 import celtech.utils.threed.MeshUtils;
+import jakarta.inject.Inject;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -64,16 +69,12 @@ import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.TriangleMesh;
 
-/**
- *
- * @author Ian Hudson @ Liberty Systems Limited
- */
+// TODO: Stores the state of the project in *ProjectFile and *ProjectContainer.  Needs to be simplified 
 public class ModelContainerProject extends Project {
 
 	private int version = -1;
@@ -89,13 +90,45 @@ public class ModelContainerProject extends Project {
 	private BooleanProperty modelColourChanged;
 	private BooleanBinding hasInvalidMeshes;
 
-	private FilamentContainer filamentContainer;
+
 
 	//Changed to make this list always include both extruders
 	private ObservableList<Boolean> lastCalculatedUsedExtruders;
 
-	public ModelContainerProject() {
-		super();
+	// Injected params.  Don't persist.
+	private transient final SelectedPrinter selectedPrinter;
+	private transient final FilamentContainer filamentContainer;
+	private transient final ModelGroupFactory modelGroupFactory;
+	private transient final BinPacking binPacking;
+	private transient final SlicerPreference slicerPreference;
+	private transient final PrinterContainer printerContainer;
+
+	@Inject
+	protected ModelContainerProject(
+			ProjectsPathPreference projectsPathPreference,
+			SlicerPreference slicerPreference,
+			I18N i18n,
+			CameraManager cameraManager,
+			GCodeGeneratorManager gCodeGeneratorManager,
+			SelectedPrinter selectedPrinter,
+			FilamentContainer filamentContainer,
+			ModelGroupFactory modelGroupFactory,
+			CameraProfileContainer cameraProfileContainer,
+			BinPacking binPacking,
+			PrinterSettingsOverridesFactory printerSettingsOverridesFactory,
+			PrinterContainer printerContainer) {
+
+		super(projectsPathPreference, slicerPreference, i18n, cameraManager, gCodeGeneratorManager, modelGroupFactory, cameraProfileContainer, printerSettingsOverridesFactory);
+
+		this.selectedPrinter = selectedPrinter;
+		this.filamentContainer = filamentContainer;
+		this.modelGroupFactory = modelGroupFactory;
+		this.binPacking = binPacking;
+		this.slicerPreference = slicerPreference;
+		this.printerContainer = printerContainer;
+
+		//Perhaps jsut move this into the constructor
+		initialise();
 	}
 
 	@Override
@@ -117,7 +150,7 @@ public class ModelContainerProject extends Project {
 		extruder0Filament = new SimpleObjectProperty<>();
 		extruder1Filament = new SimpleObjectProperty<>();
 		modelColourChanged = new SimpleBooleanProperty();
-		filamentContainer = FilamentContainer.getInstance();
+		//filamentContainer = filamentContainer;
 
 		DEFAULT_FILAMENT = filamentContainer.getFilamentByID("RBX-ABS-GR499");
 
@@ -136,74 +169,88 @@ public class ModelContainerProject extends Project {
 		return hasInvalidMeshes;
 	}
 
+	//TODO: State of the project held in two places, the projectFile and the container.  Simplify?
 	@Override
-	protected void load(ProjectFile projectFile, String basePath) throws ProjectLoadException {
+	protected void load(ProjectFile projectFile, Path filePath) throws ProjectLoadException {
+
+		if (!(projectFile instanceof ModelContainerProjectFile))
+			throw new ProjectLoadException("Incorrect file type provided");
+
+		ModelContainerProjectFile mcProjectFile = (ModelContainerProjectFile) projectFile;
+
+		suppressProjectChanged = true;
+
 		try {
-			suppressProjectChanged = true;
+			version = projectFile.getVersion();
 
-			if (projectFile instanceof ModelContainerProjectFile) {
-				ModelContainerProjectFile mcProjectFile = (ModelContainerProjectFile) projectFile;
-				try {
-					version = projectFile.getVersion();
+			projectNameProperty.set(projectFile.getProjectName());
+			lastModifiedDate.set(projectFile.getLastModifiedDate());
+			lastPrintJobID = projectFile.getLastPrintJobID();
+			projectNameModified = projectFile.isProjectNameModified();
 
-					projectNameProperty.set(projectFile.getProjectName());
-					lastModifiedDate.set(projectFile.getLastModifiedDate());
-					lastPrintJobID = projectFile.getLastPrintJobID();
-					projectNameModified = projectFile.isProjectNameModified();
-
-					String filamentID0 = mcProjectFile.getExtruder0FilamentID();
-					String filamentID1 = mcProjectFile.getExtruder1FilamentID();
-					if (!filamentID0.equals("NULL")) {
-						Filament filament0 = filamentContainer.getFilamentByID(filamentID0);
-						if (filament0 != null) {
-							extruder0Filament.set(filament0);
-						}
-					}
-					if (!filamentID1.equals("NULL")) {
-						Filament filament1 = filamentContainer.getFilamentByID(filamentID1);
-						if (filament1 != null) {
-							extruder1Filament.set(filament1);
-						}
-					}
-
-					printerSettings.setSettingsName(mcProjectFile.getSettingsName());
-					printerSettings.setPrintQuality(mcProjectFile.getPrintQuality());
-					printerSettings.setBrimOverride(mcProjectFile.getBrimOverride());
-					printerSettings.setFillDensityOverride(mcProjectFile.getFillDensityOverride());
-					printerSettings.setFillDensityChangedByUser(mcProjectFile.isFillDensityOverridenByUser());
-					printerSettings.setPrintSupportOverride(mcProjectFile.getPrintSupportOverride());
-					printerSettings.setPrintSupportTypeOverride(mcProjectFile.getPrintSupportTypeOverride());
-					printerSettings.setRaftOverride(mcProjectFile.getPrintRaft());
-					printerSettings.setSpiralPrintOverride(mcProjectFile.getSpiralPrint());
-
-					loadTimelapseSettings(mcProjectFile);
-
-					loadModels(basePath);
-
-					recreateGroups(mcProjectFile.getGroupStructure(), mcProjectFile.getGroupState());
-
-				}
-				catch (IOException ex) {
-					LOGGER.error("Failed to load project " + basePath, ex);
-				}
-				catch (ClassNotFoundException ex) {
-					LOGGER.error("Failed to load project " + basePath, ex);
+			String filamentID0 = mcProjectFile.getExtruder0FilamentID();
+			String filamentID1 = mcProjectFile.getExtruder1FilamentID();
+			if (!filamentID0.equals("NULL")) {
+				Filament filament0 = filamentContainer.getFilamentByID(filamentID0);
+				if (filament0 != null) {
+					extruder0Filament.set(filament0);
 				}
 			}
+			if (!filamentID1.equals("NULL")) {
+				Filament filament1 = filamentContainer.getFilamentByID(filamentID1);
+				if (filament1 != null) {
+					extruder1Filament.set(filament1);
+				}
+			}
+
+			printerSettings.setSettingsName(mcProjectFile.getSettingsName());
+			printerSettings.setPrintQuality(mcProjectFile.getPrintQuality());
+			printerSettings.setBrimOverride(mcProjectFile.getBrimOverride());
+			printerSettings.setFillDensityOverride(mcProjectFile.getFillDensityOverride());
+			printerSettings.setFillDensityChangedByUser(mcProjectFile.isFillDensityOverridenByUser());
+			printerSettings.setPrintSupportOverride(mcProjectFile.getPrintSupportOverride());
+			printerSettings.setPrintSupportTypeOverride(mcProjectFile.getPrintSupportTypeOverride());
+			printerSettings.setRaftOverride(mcProjectFile.getPrintRaft());
+			printerSettings.setSpiralPrintOverride(mcProjectFile.getSpiralPrint());
+
+			loadTimelapseSettings(mcProjectFile);
+
+			loadModels(filePath);
+
+			recreateGroups(mcProjectFile.getGroupStructure(), mcProjectFile.getGroupState());
+
+		}
+		catch (IOException ex) {
+			LOGGER.error("Failed to load project " + filePath, ex);
+		}
+		catch (ClassNotFoundException ex) {
+			LOGGER.error("Failed to load project " + filePath, ex);
 		}
 		finally {
 			suppressProjectChanged = false;
 		}
 	}
 
-	private void loadModels(String basePath) throws IOException, ClassNotFoundException {
-		FileInputStream fileInputStream = new FileInputStream(basePath + ApplicationConfiguration.projectModelsFileExtension);
+	private void loadModels(Path filePath) throws IOException, ClassNotFoundException {
+
+		// Legacy in case we've been passed a path without the project file name
+		if (!filePath.toString().endsWith(ApplicationConfiguration.projectFileExtension))
+			filePath = filePath.resolveSibling(filePath.getFileName().toString() + ApplicationConfiguration.projectFileExtension);
+		
+
+		//Change the type of the file to the model type
+		filePath = filePath.resolveSibling(
+				filePath.getFileName().toString()
+						.replace(ApplicationConfiguration.projectFileExtension, ApplicationConfiguration.projectModelsFileExtension));
+
+		FileInputStream fileInputStream = new FileInputStream(filePath.toFile());
 		BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
 		ObjectInputStream modelsInput = new ObjectInputStream(bufferedInputStream);
 		int numModels = modelsInput.readInt();
 
 		for (int i = 0; i < numModels; i++) {
 			ModelContainer modelContainer = (ModelContainer) modelsInput.readObject();
+			GuiceContext.get().injectMembers(modelContainer);
 			Optional<MeshUtils.MeshError> error = MeshUtils.validate((TriangleMesh) modelContainer.getMeshView().getMesh());
 
 			if (error.isPresent()) {
@@ -219,13 +266,14 @@ public class ModelContainerProject extends Project {
 
 	}
 
-	public static void saveProject(ModelContainerProject project) {
-		Path projectPath = OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(project.getProjectName());
+	//TODO: Also odd.  Put in ProjectPersistance?
+	public void saveProject(ModelContainerProject project) {
+		Path projectPath = projectsPathPreference.getValue().resolve(project.getProjectName());
 		project.save(projectPath);
 	}
 
 	public Path getProjectLocation() {
-		return OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(projectNameProperty.get());
+		return projectsPathPreference.getValue().resolve(projectNameProperty.get());
 	}
 
 	private void saveModels(Path path) throws IOException {
@@ -245,22 +293,33 @@ public class ModelContainerProject extends Project {
 	}
 
 	@Override
-	protected void save(Path basePath) {
-		if (topLevelThings.size() == 0)
+	protected void save(Path filePath) {
+		if (topLevelThings.size() == 0) {
+			if (LOGGER.isDebugEnabled())
+				LOGGER.debug("No top level things.  Returning");
+
 			return;
+		}
+
+		//Legacy incase we're not given the project file name
+		if (!filePath.toString().endsWith(ApplicationConfiguration.projectFileExtension))
+			filePath = filePath.resolveSibling(filePath.getFileName().toString() + ApplicationConfiguration.projectFileExtension);
+
+		Path modelsPath = filePath.resolveSibling(filePath.getFileName().toString().replace(ApplicationConfiguration.projectFileExtension, ApplicationConfiguration.projectModelsFileExtension));
+
+		LOGGER.info(filePath.toString());
+		LOGGER.info(modelsPath.toString());
 
 		try {
 			ProjectFile projectFile = new ModelContainerProjectFile();
 			projectFile.populateFromProject(this);
 
-			Path projectFilePath = basePath.resolveSibling(basePath.getFileName() + ApplicationConfiguration.projectFileExtension);
-
-			File file = projectFilePath.toFile();
+			File file = filePath.toFile();
 
 			ObjectMapper mapper = new ObjectMapper();
 			mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
 			mapper.writeValue(file, projectFile);
-			saveModels(basePath.resolveSibling(basePath.getFileName() + ApplicationConfiguration.projectModelsFileExtension));
+			saveModels(modelsPath);
 		}
 		catch (FileNotFoundException ex) {
 			LOGGER.error("Failed to save project state", ex);
@@ -445,7 +504,7 @@ public class ModelContainerProject extends Project {
 		extruder0Filament.set(DEFAULT_FILAMENT);
 		extruder1Filament.set(DEFAULT_FILAMENT);
 
-		Printer printer = Lookup.getSelectedPrinterProperty().get();
+		Printer printer = selectedPrinter.get();
 		if (printer != null) {
 			if (printer.reelsProperty().containsKey(0)) {
 				String filamentID = printer.reelsProperty().get(0).filamentIDProperty().get();
@@ -518,13 +577,11 @@ public class ModelContainerProject extends Project {
 	private Map<ModelContainer, ChangeListener<Number>> modelExtruderNumberListener = new HashMap<>();
 
 	private void addModelListeners(ModelContainer modelContainer) {
+
 		if (!(modelContainer instanceof ModelGroup) && !modelExtruderNumberListener.containsKey(modelContainer)) {
-			ChangeListener<Number> changeListener = new ChangeListener() {
-				@Override
-				public void changed(ObservableValue ov, Object t, Object t1) {
-					fireWhenModelChanged(modelContainer, ASSOCIATE_WITH_EXTRUDER_NUMBER);
-					modelColourChanged.set(!modelColourChanged.get());
-				}
+			ChangeListener<Number> changeListener = (observable, oldValue, newValue) -> {
+				fireWhenModelChanged(modelContainer, ASSOCIATE_WITH_EXTRUDER_NUMBER);
+				modelColourChanged.set(!modelColourChanged.get());
 			};
 
 			modelExtruderNumberListener.put(modelContainer, changeListener);
@@ -716,12 +773,14 @@ public class ModelContainerProject extends Project {
 		double printVolumeWidth = 0;
 		double printVolumeDepth = 0;
 
-		if (Lookup.getSelectedPrinterProperty().get() != null && Lookup.getSelectedPrinterProperty().get().printerConfigurationProperty().get() != null) {
-			printVolumeWidth = Lookup.getSelectedPrinterProperty().get().printerConfigurationProperty().get().getPrintVolumeWidth();
-			printVolumeDepth = Lookup.getSelectedPrinterProperty().get().printerConfigurationProperty().get().getPrintVolumeDepth();
+		Printer selPrinter = selectedPrinter.get();
+
+		if (selPrinter != null && selPrinter.printerConfigurationProperty().get() != null) {
+			printVolumeWidth = selPrinter.printerConfigurationProperty().get().getPrintVolumeWidth();
+			printVolumeDepth = selPrinter.printerConfigurationProperty().get().getPrintVolumeDepth();
 		}
 		else {
-			PrinterDefinitionFile defaultPrinterConfiguration = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+			PrinterDefinitionFile defaultPrinterConfiguration = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 			printVolumeWidth = defaultPrinterConfiguration.getPrintVolumeWidth();
 			printVolumeDepth = defaultPrinterConfiguration.getPrintVolumeDepth();
 		}
@@ -790,7 +849,7 @@ public class ModelContainerProject extends Project {
 			LOGGER.info("Unplaced = " + unplacedParts.length);
 		}
 		else {
-			Bin[] bins = BinPacking.BinPackingStrategy(partsToLayout, binDimension, binDimension);
+			Bin[] bins = binPacking.BinPackingStrategy(partsToLayout, binDimension, binDimension);
 			layoutBin = bins[0];
 		}
 
@@ -940,7 +999,7 @@ public class ModelContainerProject extends Project {
 		}
 
 		if (!usingDifferentExtruders) {
-			if (new SlicerPreference().get() == Slicer.CURA_4) {
+			if (slicerPreference.getValue() == Slicer.CURA_4) {
 				printerSettings.getPrintSupportTypeOverrideProperty().set(SupportType.AS_PROFILE);
 			}
 			else {
@@ -971,7 +1030,7 @@ public class ModelContainerProject extends Project {
 	@Override
 	public ModelGroup createNewGroupAndAddModelListeners(Set<Groupable> modelContainers) {
 		checkNotAlreadyInGroup(modelContainers);
-		ModelGroup modelGroup = new ModelGroup((Set) modelContainers);
+		ModelGroup modelGroup = modelGroupFactory.create((Set) modelContainers);
 		addModelListeners(modelGroup);
 		for (ModelContainer childModelContainer : modelGroup.getDescendentModelContainers()) {
 			addModelListeners(childModelContainer);

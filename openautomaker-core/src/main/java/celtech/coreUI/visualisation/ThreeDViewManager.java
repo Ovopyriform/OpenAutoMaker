@@ -17,9 +17,14 @@ import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterConnection;
 import org.openautomaker.base.utils.TimeUtils;
+import org.openautomaker.ui.inject.importer.OBJImporterFactory;
+import org.openautomaker.ui.inject.undo.UndoableProjectFactory;
+import org.openautomaker.ui.state.ProjectGUIStates;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.CoreTest;
-import celtech.Lookup;
+import com.google.inject.assistedinject.Assisted;
+
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ModelContainerProject;
@@ -28,6 +33,7 @@ import celtech.appManager.TimelapseSettingsData;
 import celtech.appManager.undo.UndoableProject;
 import celtech.configuration.ApplicationConfiguration;
 import celtech.coreUI.LayoutSubmode;
+import celtech.coreUI.ProjectGUIState;
 import celtech.coreUI.StandardColours;
 import celtech.coreUI.visualisation.collision.CollisionManager;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResult;
@@ -37,6 +43,7 @@ import celtech.modelcontrol.ModelGroup;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.modelcontrol.TranslateableTwoD;
 import celtech.utils.threed.importers.obj.ObjImporter;
+import jakarta.inject.Inject;
 import javafx.animation.AnimationTimer;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -82,12 +89,11 @@ import javafx.util.Duration;
  * @author Ian Hudson @ Liberty Systems Limited
  */
 public class ThreeDViewManager implements Project.ProjectChangesListener, ScreenCoordinateConverter {
+	//TODO: Cleanup
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			ThreeDViewManager.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final ObservableList<ProjectifiableThing> loadedModels;
-	private final ApplicationStatus applicationStatus = ApplicationStatus.getInstance();
 
 	private final Group root3D = new Group();
 	private SubScene subScene;
@@ -115,7 +121,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 	/*
 	 * Selection stuff
 	 */
-	private ObjectProperty<DragMode> dragMode = new SimpleObjectProperty(DragMode.IDLE);
+	private ObjectProperty<DragMode> dragMode = new SimpleObjectProperty<>(DragMode.IDLE);
 
 	private final ReadOnlyDoubleProperty widthPropertyToFollow;
 	private final ReadOnlyDoubleProperty heightPropertyToFollow;
@@ -351,7 +357,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 			}
 			// if clicked mc is within a selected group then isolate the objects below the selected
 			// group.e
-			Set<ProjectifiableThing> selectedProjectifiableThings = Lookup.getProjectGUIState(project).getProjectSelection().getSelectedModelsSnapshot();
+			Set<ProjectifiableThing> selectedProjectifiableThings = projectGUIState.getProjectSelection().getSelectedModelsSnapshot();
 			Set<ModelContainer> selectedModelContainers = (Set) selectedProjectifiableThings;
 			Set<MeshView> selectedMeshViews = selectedModelContainers.stream().map(mc -> mc.descendentMeshViews()).reduce(new HashSet<>(), (a, b) -> {
 				a.addAll(b);
@@ -371,9 +377,9 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		Point3D pickedPoint = pickResult.getIntersectedPoint();
 		Node intersectedNode = pickResult.getIntersectedNode();
 
-		boolean shortcut = event.isShortcutDown();
+		//boolean shortcut = event.isShortcutDown();
 
-		ModelGroup ancestorGroup = null;
+		//ModelGroup ancestorGroup = null;
 
 		//Drop out early if we shouldn't use this click
 		//        if (intersectedNode instanceof MeshView)
@@ -601,34 +607,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		}
 	}
 
-	private final EventHandler<MouseEvent> mouseEventHandler = event -> {
-
-		mouseOldX = mousePosX;
-		mouseOldY = mousePosY;
-		mousePosX = event.getSceneX();
-		mousePosY = event.getSceneY();
-
-		if (event.getEventType() == MouseEvent.MOUSE_PRESSED) {
-			if (applicationStatus.getMode() != ApplicationMode.SETTINGS) {
-				if (event.getClickCount() == 2 && event.isPrimaryButtonDown()) {
-					handleMouseDoubleClickedEvent(event);
-				}
-				else if (event.isPrimaryButtonDown()
-						|| event.isSecondaryButtonDown()) {
-					handleMouseSingleClickedEvent(event);
-				}
-			}
-
-		}
-		else if (event.getEventType() == MouseEvent.MOUSE_DRAGGED && dragMode.get() != DragMode.SCALING) {
-			handleMouseDragEvent(event);
-
-		}
-		else if (event.getEventType() == MouseEvent.MOUSE_RELEASED) {
-			setDragMode(DragMode.IDLE);
-			lastDragPosition = null;
-		}
-	};
+	private final EventHandler<MouseEvent> mouseEventHandler;
 
 	private final EventHandler<ScrollEvent> scrollEventHandler = event -> {
 		if (event.getTouchCount() > 0) { // touch pad scroll
@@ -655,25 +634,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		}
 	};
 
-	private final ChangeListener<ApplicationMode> applicationModeListener = (ObservableValue<? extends ApplicationMode> ov, ApplicationMode oldMode, ApplicationMode newMode) -> {
-		if (oldMode != newMode) {
-			switch (newMode) {
-				case SETTINGS:
-					deselectAllModels();
-					transitionCameraToDefaults();
-					//                            startSettingsAnimation();
-					break;
-				default:
-					subScene.addEventHandler(MouseEvent.ANY, mouseEventHandler);
-					subScene.addEventHandler(ZoomEvent.ANY, zoomEventHandler);
-					subScene.addEventHandler(ScrollEvent.ANY, scrollEventHandler);
-					notifyModelsOfCameraViewChange();
-					//                            stopSettingsAnimation();
-					break;
-			}
-			updateModelColours();
-		}
-	};
+	private final ChangeListener<ApplicationMode> applicationModeListener;
 
 	private MapChangeListener<Integer, Filament> effectiveFilamentListener = (MapChangeListener.Change<? extends Integer, ? extends Filament> change) -> {
 		updateModelColours();
@@ -702,7 +663,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		}
 		else {
 			//Default view
-			PrinterDefinitionFile defaultPrinterDefinition = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+			PrinterDefinitionFile defaultPrinterDefinition = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
 			defaultXTranslate = -defaultPrinterDefinition.getPrintVolumeWidth() / 2;
 			defaultYTranslate = defaultPrinterDefinition.getPrintVolumeHeight() - 80;
 		}
@@ -712,17 +673,45 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 
 	}
 
-	public ThreeDViewManager(ModelContainerProject project,
-			ReadOnlyDoubleProperty widthProperty, ReadOnlyDoubleProperty heightProperty) {
-		this.project = project;
-		this.undoableProject = new UndoableProject(project);
+	private final ApplicationStatus applicationStatus;
+	//private final SelectedProject selectedProject;
+	private final SelectedPrinter selectedPrinter;
 
-		currentPrinterConfiguration = PrinterContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+	private final OBJImporterFactory objImporterFactory;
+	private final ProjectGUIState projectGUIState;
+
+	private final PrinterContainer printerContainer;
+
+	@Inject
+	public ThreeDViewManager(
+			ApplicationStatus applicationStatus,
+			UndoableProjectFactory undoableProjectFactory,
+			SelectedProject selectedProject,
+			SelectedPrinter selectedPrinter,
+			ProjectGUIStates projectGUIStates,
+			OBJImporterFactory objImporterFactory,
+			PrinterContainer printerContainer,
+			@Assisted ModelContainerProject project,
+			@Assisted("widthProperty") ReadOnlyDoubleProperty widthProperty,
+			@Assisted("heightProperty") ReadOnlyDoubleProperty heightProperty) {
+
+		this.applicationStatus = applicationStatus;
+		//this.selectedProject = selectedProject;
+		this.selectedPrinter = selectedPrinter;
+		this.objImporterFactory = objImporterFactory;
+		this.printerContainer = printerContainer;
+
+		this.project = project;
+		this.undoableProject = undoableProjectFactory.create(project);
+
+		currentPrinterConfiguration = printerContainer.getPrinterByID(PrinterContainer.defaultPrinterID);
+
+		projectGUIState = projectGUIStates.get(project);
 
 		loadedModels = project.getTopLevelThings();
-		projectSelection = Lookup.getProjectGUIState(project).getProjectSelection();
-		layoutSubmode = Lookup.getProjectGUIState(project).getLayoutSubmodeProperty();
-		inSelectedGroupButNotSelected = Lookup.getProjectGUIState(project).getExcludedFromSelection();
+		projectSelection = projectGUIState.getProjectSelection();
+		layoutSubmode = projectGUIState.getLayoutSubmodeProperty();
+		inSelectedGroupButNotSelected = projectGUIState.getExcludedFromSelection();
 
 		widthPropertyToFollow = widthProperty;
 		heightPropertyToFollow = heightProperty;
@@ -740,6 +729,55 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 				notifyListenersOfCameraViewChange();
 			}
 		});
+
+		mouseEventHandler = event -> {
+
+			mouseOldX = mousePosX;
+			mouseOldY = mousePosY;
+			mousePosX = event.getSceneX();
+			mousePosY = event.getSceneY();
+
+			if (event.getEventType() == MouseEvent.MOUSE_PRESSED) {
+				if (applicationStatus.getMode() != ApplicationMode.SETTINGS) {
+					if (event.getClickCount() == 2 && event.isPrimaryButtonDown()) {
+						handleMouseDoubleClickedEvent(event);
+					}
+					else if (event.isPrimaryButtonDown()
+							|| event.isSecondaryButtonDown()) {
+						handleMouseSingleClickedEvent(event);
+					}
+				}
+
+			}
+			else if (event.getEventType() == MouseEvent.MOUSE_DRAGGED && dragMode.get() != DragMode.SCALING) {
+				handleMouseDragEvent(event);
+
+			}
+			else if (event.getEventType() == MouseEvent.MOUSE_RELEASED) {
+				setDragMode(DragMode.IDLE);
+				lastDragPosition = null;
+			}
+		};
+
+		applicationModeListener = (ObservableValue<? extends ApplicationMode> ov, ApplicationMode oldMode, ApplicationMode newMode) -> {
+			if (oldMode != newMode) {
+				switch (newMode) {
+					case SETTINGS:
+						deselectAllModels();
+						transitionCameraToDefaults();
+						//                            startSettingsAnimation();
+						break;
+					default:
+						subScene.addEventHandler(MouseEvent.ANY, mouseEventHandler);
+						subScene.addEventHandler(ZoomEvent.ANY, zoomEventHandler);
+						subScene.addEventHandler(ScrollEvent.ANY, scrollEventHandler);
+						notifyModelsOfCameraViewChange();
+						//                            stopSettingsAnimation();
+						break;
+				}
+				updateModelColours();
+			}
+		};
 
 		root3D.setId("Root");
 		AnchorPane.setBottomAnchor(root3D, 0.0);
@@ -769,14 +807,14 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 
 		buildBed(false);
 
-		Lookup.getSelectedPrinterProperty().addListener(new ChangeListener<Printer>() {
+		selectedPrinter.addListener(new ChangeListener<Printer>() {
 			@Override
 			public void changed(ObservableValue<? extends Printer> ov, Printer t, Printer t1) {
 				whenCurrentPrinterChanged(t1);
 			}
 		});
 
-		whenCurrentPrinterChanged(Lookup.getSelectedPrinterProperty().get());
+		whenCurrentPrinterChanged(selectedPrinter.get());
 
 		translationDragPlane.setId("DragPlane");
 		translationDragPlane.setOpacity(0.0);
@@ -849,12 +887,11 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		setupFilamentListeners(project);
 		updateModelColours();
 
-		if (Lookup.getSelectedPrinterProperty().get() != null
-				&& Lookup.getSelectedPrinterProperty().get().effectiveFilamentsProperty() != null) {
-			Lookup.getSelectedPrinterProperty().get().effectiveFilamentsProperty().addListener(effectiveFilamentListener);
-		}
+		Printer selPrinter = selectedPrinter.get();
+		if (selPrinter != null && selPrinter.effectiveFilamentsProperty() != null)
+			selPrinter.effectiveFilamentsProperty().addListener(effectiveFilamentListener);
 
-		Lookup.getSelectedPrinterProperty().addListener(
+		selectedPrinter.addListener(
 				(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
 					if (oldValue != null) {
 						oldValue.effectiveFilamentsProperty().removeListener(effectiveFilamentListener);
@@ -907,12 +944,11 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		double peiDrop;
 		bed.getChildren().clear();
 		if (brobox) {
-			bedOuterURL = CoreTest.class
-					.getResource(ApplicationConfiguration.modelResourcePath + "bed_frame_210x300.obj");
-			peiSheetURL = CoreTest.class.getResource(ApplicationConfiguration.modelResourcePath
+			bedOuterURL = getClass().getResource(ApplicationConfiguration.modelResourcePath + "bed_frame_210x300.obj");
+			peiSheetURL = getClass().getResource(ApplicationConfiguration.modelResourcePath
 					+ "bed_glass_210x300.obj");
 			bedClipsURL = null;
-			bedGraphicURL = CoreTest.class.getResource(ApplicationConfiguration.imageResourcePath
+			bedGraphicURL = getClass().getResource(ApplicationConfiguration.imageResourcePath
 					+ "Bed Graphic - RoboxPro.png");
 			bedZOffset = 210;
 			bedYOffset = 0;
@@ -920,13 +956,13 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 			peiDrop = 0.5;
 		}
 		else {
-			bedOuterURL = CoreTest.class
+			bedOuterURL = getClass()
 					.getResource(ApplicationConfiguration.modelResourcePath + "bedBase.obj");
-			peiSheetURL = CoreTest.class.getResource(ApplicationConfiguration.modelResourcePath
+			peiSheetURL = getClass().getResource(ApplicationConfiguration.modelResourcePath
 					+ "pei.obj");
-			bedClipsURL = CoreTest.class.getResource(ApplicationConfiguration.modelResourcePath
+			bedClipsURL = getClass().getResource(ApplicationConfiguration.modelResourcePath
 					+ "clips.obj");
-			bedGraphicURL = CoreTest.class.getResource(ApplicationConfiguration.imageResourcePath
+			bedGraphicURL = getClass().getResource(ApplicationConfiguration.imageResourcePath
 					+ "Bed Graphic - Robox.png");
 			bedZOffset = 150;
 			bedYOffset = 0;
@@ -942,13 +978,13 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		PhongMaterial bedClipsMaterial = new PhongMaterial(Color.web("#f0f0f0"));
 		bedClipsMaterial.setSpecularPower(20f);
 
-		ObjImporter bedOuterImporter = new ObjImporter();
+		ObjImporter bedOuterImporter = objImporterFactory.create();
 		ModelLoadResult bedOuterLoadResult = bedOuterImporter.loadURL(null, bedOuterURL);
 		MeshView outerMeshView = ((ModelContainer) bedOuterLoadResult.getProjectifiableThings().iterator().next()).getMeshView();
 		outerMeshView.setMaterial(bedOuterMaterial);
 		bed.getChildren().addAll(outerMeshView);
 
-		ObjImporter peiSheetImporter = new ObjImporter();
+		ObjImporter peiSheetImporter = objImporterFactory.create();
 		ModelLoadResult peiSheetLoadResult = peiSheetImporter.loadURL(null, peiSheetURL);
 		MeshView peiMeshView = ((ModelContainer) peiSheetLoadResult.getProjectifiableThings().iterator().next()).getMeshView();
 		peiMeshView.setMaterial(peiSheetMaterial);
@@ -956,7 +992,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 		bed.getChildren().addAll(peiMeshView);
 
 		if (bedClipsURL != null) {
-			ObjImporter bedClipsImporter = new ObjImporter();
+			ObjImporter bedClipsImporter = objImporterFactory.create();
 			ModelLoadResult bedClipsLoadResult = bedClipsImporter.loadURL(null, bedClipsURL);
 			MeshView bedClipsMeshView = ((ModelContainer) bedClipsLoadResult.getProjectifiableThings().iterator().next()).getMeshView();
 			bedClipsMeshView.setMaterial(bedClipsMaterial);
@@ -1191,20 +1227,20 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 				}
 			}
 			else {
-				Printer selectedPrinter = Lookup.getSelectedPrinterProperty().get();
+				Printer selPrinter = selectedPrinter.get();
 				Filament filament0 = null;
 				Filament filament1 = null;
 
 				if (selectedPrinter != null) {
-					filament0 = selectedPrinter.effectiveFilamentsProperty().get(0);
-					filament1 = selectedPrinter.effectiveFilamentsProperty().get(1);
+					filament0 = selPrinter.effectiveFilamentsProperty().get(0);
+					filament1 = selPrinter.effectiveFilamentsProperty().get(1);
 				}
 				PhongMaterial materialToUseForExtruder0 = null;
 				PhongMaterial materialToUseForExtruder1 = null;
 
 				if (applicationStatus.getMode() == ApplicationMode.SETTINGS) {
 					if (selectedPrinter != null
-							&& selectedPrinter.headProperty().get() != null) {
+							&& selPrinter.headProperty().get() != null) {
 						if (filament0 != FilamentContainer.UNKNOWN_FILAMENT) {
 							materialToUseForExtruder0 = loaded1Material;
 							Color dispColour = filament0.getDisplayColour();
@@ -1221,10 +1257,10 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 						}
 
 						//Single material heads can only use 1 material
-						if (selectedPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.SINGLE_MATERIAL_HEAD) {
+						if (selPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.SINGLE_MATERIAL_HEAD) {
 							materialToUseForExtruder1 = materialToUseForExtruder0;
 						}
-						else if (selectedPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.DUAL_MATERIAL_HEAD) {
+						else if (selPrinter.headProperty().get().headTypeProperty().get() == Head.HeadType.DUAL_MATERIAL_HEAD) {
 							if (filament1 != FilamentContainer.UNKNOWN_FILAMENT) {
 								materialToUseForExtruder1 = loaded2Material;
 								Color dispColour = filament1.getDisplayColour();
@@ -1239,14 +1275,14 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 								materialToUseForExtruder1 = greyExcludedMaterial;
 							}
 
-							if (!selectedPrinter.extrudersProperty().get(0).isFittedProperty().get() && !selectedPrinter.extrudersProperty().get(1).isFittedProperty().get()) {
+							if (!selPrinter.extrudersProperty().get(0).isFittedProperty().get() && !selPrinter.extrudersProperty().get(1).isFittedProperty().get()) {
 								materialToUseForExtruder0 = greyExcludedMaterial;
 								materialToUseForExtruder1 = greyExcludedMaterial;
 							}
-							else if (!selectedPrinter.extrudersProperty().get(0).isFittedProperty().get()) {
+							else if (!selPrinter.extrudersProperty().get(0).isFittedProperty().get()) {
 								materialToUseForExtruder0 = materialToUseForExtruder1;
 							}
-							else if (!selectedPrinter.extrudersProperty().get(1).isFittedProperty().get()) {
+							else if (!selPrinter.extrudersProperty().get(1).isFittedProperty().get()) {
 								materialToUseForExtruder1 = materialToUseForExtruder0;
 							}
 						}
@@ -1258,7 +1294,7 @@ public class ThreeDViewManager implements Project.ProjectChangesListener, Screen
 				}
 
 				if (selectedPrinter != null &&
-						selectedPrinter.printerConnectionProperty().isEqualTo(PrinterConnection.OFFLINE).get()) {
+						selPrinter.printerConnectionProperty().isEqualTo(PrinterConnection.OFFLINE).get()) {
 					materialToUseForExtruder0 = extruder1Material;
 					materialToUseForExtruder1 = extruder2Material;
 				}

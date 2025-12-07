@@ -3,8 +3,6 @@
  */
 package celtech.appManager;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PROJECTS;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,13 +27,15 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.geometry.euclidean.threed.Vector3D;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.configuration.datafileaccessors.RoboxProfileSettingsContainer;
 import org.openautomaker.base.configuration.fileRepresentation.PrinterSettingsOverrides;
 import org.openautomaker.base.configuration.utils.RoboxProfileUtils;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.inject.service.GCodeGeneratorTaskFactory;
+import org.openautomaker.base.inject.utils.models.PrintableMeshesFactory;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterListChangesAdapter;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
@@ -43,20 +43,23 @@ import org.openautomaker.base.services.camera.CameraTriggerData;
 import org.openautomaker.base.services.gcodegenerator.GCodeGeneratorResult;
 import org.openautomaker.base.services.gcodegenerator.GCodeGeneratorTask;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
+import org.openautomaker.base.task_executor.Cancellable;
+import org.openautomaker.base.task_executor.SimpleCancellable;
+import org.openautomaker.base.task_executor.TaskExecutor;
 import org.openautomaker.base.utils.models.MeshForProcessing;
 import org.openautomaker.base.utils.models.PrintableMeshes;
-import org.openautomaker.base.utils.tasks.Cancellable;
-import org.openautomaker.base.utils.tasks.SimpleCancellable;
 import org.openautomaker.base.utils.threed.CentreCalculations;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.Slicer;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.environment.preference.modeling.ProjectsPathPreference;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.modelcontrol.ModelContainer;
 import celtech.modelcontrol.ProjectifiableThing;
 import celtech.roboxbase.comms.remote.RoboxRemoteCommandInterface;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
@@ -80,14 +83,11 @@ import javafx.geometry.Bounds;
  * @author Tony and George
  */
 public class GCodeGeneratorManager implements ModelContainerProject.ProjectChangesListener {
-	private static final Logger LOGGER = LogManager.getLogger(GCodeGeneratorManager.class.getName());
-
-	private final SlicerPreference fSlicerPreference;
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference;
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final ExecutorService slicingExecutorService;
 	private final ExecutorService printOrSaveExecutorService;
-	private final Project project;
+	private Project project;
 
 	private final BooleanProperty dataChanged = new SimpleBooleanProperty(false);
 	private final DoubleProperty selectedTaskProgress = new SimpleDoubleProperty(-1);
@@ -116,8 +116,8 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 	private List<PrintQualityEnumeration> slicingOrder = Arrays.asList(PrintQualityEnumeration.values());
 	private GCodeGeneratorTask selectedTask;
 
-	private ChangeListener applicationModeChangeListener;
-	private ChangeListener selectedPrinterReactionChangeListener;
+	private ChangeListener<ApplicationMode> applicationModeChangeListener;
+	private ChangeListener<Printer> selectedPrinterReactionChangeListener;
 	private PrinterListChangesListener printerListChangesListener;
 	private MapChangeListener<Integer, Filament> filamentListener;
 
@@ -126,13 +126,70 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 
 	private ReentrantLock taskMapLock = new ReentrantLock();
 
+	//	public GCodeGeneratorManager(Project project) {
+	//		fSlicerPreference = new SlicerPreference();
+	//		fSafetyFeaturesPreference = new SafetyFeaturesPreference();
+	//
+	//		this.project = project;
+	//		ThreadFactory threadFactory = (Runnable runnable) -> {
+	//			Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+	//			thread.setDaemon(true);
+	//			return thread;
+	//		};
+	//		// Could run multiple slicers, but probably safer to run them one at a time.
+	//		//int nThreads = Runtime.getRuntime().availableProcessors() - 1;
+	//		//if (nThreads < 1)
+	//		//    nThreads = 1;
+	//		int nThreads = 1;
+	//		slicingExecutorService = Executors.newFixedThreadPool(nThreads, threadFactory);
+	//		printOrSaveExecutorService = Executors.newSingleThreadExecutor();
+	//		currentPrinter = Lookup.getSelectedPrinterProperty().get();
+	//
+	//		initialiseListeners();
+	//	}
+
+	private final SlicerPreference fSlicerPreference;
+	private final SafetyFeaturesPreference fSafetyFeaturesPreference;
+	private final TaskExecutor taskExecutor;
+	private final SelectedPrinter selectedPrinter;
+	private final SelectedProject selectedProject;
+	private final ApplicationStatus applicationStatus;
+	private final RoboxProfileSettingsContainer roboxProfileSettingsContainer;
+	private final PrinterManager printerManager;
+	private final GCodeGeneratorTaskFactory gCodeGeneratorTaskFactory;
+	private final ProjectsPathPreference projectsPathPreference;
+
+	private final PrintableMeshesFactory printableMeshesFactory;
+
+	@Inject
+	public GCodeGeneratorManager(
+			SlicerPreference slicerPreference,
+			SafetyFeaturesPreference safetyFeaturesPreference,
+			TaskExecutor taskExecutor,
+			SelectedPrinter selectedPrinter,
+			SelectedProject selectedProject,
+			ApplicationStatus applicationStatus,
+			RoboxProfileSettingsContainer roboxProfileSettingsContainer,
+			PrinterManager printerManager,
+			GCodeGeneratorTaskFactory gCodeGeneratorTaskFactory,
+			ProjectsPathPreference projectsPathPreference,
+			PrintableMeshesFactory printableMeshesFactory) {
+
+		this.fSlicerPreference = slicerPreference;
+		this.fSafetyFeaturesPreference = safetyFeaturesPreference;
+		this.taskExecutor = taskExecutor;
+		this.selectedPrinter = selectedPrinter;
+		this.selectedProject = selectedProject;
+		this.applicationStatus = applicationStatus;
+		this.roboxProfileSettingsContainer = roboxProfileSettingsContainer;
+		this.printerManager = printerManager;
+		this.gCodeGeneratorTaskFactory = gCodeGeneratorTaskFactory;
+		this.projectsPathPreference = projectsPathPreference;
+		this.printableMeshesFactory = printableMeshesFactory;
+
+		this.currentPrinter = selectedPrinter.get();
 
 
-	public GCodeGeneratorManager(Project project) {
-		fSlicerPreference = new SlicerPreference();
-		fSafetyFeaturesPreference = new SafetyFeaturesPreference();
-
-		this.project = project;
 		ThreadFactory threadFactory = (Runnable runnable) -> {
 			Thread thread = Executors.defaultThreadFactory().newThread(runnable);
 			thread.setDaemon(true);
@@ -145,8 +202,10 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 		int nThreads = 1;
 		slicingExecutorService = Executors.newFixedThreadPool(nThreads, threadFactory);
 		printOrSaveExecutorService = Executors.newSingleThreadExecutor();
-		currentPrinter = Lookup.getSelectedPrinterProperty().get();
+	}
 
+	public void setProject(Project project) {
+		this.project = project;
 		initialiseListeners();
 	}
 
@@ -186,7 +245,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 					currentPrinter.effectiveFilamentsProperty().removeListener(filamentListener);
 				}
 				purgeAllTasks();
-				currentPrinter = (Printer) newValue;
+				currentPrinter = newValue;
 				if (currentPrinter != null) {
 					currentPrinter.effectiveFilamentsProperty().addListener(filamentListener);
 				}
@@ -252,17 +311,17 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 			}
 		});
 
-		ApplicationStatus.getInstance().modeProperty().addListener(applicationModeChangeListener);
-		Lookup.getSelectedPrinterProperty().addListener(selectedPrinterReactionChangeListener);
-		BaseLookup.getPrinterListChangesNotifier().addListener(printerListChangesListener);
-		RoboxProfileSettingsContainer.getInstance().addProfileChangeListener(roboxProfileChangeListener);
+		applicationStatus.modeProperty().addListener(applicationModeChangeListener);
+		selectedPrinter.addListener(selectedPrinterReactionChangeListener);
+		printerManager.getPrinterChangeNotifier().addListener(printerListChangesListener);
+		roboxProfileSettingsContainer.addProfileChangeListener(roboxProfileChangeListener);
 	}
 
 	public Optional<GCodeGeneratorResult> getPrepResult(PrintQualityEnumeration quality) {
 		Future<GCodeGeneratorResult> resultFuture = null;
 
 		// This is effectively locked if we are in the middle of restarting the tasks.
-		// It makes sure the map has had a chance to be refilled by the newely restarted tasks.
+		// It makes sure the map has had a chance to be refilled by the newly restarted tasks.
 		taskMapLock.lock();
 		try {
 			resultFuture = taskMap.get(quality);
@@ -334,7 +393,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 			slicingOrder.forEach(printQuality -> {
 				if (modelIsSuitable(printQuality)) {
 					String headType = HeadContainer.defaultHeadID;
-					Slicer slicerType = fSlicerPreference.get();
+					Slicer slicerType = fSlicerPreference.getValue();
 
 					if (currentPrinter != null && currentPrinter.headProperty().get() != null) {
 						headType = currentPrinter.headProperty().get().typeCodeProperty().get();
@@ -344,7 +403,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 					printerSettingsOverrides.setPrintQuality(printQuality);
 					RoboxProfile profileSettings = printerSettingsOverrides.getSettings(headType, slicerType);
 					if (profileSettings != null) {
-						GCodeGeneratorTask prepTask = new GCodeGeneratorTask();
+						GCodeGeneratorTask prepTask = gCodeGeneratorTaskFactory.create();
 						Supplier<PrintableMeshes> meshSupplier = () -> {
 							List<MeshForProcessing> meshesForProcessing = new ArrayList<>();
 							List<Integer> extruderForModel = new ArrayList<>();
@@ -391,7 +450,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 									cameraTriggerData = ctd.get();
 							}
 
-							return new PrintableMeshes(
+							return printableMeshesFactory.create(
 									meshesForProcessing,
 									project.getUsedExtruders(currentPrinter),
 									extruderForModel,
@@ -402,7 +461,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 									printQuality,
 									slicerType,
 									centreOfPrintedObject,
-									fSafetyFeaturesPreference.get(),
+									fSafetyFeaturesPreference.getValue(),
 									cameraTriggerData != null,
 									cameraTriggerData);
 						};
@@ -415,7 +474,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 						slicingExecutorService.execute(prepTask);
 						if (!selectedTaskReBound) {
 							selectedTaskReBound = true;
-							BaseLookup.getTaskExecutor().runOnGUIThread(() -> {
+							taskExecutor.runOnGUIThread(() -> {
 								bindToSelectedTask(printQuality);
 							});
 						}
@@ -430,7 +489,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 	}
 
 	public Path getGCodeDirectory(PrintQualityEnumeration printQuality) {
-		Path gcodePath = OpenAutomakerEnv.get().getUserPath(PROJECTS).resolve(project.getProjectName()).resolve(printQuality.getFriendlyName());
+		Path gcodePath = projectsPathPreference.getValue().resolve(project.getProjectName()).resolve(printQuality.getFriendlyName());
 
 		File dirHandle = gcodePath.toFile();
 		if (!dirHandle.exists())
@@ -451,7 +510,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 
 	private void reactToChange(boolean globalChange) {
 		if ((!suppressReaction && isCurrentProjectSelected()) || globalChange) {
-			if (ApplicationStatus.getInstance().modeProperty().get() == ApplicationMode.SETTINGS) {
+			if (applicationStatus.modeProperty().get() == ApplicationMode.SETTINGS) {
 				restartAllTasks();
 				projectNeedsSlicing = false;
 			}
@@ -473,7 +532,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 				if (currentPrinter != null && currentPrinter.headProperty().get() != null) {
 					headType = currentPrinter.headProperty().get().typeCodeProperty().get();
 				}
-				slicerParameters = project.getPrinterSettings().getSettings(headType, fSlicerPreference.get(), printQuality);
+				slicerParameters = project.getPrinterSettings().getSettings(headType, fSlicerPreference.getValue(), printQuality);
 			}
 			if (slicerParameters != null) {
 				// NOTE - this needs to change if raft settings in slicermapping.dat is changed
@@ -483,7 +542,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 					zReduction = currentPrinter.headProperty().get().getZReductionProperty().get();
 				}
 
-				double raftOffset = RoboxProfileUtils.calculateRaftOffset(slicerParameters, fSlicerPreference.get());
+				double raftOffset = RoboxProfileUtils.calculateRaftOffset(slicerParameters, fSlicerPreference.getValue());
 
 				for (ProjectifiableThing projectifiableThing : project.getTopLevelThings()) {
 					if (projectifiableThing instanceof ModelContainer) {
@@ -507,7 +566,7 @@ public class GCodeGeneratorManager implements ModelContainerProject.ProjectChang
 	}
 
 	private boolean isCurrentProjectSelected() {
-		return Lookup.getSelectedProjectProperty().get() == project;
+		return selectedProject.get() == project;
 	}
 
 	public void changeSlicingOrder(List<PrintQualityEnumeration> slicingOrder) {

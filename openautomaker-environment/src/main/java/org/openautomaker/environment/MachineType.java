@@ -2,10 +2,11 @@ package org.openautomaker.environment;
 
 /**
  *
+ * TODO: This should be removed. It's not needed in code.
+ *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public enum MachineType
-{
+public enum MachineType {
 	//os.arch: x86_64 || aarch64
 	//os.name: Mac OS X
 	//
@@ -15,20 +16,19 @@ public enum MachineType
 
 	//Windows 
 
-    /**
-     *
-     */
+	/**
+	 *
+	 */
 	WINDOWS("^Windows.*"),
 
-
-    /**
+	/**
 	 * 
 	 */
 	LINUX("^Linux.*"),
 
-    /**
-     *
-     */
+	/**
+	 *
+	 */
 	MAC("^Mac.*");
 
 	String regex;

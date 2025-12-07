@@ -92,7 +92,7 @@ public class HeadFile {
 
 	@JsonIgnore
 	public Optional<Integer> getNozzleNumberForExtruderNumber(int extruderNumber) {
-		Optional returnVal = Optional.empty();
+		Optional<Integer> returnVal = Optional.empty();
 
 		for (int nozzleIndex = 0; nozzleIndex < nozzles.size(); nozzleIndex++) {
 			if (nozzles.get(nozzleIndex).getAssociatedExtruder().equalsIgnoreCase(Extruder.getExtruderLetterForNumber(extruderNumber))) {

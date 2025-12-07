@@ -1,7 +1,5 @@
 package celtech.services.modelLoader;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.TEMP;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,13 +11,20 @@ import java.util.zip.ZipFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.FileUtilities;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.root.TempPathPreference;
+import org.openautomaker.ui.inject.importer.OBJImporterFactory;
+import org.openautomaker.ui.inject.importer.STLImporterFactory;
+import org.openautomaker.ui.inject.importer.SVGImporterFactory;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.coreUI.visualisation.metaparts.ModelLoadResult;
 import celtech.coreUI.visualisation.metaparts.ModelLoadResultType;
 import celtech.utils.threed.importers.obj.ObjImporter;
 import celtech.utils.threed.importers.stl.STLImporter;
 import celtech.utils.threed.importers.svg.SVGImporter;
+import jakarta.inject.Inject;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
@@ -37,7 +42,27 @@ public class ModelLoaderTask extends Task<ModelLoadResults> {
 	private final List<File> modelFilesToLoad;
 	private final DoubleProperty percentProgress = new SimpleDoubleProperty();
 
-	public ModelLoaderTask(List<File> modelFilesToLoad) {
+	private final OBJImporterFactory objImporterFactory;
+	private final STLImporterFactory stlImporterFactory;
+	private final SVGImporterFactory svgImporterFactory;
+	private final TempPathPreference tempPathPreference;
+	private final I18N i18n;
+
+	@Inject
+	protected ModelLoaderTask(
+			OBJImporterFactory objImporterFactory,
+			STLImporterFactory stlImporterFactory,
+			SVGImporterFactory svgImporterFactory,
+			TempPathPreference tempPathPreference,
+			I18N i18n,
+			@Assisted List<File> modelFilesToLoad) {
+
+		this.objImporterFactory = objImporterFactory;
+		this.stlImporterFactory = stlImporterFactory;
+		this.svgImporterFactory = svgImporterFactory;
+		this.tempPathPreference = tempPathPreference;
+		this.i18n = i18n;
+
 		this.modelFilesToLoad = modelFilesToLoad;
 
 		percentProgress.addListener(new ChangeListener<Number>() {
@@ -52,13 +77,13 @@ public class ModelLoaderTask extends Task<ModelLoadResults> {
 	protected ModelLoadResults call() throws Exception {
 		List<ModelLoadResult> modelLoadResultList = new ArrayList<>();
 
-		updateTitle(OpenAutomakerEnv.getI18N().t("dialogs.loadModelTitle"));
+		updateTitle(i18n.t("dialogs.loadModelTitle"));
 
 		for (File modelFileToLoad : modelFilesToLoad) {
 			LOGGER.info("Model file load started:" + modelFileToLoad.getName());
 
 			String modelFilePath = modelFileToLoad.getAbsolutePath();
-			updateMessage(OpenAutomakerEnv.getI18N().t("dialogs.gcodeLoadMessagePrefix")
+			updateMessage(i18n.t("dialogs.gcodeLoadMessagePrefix")
 					+ modelFileToLoad.getName());
 			updateProgress(0, 100);
 
@@ -72,7 +97,7 @@ public class ModelLoaderTask extends Task<ModelLoadResults> {
 					final Enumeration<? extends ZipEntry> entries = zipFile.entries();
 					while (entries.hasMoreElements()) {
 						final ZipEntry entry = entries.nextElement();
-						final String tempTargetname = OpenAutomakerEnv.get().getUserPath(TEMP) + entry.getName();
+						final String tempTargetname = tempPathPreference.getValue() + entry.getName();
 						FileUtilities.writeStreamToFile(zipFile.getInputStream(entry), tempTargetname);
 						fileNamesToLoad.add(tempTargetname);
 					}
@@ -110,16 +135,16 @@ public class ModelLoaderTask extends Task<ModelLoadResults> {
 		ModelLoadResult modelLoadResult = null;
 
 		if (modelFileToLoad.toUpperCase().endsWith("OBJ")) {
-			ObjImporter reader = new ObjImporter();
+			ObjImporter reader = objImporterFactory.create();
 			modelLoadResult = reader.loadFile(this, modelFileToLoad, percentProgress, false);
 		}
 		else if (modelFileToLoad.toUpperCase().endsWith("STL")) {
-			STLImporter reader = new STLImporter();
+			STLImporter reader = stlImporterFactory.create();
 			modelLoadResult = reader.loadFile(this, new File(modelFileToLoad),
 					percentProgress);
 		}
 		else if (modelFileToLoad.toUpperCase().endsWith("SVG")) {
-			SVGImporter reader = new SVGImporter();
+			SVGImporter reader = svgImporterFactory.create();
 			modelLoadResult = reader.loadFile(this, new File(modelFileToLoad),
 					percentProgress);
 		}

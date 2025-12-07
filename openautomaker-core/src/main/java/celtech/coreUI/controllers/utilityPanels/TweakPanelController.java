@@ -1,11 +1,8 @@
 package celtech.coreUI.controllers.utilityPanels;
 
-import java.net.URL;
-import java.util.ResourceBundle;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
+import org.openautomaker.base.device.PrinterManager;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.PrintJob;
 import org.openautomaker.base.printerControl.PrintQueueStatus;
@@ -15,14 +12,14 @@ import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
 import org.openautomaker.base.printerControl.model.Reel;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.coreUI.controllers.StatusInsetController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.layout.VBox;
@@ -32,9 +29,24 @@ import javafx.scene.layout.VBox;
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class TweakPanelController implements Initializable, StatusInsetController, PrinterListChangesListener {
+public class TweakPanelController implements StatusInsetController, PrinterListChangesListener {
 
-	private static final Logger LOGGER = LogManager.getLogger(TweakPanelController.class.getName());
+	private final SelectedPrinter selectedPrinter;
+	private final PrinterManager printerManager;
+	private final I18N i18n;
+
+	@Inject
+	public TweakPanelController(
+			I18N i18n,
+			SelectedPrinter selectedPrinter,
+			PrinterManager printerManager) {
+
+		this.i18n = i18n;
+		this.selectedPrinter = selectedPrinter;
+		this.printerManager = printerManager;
+	}
+
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	@FXML
 	private VBox container;
@@ -278,10 +290,9 @@ public class TweakPanelController implements Initializable, StatusInsetControlle
 	/**
 	 * Initialises the controller class.
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
+	public void initialize() {
 		container.setVisible(false);
-		Lookup.getSelectedPrinterProperty().addListener(
+		selectedPrinter.addListener(
 				(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newPrinter) -> {
 					bindToPrintEngineStatus(newPrinter);
 
@@ -293,10 +304,10 @@ public class TweakPanelController implements Initializable, StatusInsetControlle
 					}
 				});
 
-		BaseLookup.getPrinterListChangesNotifier().addListener(this);
+		printerManager.getPrinterChangeNotifier().addListener(this);
 
-		if (Lookup.getSelectedPrinterProperty().get() != null) {
-			bindToPrintEngineStatus(Lookup.getSelectedPrinterProperty().get());
+		if (selectedPrinter.get() != null) {
+			bindToPrintEngineStatus(selectedPrinter.get());
 		}
 	}
 
@@ -312,7 +323,7 @@ public class TweakPanelController implements Initializable, StatusInsetControlle
 			if (printer.getPrintEngine().printQueueStatusProperty().get() == PrintQueueStatus.PRINTING) {
 				bind();
 			}
-			BaseLookup.getPrinterListChangesNotifier().addListener(this);
+			printerManager.getPrinterChangeNotifier().addListener(this);
 
 		}
 	}
@@ -514,7 +525,7 @@ public class TweakPanelController implements Initializable, StatusInsetControlle
 				currentPrinter.headProperty().get().getNozzleHeaters().get(0).heaterModeProperty().addListener(heaterModeListener);
 				currentPrinter.headProperty().get().getNozzleHeaters().get(0).lastFilamentTemperatureProperty().addListener(lastFilamentTempChangeListener);
 			}
-			material1Text.setText(OpenAutomakerEnv.getI18N().t("printAdjustments.nozzleTemperature"));
+			material1Text.setText(i18n.t("printAdjustments.nozzleTemperature"));
 		}
 	}
 

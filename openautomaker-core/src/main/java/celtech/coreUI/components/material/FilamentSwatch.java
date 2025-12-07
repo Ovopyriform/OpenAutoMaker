@@ -3,7 +3,10 @@ package celtech.coreUI.components.material;
 import java.io.IOException;
 
 import org.openautomaker.base.configuration.Filament;
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
 
+import jakarta.inject.Inject;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Tooltip;
@@ -24,17 +27,21 @@ public class FilamentSwatch extends StackPane {
 	private FilamentSelectionListener filamentSelectionListener;
 	private Filament currentFilament = null;
 
+	@Inject
+	FXMLLoaderFactory fxmlLoaderFactory;
+
 	public FilamentSwatch() {
+		GuiceContext.get().injectMembers(this);
 		initialise(null, null);
 	}
 
 	public FilamentSwatch(FilamentSelectionListener filamentSelectionListenerInput, Filament filament) {
+		GuiceContext.get().injectMembers(this);
 		initialise(filamentSelectionListenerInput, filament);
 	}
 
 	private void initialise(FilamentSelectionListener filamentSelectionListenerInput, Filament filament) {
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/material/filamentSwatch.fxml"));
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/components/material/filamentSwatch.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

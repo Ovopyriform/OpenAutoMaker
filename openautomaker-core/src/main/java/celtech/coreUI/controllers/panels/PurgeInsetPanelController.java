@@ -1,18 +1,17 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.ResourceBundle;
 
 import javax.print.PrintException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
-import org.openautomaker.base.appManager.NotificationType;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
+import org.openautomaker.base.device.PrinterManager;
+import org.openautomaker.base.notification_manager.NotificationType;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.printerControl.PrinterStatus;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
@@ -25,15 +24,17 @@ import org.openautomaker.base.printerControl.model.statetransitions.StateTransit
 import org.openautomaker.base.printerControl.model.statetransitions.purge.PurgeState;
 import org.openautomaker.base.printerControl.model.statetransitions.purge.PurgeStateTransitionManager;
 import org.openautomaker.base.utils.PrinterUtils;
-import org.openautomaker.environment.preference.SafetyFeaturesPreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.environment.preference.slicer.SafetyFeaturesPreference;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.component.graphic_button.GraphicButtonWithLabel;
 
 import celtech.appManager.ApplicationMode;
 import celtech.appManager.ApplicationStatus;
 import celtech.appManager.ModelContainerProject;
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.components.Notifications.ConditionalNotificationBar;
-import celtech.coreUI.components.buttons.GraphicButtonWithLabel;
+import jakarta.inject.Inject;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -42,7 +43,6 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.MapChangeListener;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.Group;
 import javafx.scene.control.CheckBox;
 import javafx.scene.layout.GridPane;
@@ -51,15 +51,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 
-/**
- *
- * @author Ian
- */
-public class PurgeInsetPanelController implements Initializable {
+public class PurgeInsetPanelController {
 
 	private static final Logger LOGGER = LogManager.getLogger();
-
-	private final SafetyFeaturesPreference fSafetyFeaturesPreference = new SafetyFeaturesPreference();
 
 	private ModelContainerProject project = null;
 	private Printer printer = null;
@@ -157,6 +151,27 @@ public class PurgeInsetPanelController implements Initializable {
 
 	private boolean backToStatusInhibitWhenAtTop = false;
 
+	private final PrinterManager printerManager;
+	private final SafetyFeaturesPreference safetyFeaturesPreference;
+	private final SystemNotificationManager systemNotificationManager;
+	private final PrinterUtils printerUtils;
+	private final I18N i18n;
+
+	@Inject
+	protected PurgeInsetPanelController(
+			I18N i18n,
+			PrinterManager printerManager,
+			SafetyFeaturesPreference safetyFeaturesPreference,
+			SystemNotificationManager systemNotificationManager,
+			PrinterUtils printerUtils) {
+
+		this.i18n = i18n;
+		this.printerManager = printerManager;
+		this.safetyFeaturesPreference = safetyFeaturesPreference;
+		this.systemNotificationManager = systemNotificationManager;
+		this.printerUtils = printerUtils;
+	}
+
 	@FXML
 	void start(ActionEvent event) {
 		transitionManager.followTransition(GUIName.START);
@@ -185,13 +200,13 @@ public class PurgeInsetPanelController implements Initializable {
 	@FXML
 	void closeWindow(ActionEvent event) {
 
-		ApplicationStatus.getInstance().returnToLastMode();
+		applicationStatus.returnToLastMode();
 
 		if (project != null) {
-			BaseLookup.getSystemNotificationHandler().askUserToClearBed();
+			systemNotificationManager.askUserToClearBed();
 
 			// Need to go to settings page for this project
-			ApplicationStatus.getInstance().setMode(ApplicationMode.SETTINGS);
+			applicationStatus.setMode(ApplicationMode.SETTINGS);
 			project = null;
 		}
 	}
@@ -228,11 +243,8 @@ public class PurgeInsetPanelController implements Initializable {
 		}
 	};
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	public void initialize() {
 		populateNamesToButtons();
-
-		applicationStatus = ApplicationStatus.getInstance();
 
 		cantPurgeDoorIsOpenNotificationBar = new ConditionalNotificationBar("dialogs.cantPurgeDoorIsOpenMessage", NotificationType.CAUTION);
 		cantPrintNoFilamentNotificationBar = new ConditionalNotificationBar("dialogs.cantPrintNoFilamentMessage", NotificationType.CAUTION);
@@ -244,7 +256,7 @@ public class PurgeInsetPanelController implements Initializable {
 
 		FXMLUtilities.addColonsToLabels(purgeDetailsGrid);
 
-		BaseLookup.getPrinterListChangesNotifier().addListener(new PrinterListChangesAdapter() {
+		printerManager.getPrinterChangeNotifier().addListener(new PrinterListChangesAdapter() {
 
 			@Override
 			public void whenReelAdded(Printer printer, int reelIndex) {
@@ -375,7 +387,7 @@ public class PurgeInsetPanelController implements Initializable {
 		showAppropriateButtons(state);
 		resettingPrinter.setVisible(false);
 		purgeStatus.setVisible(true);
-		purgeStatus.setText(state.getStepTitle());
+		purgeStatus.setText(i18n.t(state.getKey()));
 		purgeTemperature0.valueChangedProperty().removeListener(purgeTempEntryListener0);
 		if (purgeTwoNozzleHeaters.get()) {
 			purgeTemperature1.valueChangedProperty().removeListener(purgeTempEntryListener1);
@@ -510,7 +522,7 @@ public class PurgeInsetPanelController implements Initializable {
 
 	private void installTagAndDisabledStatusForButton(PurgeStateTransitionManager transitionManager,
 			Printer printer, GraphicButtonWithLabel button) {
-		BooleanBinding doorIsOpen = printer.getPrinterAncillarySystems().doorOpenProperty().and(FXProperty.bind(fSafetyFeaturesPreference));
+		BooleanBinding doorIsOpen = printer.getPrinterAncillarySystems().doorOpenProperty().and(FXProperty.bind(safetyFeaturesPreference));
 
 		BooleanBinding extruder0NotLoaded = printer.extrudersProperty().get(0).filamentLoadedProperty().not();
 
@@ -559,24 +571,49 @@ public class PurgeInsetPanelController implements Initializable {
 					}
 				};
 
-				cantPrintNoFilament0NotificationBar.setAppearanceCondition(applicationStatus.modeProperty().isEqualTo(ApplicationMode.PURGE)
-						.and(purgingNozzleHeater1.and(extruder0NotLoaded)));
+				cantPrintNoFilament0NotificationBar
+						.setAppearanceCondition(
+								applicationStatus.modeProperty()
+										.isEqualTo(ApplicationMode.PURGE)
+										.and(purgingNozzleHeater1.and(extruder0NotLoaded)));
 
-				cantPrintNoFilament1NotificationBar.setAppearanceCondition(applicationStatus.modeProperty().isEqualTo(ApplicationMode.PURGE)
-						.and(purgingNozzleHeater0.and(extruder1NotLoaded)));
+				cantPrintNoFilament1NotificationBar
+						.setAppearanceCondition(
+								applicationStatus.modeProperty()
+										.isEqualTo(ApplicationMode.PURGE)
+										.and(purgingNozzleHeater0.and(extruder1NotLoaded)));
 
-				cantPrintFilament0NotSpecifiedNotificationBar.setAppearanceCondition(applicationStatus.modeProperty().isEqualTo(ApplicationMode.PURGE)
-						.and(purgingNozzleHeater1.and(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0).isNull()
-								.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0).isEqualTo(FilamentContainer.UNKNOWN_FILAMENT)))));
+				cantPrintFilament0NotSpecifiedNotificationBar
+						.setAppearanceCondition(
+								applicationStatus.modeProperty()
+										.isEqualTo(ApplicationMode.PURGE)
+										.and(purgingNozzleHeater1
+												.and(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0)
+														.isNull()
+														.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0)
+																.isEqualTo(FilamentContainer.UNKNOWN_FILAMENT)))));
 
-				cantPrintFilament1NotSpecifiedNotificationBar.setAppearanceCondition(applicationStatus.modeProperty().isEqualTo(ApplicationMode.PURGE)
-						.and(purgingNozzleHeater0.and(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1).isNull()
-								.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1).isEqualTo(FilamentContainer.UNKNOWN_FILAMENT)))));
+				cantPrintFilament1NotSpecifiedNotificationBar
+						.setAppearanceCondition(
+								applicationStatus.modeProperty()
+										.isEqualTo(ApplicationMode.PURGE)
+										.and(purgingNozzleHeater0
+												.and(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1)
+														.isNull()
+														.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1)
+																.isEqualTo(FilamentContainer.UNKNOWN_FILAMENT)))));
 
-				BooleanBinding filament0Invalid = Bindings.valueAt(printer.effectiveFilamentsProperty(), 0).isNull()
-						.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0).isEqualTo(FilamentContainer.UNKNOWN_FILAMENT));
-				BooleanBinding filament1Invalid = Bindings.valueAt(printer.effectiveFilamentsProperty(), 1).isNull()
-						.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1).isEqualTo(FilamentContainer.UNKNOWN_FILAMENT));
+				BooleanBinding filament0Invalid = Bindings
+						.valueAt(printer.effectiveFilamentsProperty(), 0)
+						.isNull()
+						.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 0)
+								.isEqualTo(FilamentContainer.UNKNOWN_FILAMENT));
+
+				BooleanBinding filament1Invalid = Bindings
+						.valueAt(printer.effectiveFilamentsProperty(), 1)
+						.isNull()
+						.or(Bindings.valueAt(printer.effectiveFilamentsProperty(), 1)
+								.isEqualTo(FilamentContainer.UNKNOWN_FILAMENT));
 
 				BooleanBinding isDisabled = notPurgingAndNotIdle
 						.or(doorIsOpen)
@@ -619,10 +656,10 @@ public class PurgeInsetPanelController implements Initializable {
 			purgeMaterial0.setSelected(false);
 			purgeMaterial1.setSelected(false);
 
-			if (PrinterUtils.isPurgeNecessaryForExtruder(printer, 0)) {
+			if (printerUtils.isPurgeNecessaryForExtruder(printer, 0)) {
 				purgeMaterial0.setSelected(true);
 			}
-			if (PrinterUtils.isPurgeNecessaryForExtruder(printer, 1)) {
+			if (printerUtils.isPurgeNecessaryForExtruder(printer, 1)) {
 				purgeMaterial1.setSelected(true);
 			}
 		}
@@ -639,10 +676,10 @@ public class PurgeInsetPanelController implements Initializable {
 	}
 
 	private void startPurge() {
-		ApplicationStatus.getInstance().setMode(ApplicationMode.PURGE);
+		applicationStatus.setMode(ApplicationMode.PURGE);
 
 		try {
-			transitionManager = printer.startPurge(fSafetyFeaturesPreference.get());
+			transitionManager = printer.startPurge(safetyFeaturesPreference.getValue());
 
 			currentMaterialTemperature0.textProperty().unbind();
 			lastMaterialTemperature0.textProperty().unbind();
@@ -678,11 +715,8 @@ public class PurgeInsetPanelController implements Initializable {
 						transitionManager.getLastMaterialTemperature(0).asString());
 			}
 
-			transitionManager.stateGUITProperty().addListener(new ChangeListener() {
-				@Override
-				public void changed(ObservableValue observable, Object oldValue, Object newValue) {
-					setState((PurgeState) newValue);
-				}
+			transitionManager.stateGUITProperty().addListener((observable, oldValue, newValue) -> {
+				setState(newValue);
 			});
 
 			transitionManager.start();

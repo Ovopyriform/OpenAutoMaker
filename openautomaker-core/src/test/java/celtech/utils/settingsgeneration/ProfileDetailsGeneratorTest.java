@@ -3,8 +3,8 @@ package celtech.utils.settingsgeneration;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,17 +12,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openautomaker.base.configuration.datafileaccessors.PrintProfileSettingsContainer;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSetting;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSettings;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.Slicer;
+import org.openautomaker.test_library.GuiceExtension;
+import org.openautomaker.ui.inject.utils.settings_generation.ProfileDetailsGeneratorFactory;
+import org.testfx.framework.junit5.ApplicationExtension;
+import org.testfx.framework.junit5.Start;
 
-import celtech.FXTest;
-import celtech.JavaFXConfiguredTest;
 import celtech.coreUI.components.RestrictedNumberField;
+import jakarta.inject.Inject;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -33,14 +37,11 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.RowConstraints;
+import javafx.stage.Stage;
 
-/**
- * Test class for the {@link ProfileDetailsGenerator}
- *
- * @author George Salter
- */
-@Category(FXTest.class)
-public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
+//TODO: Revisit this test
+@ExtendWith({ GuiceExtension.class, ApplicationExtension.class })
+public class ProfileDetailsGeneratorTest {
 
 	private static final String FLOAT_VALUE_TYPE = "float";
 	private static final String OPTION_VALUE_TYPE = "option";
@@ -68,9 +69,24 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 
 	GridPane gridPane;
 
-	private void setup() {
-		printProfileSettings = PrintProfileSettingsContainer.getInstance().getPrintProfileSettingsForSlicer(Slicer.CURA);
-		profileDetailsGenerator = new ProfileDetailsGenerator(printProfileSettings, new SimpleBooleanProperty(false));
+	@Inject
+	PrintProfileSettingsContainer printProfileSettingsContainer;
+
+	@Inject
+	ProfileDetailsGeneratorFactory profileDetailsGeneratorFactory;
+
+	@Inject
+	I18N i18n;
+
+	@Start
+	public void start(Stage stage) {
+
+	}
+
+	@BeforeEach
+	public void beforeEach() {
+		printProfileSettings = printProfileSettingsContainer.getPrintProfileSettingsForSlicer(Slicer.CURA_4);
+		profileDetailsGenerator = profileDetailsGeneratorFactory.create(printProfileSettings, new SimpleBooleanProperty(false));
 
 		List<String> nozzleList = new ArrayList<>();
 		nozzleList.add(NOZZLE_OPTION_1);
@@ -93,10 +109,9 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 		gridPane.getColumnConstraints().addAll(col0, col1, col2, col3, col4);
 	}
 
+
 	@Test
 	public void testAddSingleFieldRow() {
-		setup();
-
 		PrintProfileSetting slicerSetting = new PrintProfileSetting();
 		slicerSetting.setSettingName(SLICER_SETTING_NAME);
 		slicerSetting.setTooltip(TOOLTIP);
@@ -121,8 +136,6 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 
 	@Test
 	public void testAddComboBoxRow() {
-		setup();
-
 		PrintProfileSetting slicerSetting = new PrintProfileSetting();
 		slicerSetting.setSettingName(SLICER_SETTING_NAME);
 		slicerSetting.setTooltip(TOOLTIP);
@@ -152,8 +165,6 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 
 	@Test
 	public void testAddSelectionAndValueRow() {
-		setup();
-
 		PrintProfileSetting extrusionSlicerSetting = new PrintProfileSetting();
 		extrusionSlicerSetting.setSettingName(SLICER_SETTING_NAME);
 		extrusionSlicerSetting.setTooltip(TOOLTIP);
@@ -182,7 +193,7 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 		assertThat(label.getText(), is(equalTo(SLICER_SETTING_NAME)));
 		assertTrue(label.getStyleClass().contains(COLON_STYLE));
 
-		assertThat(boxLabel.getText(), is(equalTo(OpenAutomakerEnv.getI18N().t("extrusion.nozzle"))));
+		assertThat(boxLabel.getText(), is(equalTo(i18n.t("extrusion.nozzle"))));
 		assertThat(combo.getItems().size(), is(equalTo(2)));
 		assertThat(combo.getItems().get(0), is(equalTo(NOZZLE_OPTION_1)));
 		assertThat(combo.getItems().get(1), is(equalTo(NOZZLE_OPTION_2)));
@@ -198,8 +209,6 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 
 	@Test
 	public void testAddPerExtruderValueRow() {
-		setup();
-
 		PrintProfileSetting slicerSetting = new PrintProfileSetting();
 		slicerSetting.setSettingName(SLICER_SETTING_NAME);
 		slicerSetting.setTooltip(TOOLTIP);
@@ -242,8 +251,6 @@ public class ProfileDetailsGeneratorTest extends JavaFXConfiguredTest {
 
 	@Test
 	public void testAddCheckBoxRow() {
-		setup();
-
 		PrintProfileSetting slicerSetting = new PrintProfileSetting();
 		slicerSetting.setSettingName(SLICER_SETTING_NAME);
 		slicerSetting.setTooltip(TOOLTIP);

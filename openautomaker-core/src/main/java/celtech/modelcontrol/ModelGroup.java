@@ -1,6 +1,3 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.modelcontrol;
 
 import java.util.Collection;
@@ -12,6 +9,10 @@ import java.util.Set;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.utils.RectangularBounds;
+import org.openautomaker.ui.inject.model.ModelGroupFactory;
+
+import com.google.inject.assistedinject.Assisted;
+import com.google.inject.assistedinject.AssistedInject;
 
 import celtech.coreUI.visualisation.ScreenExtentsProvider;
 import celtech.utils.threed.ThreeDUtils;
@@ -24,18 +25,30 @@ import javafx.scene.transform.Rotate;
 /**
  * ModelGroup is a ModelContainer that is a group of child ModelContainers or other ModelGroups.
  *
- * @author tony
  */
 public class ModelGroup extends ModelContainer implements ScreenExtentsProvider.ScreenExtentsListener {
 
-	private static final Logger LOGGER = LogManager.getLogger(ModelGroup.class.getName());
+	private static final long serialVersionUID = -415316200270636398L;
+
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private final Group modelContainersGroup = new Group();
 	private Set<ModelContainer> childModelContainers;
 
 	private double turnRotationAngle = 0;
 	private Rotate turnRotate = new Rotate(0, ThreeDUtils.Y_AXIS_JFX);
 
-	public ModelGroup(Set<ModelContainer> modelContainers) {
+	private final ModelGroupFactory modelGroupFactory;
+
+	@AssistedInject
+	public ModelGroup(
+			ModelGroupFactory modelGroupFactory,
+			@Assisted Set<ModelContainer> modelContainers) {
+
+		super();
+
+		this.modelGroupFactory = modelGroupFactory;
+
 		initialise(null);
 		childModelContainers = new HashSet<>();
 		getChildren().add(modelContainersGroup);
@@ -53,8 +66,14 @@ public class ModelGroup extends ModelContainer implements ScreenExtentsProvider.
 		updateOriginalModelBounds();
 	}
 
-	public ModelGroup(Set<ModelContainer> modelContainers, int groupModelId) {
-		this(modelContainers);
+	@AssistedInject
+	public ModelGroup(
+			ModelGroupFactory modelGroupFactory,
+			@Assisted Set<ModelContainer> modelContainers,
+			@Assisted int groupModelId) {
+
+		this(modelGroupFactory, modelContainers);
+
 		modelId = groupModelId;
 		if (modelId >= nextModelId) {
 			// avoid any duplicate ids
@@ -208,7 +227,9 @@ public class ModelGroup extends ModelContainer implements ScreenExtentsProvider.
 			modelContainerCopy.setState(childModel.getState());
 			childModels.add(modelContainerCopy);
 		}
-		ModelGroup copy = new ModelGroup(childModels);
+
+		ModelGroup copy = modelGroupFactory.create(childModels);
+
 		copy.setXScale(this.getXScale(), true);
 		copy.setYScale(this.getYScale(), true);
 		copy.setZScale(this.getZScale(), true);

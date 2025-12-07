@@ -1,85 +1,54 @@
 package celtech.roboxbase.comms.remote.rx;
 
-import com.fasterxml.jackson.databind.MapperFeature;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import celtech.roboxbase.comms.remote.clear.WifiStatusResponse;
-
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
 
 /**
  *
  * @author ianhudson
  */
-public class WifiStatusResponseTest
-{
+public class WifiStatusResponseTest {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final String jsonifiedClass = "{\"associated\":false,\"poweredOn\":true,\"ssid\":\"\"}";
+	private static final String jsonifiedClass = "{\"poweredOn\":true,\"associated\":false,\"ssid\":\"\"}";
 
-    public WifiStatusResponseTest()
-    {
-    }
+	private final ObjectMapper mapper = new ObjectMapper();
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-        mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
-    }
+	@Test
+	public void serializesToJSON() throws Exception {
+		final WifiStatusResponse packet = getTestPacket();
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+		String mappedValue = mapper.writeValueAsString(packet);
 
-    @Before
-    public void setUp()
-    {
-    }
+		assertEquals(mapper.readTree(jsonifiedClass), mapper.readTree(mappedValue));
+	}
 
-    @After
-    public void tearDown()
-    {
-    }
+	@Test
+	public void deserializesFromJSON() throws Exception {
+		final WifiStatusResponse packet = getTestPacket();
 
-    @Test
-    public void serializesToJSON() throws Exception
-    {
-        final WifiStatusResponse packet = getTestPacket();
+		try {
+			WifiStatusResponse packetRec = mapper.readValue(jsonifiedClass, WifiStatusResponse.class);
+			assertEquals(packet, packetRec);
+		}
+		catch (Exception e) {
+			System.out.println(e.getCause().getMessage());
+			fail();
+		}
+	}
 
-        String mappedValue = mapper.writeValueAsString(packet);
-        assertEquals(jsonifiedClass, mappedValue);
-    }
+	private WifiStatusResponse getTestPacket() {
+		WifiStatusResponse packet = new WifiStatusResponse();
 
-    @Test
-    public void deserializesFromJSON() throws Exception
-    {
-        final WifiStatusResponse packet = getTestPacket();
+		packet.setPoweredOn(true);
+		packet.setAssociated(false);
+		packet.setSsid("");
 
-        try
-        {
-            WifiStatusResponse packetRec = mapper.readValue(jsonifiedClass, WifiStatusResponse.class);
-            assertEquals(packet, packetRec);
-        } catch (Exception e)
-        {
-            System.out.println(e.getCause().getMessage());
-            fail();
-        }
-    }
-
-    private WifiStatusResponse getTestPacket()
-    {
-        WifiStatusResponse packet = new WifiStatusResponse();
-
-        packet.setPoweredOn(true);
-        packet.setAssociated(false);
-        packet.setSsid("");
-
-        return packet;
-    }
+		return packet;
+	}
 }

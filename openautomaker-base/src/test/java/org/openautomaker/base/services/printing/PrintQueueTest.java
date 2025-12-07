@@ -2,13 +2,9 @@
 package org.openautomaker.base.services.printing;
 
 import org.openautomaker.base.printerControl.model.PrintEngine;
-import org.openautomaker.base.utils.BaseEnvironmentConfiguredTest;
 
-/**
- *
- * @author tony
- */
-public class PrintQueueTest extends BaseEnvironmentConfiguredTest
+//TODO: See if there's anything useful in this test.  Seems it was commented and elements no longer exist.
+public class PrintQueueTest
 {
 
     static final int WAIT_INTERVAL = 500;

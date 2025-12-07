@@ -3,6 +3,10 @@ package celtech.coreUI.components;
 
 import java.io.IOException;
 
+import org.openautomaker.guice.FXMLLoaderFactory;
+import org.openautomaker.guice.GuiceContext;
+
+import jakarta.inject.Inject;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.ToggleGroup;
@@ -15,6 +19,7 @@ import javafx.scene.text.Text;
  * @author Ian
  */
 public class InsetPanelMenu extends HBox {
+
 	@FXML
 	private Text menuTitle;
 
@@ -23,9 +28,12 @@ public class InsetPanelMenu extends HBox {
 
 	private ToggleGroup buttonGroup = new ToggleGroup();
 
+	@Inject
+	public FXMLLoaderFactory fxmlLoaderFactory;
+
 	public InsetPanelMenu() {
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/insetPanelMenu.fxml"));
+		GuiceContext.get().injectMembers(this);
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource("/celtech/resources/fxml/components/insetPanelMenu.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 

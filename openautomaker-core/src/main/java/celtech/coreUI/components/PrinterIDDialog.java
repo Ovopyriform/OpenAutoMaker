@@ -7,10 +7,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.StageManager;
 
 import celtech.configuration.ApplicationConfiguration;
-import celtech.coreUI.DisplayManager;
 import celtech.coreUI.controllers.PrinterIDDialogController;
+import jakarta.inject.Inject;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -19,31 +21,41 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
-/**
- *
- * @author ianhudson
- */
+//TODO: Perhaps could be regualar injectable
 public class PrinterIDDialog {
 
-	private static final Logger LOGGER = LogManager.getLogger(PrinterIDDialog.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	private Stage dialogStage = null;
+
 	private PrinterIDDialogController dialogController = null;
 
-	/**
-	 *
-	 */
+	@Inject
+	private I18N i18n;
+
+	@Inject
+	private FXMLLoader fxmlloader;
+
+	@Inject
+	private StageManager stageManager;
+
+
 	public PrinterIDDialog() {
+		GuiceContext.get().injectMembers(this);
+
 		dialogStage = new Stage(StageStyle.TRANSPARENT);
-		URL dialogFXMLURL = PrinterIDDialog.class.getResource(ApplicationConfiguration.fxmlResourcePath + "PrinterIDDialog.fxml");
-		FXMLLoader dialogLoader = new FXMLLoader(dialogFXMLURL, new I18N().getResourceBundle());
+
+		URL dialogFXMLURL = getClass().getResource(ApplicationConfiguration.fxmlResourcePath + "PrinterIDDialog.fxml");
+		fxmlloader.setLocation(dialogFXMLURL);
+
 		try {
-			Parent dialogBoxScreen = (Parent) dialogLoader.load();
-			dialogController = (PrinterIDDialogController) dialogLoader.getController();
+			Parent dialogBoxScreen = (Parent) fxmlloader.load();
+			dialogController = (PrinterIDDialogController) fxmlloader.getController();
 
 			Scene dialogScene = new Scene(dialogBoxScreen, Color.TRANSPARENT);
 			dialogScene.getStylesheets().add(ApplicationConfiguration.getMainCSSFile());
 			dialogStage.setScene(dialogScene);
-			dialogStage.initOwner(DisplayManager.getMainStage());
+			dialogStage.initOwner(stageManager.getMainStage());
 			dialogStage.initModality(Modality.APPLICATION_MODAL);
 			dialogController.configure(dialogStage);
 		}

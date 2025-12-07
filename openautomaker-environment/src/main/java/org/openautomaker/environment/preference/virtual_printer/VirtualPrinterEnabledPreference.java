@@ -1,12 +1,28 @@
 package org.openautomaker.environment.preference.virtual_printer;
 
-import org.openautomaker.environment.preference.AbsBooleanPreference;
+import java.util.prefs.Preferences;
 
-public class VirtualPrinterEnabledPreference extends AbsBooleanPreference {
+import org.openautomaker.environment.preference.ASimpleBooleanPreference;
+
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+
+@Singleton
+public class VirtualPrinterEnabledPreference extends ASimpleBooleanPreference {
+
+	@Inject
+	protected VirtualPrinterEnabledPreference() {
+
+	}
 
 	@Override
-	protected Boolean getDefault() {
+	public Boolean getDefault() {
 		return Boolean.FALSE;
+	}
+
+	@Override
+	protected Preferences getNode() {
+		return getUserNode();
 	}
 
 }

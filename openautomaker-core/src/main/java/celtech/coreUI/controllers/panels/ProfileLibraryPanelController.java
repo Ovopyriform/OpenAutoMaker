@@ -1,13 +1,11 @@
 package celtech.coreUI.controllers.panels;
 
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.ResourceBundle;
 import java.util.function.Function;
 import java.util.prefs.PreferenceChangeEvent;
 import java.util.prefs.PreferenceChangeListener;
@@ -15,7 +13,6 @@ import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.datafileaccessors.HeadContainer;
 import org.openautomaker.base.configuration.datafileaccessors.PrintProfileSettingsContainer;
@@ -24,19 +21,23 @@ import org.openautomaker.base.configuration.datafileaccessors.SlicerMappingsCont
 import org.openautomaker.base.configuration.fileRepresentation.HeadFile;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSetting;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSettings;
+import org.openautomaker.base.inject.configuration.profile_settings.PrintProfileSettingsFactory;
 import org.openautomaker.base.printerControl.model.Head;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.services.slicer.PrintQualityEnumeration;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 import org.openautomaker.environment.Slicer;
-import org.openautomaker.environment.preference.SlicerPreference;
+import org.openautomaker.environment.preference.slicer.SlicerPreference;
+import org.openautomaker.ui.inject.utils.settings_generation.ProfileDetailsGeneratorFactory;
+import org.openautomaker.ui.state.SelectedPrinter;
+import org.openautomaker.ui.state.SelectedProject;
 
-import celtech.Lookup;
 import celtech.appManager.Project;
 import celtech.coreUI.DisplayManager;
 import celtech.coreUI.components.RestrictedComboBox;
 import celtech.utils.settingsgeneration.ProfileDetailsGenerator;
 import celtech.utils.settingsgeneration.ProfileDetailsGenerator.ProfileDetailsGenerationException;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
@@ -51,22 +52,15 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.VBox;
 
-/**
- * FXML Controller class
- *
- * @author Ian Hudson and George Salter
- */
-public class ProfileLibraryPanelController implements Initializable, MenuInnerPanel {
+public class ProfileLibraryPanelController implements MenuInnerPanel {
+
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private static final PrintProfileSettingsContainer PRINT_PROFILE_SETTINGS_CONTAINER = PrintProfileSettingsContainer.getInstance();
-	private static final RoboxProfileSettingsContainer ROBOX_PROFILE_SETTINGS_CONTAINER = RoboxProfileSettingsContainer.getInstance();
 	private static final HashMap<String, Integer> standardProfileOrder = new HashMap<>();
 	static {
 		standardProfileOrder.put("DRAFT", 0);
@@ -144,25 +138,59 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	};
 
 
-	public ProfileLibraryPanelController() {
+	private final SlicerPreference slicerPreference;
+	private final I18N i18n;
+	private final DisplayManager displayManager;
+	private final PrintProfileSettingsContainer printProfileSettingsContainer;
+	private final RoboxProfileSettingsContainer roboxProfileSettingsContainer;
+	private final SlicerMappingsContainer slicerMappingsContainer;
+	private final SelectedPrinter selectedPrinter;
+	private final SelectedProject selectedProject;
+	private final ProfileDetailsGeneratorFactory profileDetailsGeneratorFactory;
+	private final PrintProfileSettingsFactory printProfileSettingsFactory;
+	private final HeadContainer headContainer;
+
+	@Inject
+	protected ProfileLibraryPanelController(
+			SlicerPreference slicerPreference,
+			I18N i18n,
+			DisplayManager displayManager,
+			PrintProfileSettingsContainer printProfileSettingsContainer,
+			RoboxProfileSettingsContainer roboxProfileSettingsContainer,
+			SlicerMappingsContainer slicerMappingsContainer,
+			SelectedPrinter selectedPrinter,
+			SelectedProject selectedProject,
+			ProfileDetailsGeneratorFactory profileDetailsGeneratorFactory,
+			PrintProfileSettingsFactory printProfileSettingsFactory,
+			HeadContainer headContainer) {
+
+		this.slicerPreference = slicerPreference;
+		this.i18n = i18n;
+		this.displayManager = displayManager;
+		this.printProfileSettingsContainer = printProfileSettingsContainer;
+		this.roboxProfileSettingsContainer = roboxProfileSettingsContainer;
+		this.slicerMappingsContainer = slicerMappingsContainer;
+		this.selectedPrinter = selectedPrinter;
+		this.selectedProject = selectedProject;
+		this.profileDetailsGeneratorFactory = profileDetailsGeneratorFactory;
+		this.printProfileSettingsFactory = printProfileSettingsFactory;
+		this.headContainer = headContainer;
+
 	}
 
 	/**
 	 * Initialises the controller class.
 	 *
-	 * @param url
-	 * @param rb
 	 */
-	@Override
-	public void initialize(URL url, ResourceBundle rb) {
-		Slicer slicer = new SlicerPreference().get();
+	public void initialize() {
+		Slicer slicer = slicerPreference.getValue();
 
-		Lookup.getSelectedPrinterProperty().addListener((ObservableValue<? extends Printer> ov, Printer oldValue, Printer newValue) -> {
+		selectedPrinter.addListener((ObservableValue<? extends Printer> ov, Printer oldValue, Printer newValue) -> {
 			bindToPrinter(newValue);
 		});
 
-		if (Lookup.getSelectedPrinterProperty().get() != null) {
-			bindToPrinter(Lookup.getSelectedPrinterProperty().get());
+		if (selectedPrinter.get() != null) {
+			bindToPrinter(selectedPrinter.get());
 		}
 
 		canSave.bind(isNameValid
@@ -173,9 +201,9 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 		canDelete.bind(state.isNotEqualTo(State.NEW).and(state.isNotEqualTo(State.ROBOX)));
 		isEditable.bind(state.isNotEqualTo(State.ROBOX));
 
-		PrintProfileSettings printProfileSettings = PRINT_PROFILE_SETTINGS_CONTAINER
+		PrintProfileSettings printProfileSettings = printProfileSettingsContainer
 				.getPrintProfileSettingsForSlicer(slicer);
-		profileDetailsFxmlGenerator = new ProfileDetailsGenerator(printProfileSettings, isDirty);
+		profileDetailsFxmlGenerator = profileDetailsGeneratorFactory.create(printProfileSettings, isDirty);
 
 		setupSlicerInUseLabel();
 		setupProfileNameChangeListeners();
@@ -183,7 +211,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 		setupPrintProfileCombo();
 		selectDefaultPrintProfile();
 
-		new SlicerPreference().addChangeListener(new PreferenceChangeListener() {
+		slicerPreference.addChangeListener(new PreferenceChangeListener() {
 			@Override
 			public void preferenceChange(PreferenceChangeEvent evt) {
 				regenerateSettings = true;
@@ -191,7 +219,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 
 		});
 
-		DisplayManager.getInstance().libraryModeEnteredProperty().addListener((observable, oldValue, enteredLibraryMode) -> {
+		displayManager.libraryModeEnteredProperty().addListener((observable, oldValue, enteredLibraryMode) -> {
 			if (enteredLibraryMode) {
 				regenerateSettings(slicer, true);
 				repopulateCmbPrintProfile();
@@ -204,10 +232,10 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 			KeyCode keyCode = event.getCode();
 			if (keyCode == KeyCode.F5) {
 				LOGGER.debug("F5 pressed, attempting refresh of print profile settings");
-				PrintProfileSettingsContainer.loadPrintProfileSettingsFile();
-				SlicerMappingsContainer.getInstance().loadSlicerMappingsFile();
-				SlicerMappingsContainer.getInstance();
-				BaseLookup.setSlicerMappings(SlicerMappingsContainer.getSlicerMappings());
+				printProfileSettingsContainer.loadPrintProfileSettingsFile();
+
+				slicerMappingsContainer.loadSlicerMappingsFile();
+
 				RoboxProfile printProfile = roboxProfilesMap.get(currentProfileName);
 				updateSettingsFromProfile(printProfile, true);
 			}
@@ -216,7 +244,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 
 	private void regenerateSettings(Slicer slicerType, boolean recreateTabs) {
 		LOGGER.debug("========== Begin regenerating settings ==========");
-		profileDetailsFxmlGenerator.setPrintProfilesettings(PRINT_PROFILE_SETTINGS_CONTAINER.getPrintProfileSettingsForSlicer(slicerType));
+		profileDetailsFxmlGenerator.setPrintProfilesettings(printProfileSettingsContainer.getPrintProfileSettingsForSlicer(slicerType));
 		profileDetailsFxmlGenerator.setHeadType(currentHeadType.get());
 		profileDetailsFxmlGenerator.setNozzleOptions(nozzleOptions);
 		try {
@@ -256,12 +284,12 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	}
 
 	private void setupHeadType() {
-		HeadContainer.getCompleteHeadList().forEach((head) -> {
+		headContainer.getCompleteHeadList().forEach((head) -> {
 			cmbHeadType.getItems().add(head.getTypeCode());
 		});
 
 		cmbHeadType.valueProperty().addListener((ObservableValue<? extends String> observable, String oldValue, String newValue) -> {
-			HeadFile headDetails = HeadContainer.getHeadByID(newValue);
+			HeadFile headDetails = headContainer.getHeadByID(newValue);
 			currentHeadType.set(newValue);
 			numNozzleHeaters.set(headDetails.getNozzleHeaters().size());
 			numNozzles.set(headDetails.getNozzles().size());
@@ -299,11 +327,11 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 		if (cmbPrintProfile.getItems().size() > 0) {
 			String headType = cmbHeadType.getValue();
 
-			Project selectedProject = Lookup.getSelectedProjectProperty().get();
+			Project selProject = selectedProject.get();
 			Optional<RoboxProfile> profileOption = Optional.empty();
-			if (selectedProject != null) {
-				PrintQualityEnumeration printQuality = selectedProject.getPrinterSettings().getPrintQuality();
-				profileOption = selectedProject.getPrinterSettings().getBaseProfile(headType, new SlicerPreference().get(), printQuality);
+			if (selProject != null) {
+				PrintQualityEnumeration printQuality = selProject.getPrinterSettings().getPrintQuality();
+				profileOption = selProject.getPrinterSettings().getBaseProfile(headType, slicerPreference.getValue(), printQuality);
 			}
 
 			if (profileOption.isPresent()) {
@@ -355,7 +383,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	}
 
 	private void repopulateCmbPrintProfile() {
-		Map<String, List<RoboxProfile>> roboxProfiles = ROBOX_PROFILE_SETTINGS_CONTAINER.getRoboxProfilesForSlicer(new SlicerPreference().get());
+		Map<String, List<RoboxProfile>> roboxProfiles = roboxProfileSettingsContainer.getRoboxProfilesForSlicer(slicerPreference.getValue());
 		String headType = cmbHeadType.getValue();
 		List<RoboxProfile> filesForHeadType = roboxProfiles.getOrDefault(headType, new ArrayList<>());
 		roboxProfilesMap = filesForHeadType.stream()
@@ -392,8 +420,8 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	}
 
 	private void setupSlicerInUseLabel() {
-		String selectedSlicerStr = OpenAutomakerEnv.getI18N().t("profileLibrary.slicerInUse");
-		selectedSlicerStr = selectedSlicerStr + " " + new SlicerPreference().get().getFriendlyName();
+		String selectedSlicerStr = i18n.t("profileLibrary.slicerInUse");
+		selectedSlicerStr = selectedSlicerStr + " " + slicerPreference.getValue().getFriendlyName();
 		slicerInUseLabel.setText(selectedSlicerStr);
 	}
 
@@ -419,13 +447,13 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	 * @param roboxProfile the profile that has been selected
 	 */
 	private void updateSettingsFromProfile(RoboxProfile roboxProfile, boolean recreateTabs) {
-		Slicer slicer = new SlicerPreference().get();
+		Slicer slicer = slicerPreference.getValue();
 
-		PrintProfileSettings printProfileSettings = PRINT_PROFILE_SETTINGS_CONTAINER
+		PrintProfileSettings printProfileSettings = printProfileSettingsContainer
 				.getPrintProfileSettingsForSlicer(slicer);
-		PrintProfileSettings defaultPrintProfileSettings = PRINT_PROFILE_SETTINGS_CONTAINER
+		PrintProfileSettings defaultPrintProfileSettings = printProfileSettingsContainer
 				.getDefaultPrintProfileSettingsForSlicer(slicer);
-		PrintProfileSettings defaultSettingsCopy = new PrintProfileSettings(defaultPrintProfileSettings);
+		PrintProfileSettings defaultSettingsCopy = printProfileSettingsFactory.create(defaultPrintProfileSettings);
 		printProfileSettings.setHeaderSettings(defaultSettingsCopy.getHeaderSettings());
 		printProfileSettings.setTabs(defaultSettingsCopy.getTabs());
 		printProfileSettings.setHiddenSettings(defaultSettingsCopy.getHiddenSettings());
@@ -456,7 +484,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 			valid = false;
 		}
 		else {
-			Map<String, List<RoboxProfile>> existingProfileMapForSlicer = ROBOX_PROFILE_SETTINGS_CONTAINER.getRoboxProfilesForSlicer(new SlicerPreference().get());
+			Map<String, List<RoboxProfile>> existingProfileMapForSlicer = roboxProfileSettingsContainer.getRoboxProfilesForSlicer(slicerPreference.getValue());
 			List<RoboxProfile> profilesForHead = existingProfileMapForSlicer.get(currentHeadType.get());
 			for (RoboxProfile profile : profilesForHead) {
 				if (!profile.getName().equalsIgnoreCase(currentProfileName)
@@ -472,23 +500,23 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	void whenSavePressed() {
 		assert (state.get() != ProfileLibraryPanelController.State.ROBOX);
 
-		Slicer slicer = new SlicerPreference().get();
+		Slicer slicer = slicerPreference.getValue();
 
 		if (validateProfileName()) {
-			PrintProfileSettings defaultSettings = PRINT_PROFILE_SETTINGS_CONTAINER.getDefaultPrintProfileSettingsForSlicer(slicer);
-			PrintProfileSettings settingsForHead = new PrintProfileSettings(defaultSettings);
-			RoboxProfile headProfile = ROBOX_PROFILE_SETTINGS_CONTAINER.loadHeadProfileForSlicer(currentHeadType.get(), slicer);
+			PrintProfileSettings defaultSettings = printProfileSettingsContainer.getDefaultPrintProfileSettingsForSlicer(slicer);
+			PrintProfileSettings settingsForHead = printProfileSettingsFactory.create(defaultSettings);
+			RoboxProfile headProfile = roboxProfileSettingsContainer.loadHeadProfileForSlicer(currentHeadType.get(), slicer);
 			overwriteSettingsFromProfile(settingsForHead, headProfile);
 
-			PrintProfileSettings currentSettings = PRINT_PROFILE_SETTINGS_CONTAINER.getPrintProfileSettingsForSlicer(slicer);
-			Map<String, List<PrintProfileSetting>> settingsToWrite = PRINT_PROFILE_SETTINGS_CONTAINER.compareAndGetDifferencesBetweenSettings(settingsForHead, currentSettings);
+			PrintProfileSettings currentSettings = printProfileSettingsContainer.getPrintProfileSettingsForSlicer(slicer);
+			Map<String, List<PrintProfileSetting>> settingsToWrite = printProfileSettingsContainer.compareAndGetDifferencesBetweenSettings(settingsForHead, currentSettings);
 
 			if (state.get() == ProfileLibraryPanelController.State.CUSTOM) {
 				// We are about to create a new profile and need to delete the old one
-				ROBOX_PROFILE_SETTINGS_CONTAINER.deleteCustomProfile(currentProfileName, slicer, currentHeadType.get());
+				roboxProfileSettingsContainer.deleteCustomProfile(currentProfileName, slicer, currentHeadType.get());
 			}
 
-			RoboxProfile savedProfile = ROBOX_PROFILE_SETTINGS_CONTAINER.saveCustomProfile(settingsToWrite, cmbPrintProfile.getEditor().getText(),
+			RoboxProfile savedProfile = roboxProfileSettingsContainer.saveCustomProfile(settingsToWrite, cmbPrintProfile.getEditor().getText(),
 					currentHeadType.get(), slicer);
 
 			isDirty.set(false);
@@ -515,7 +543,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 
 	void whenDeletePressed() {
 		if (state.get() != ProfileLibraryPanelController.State.NEW) {
-			ROBOX_PROFILE_SETTINGS_CONTAINER.deleteCustomProfile(currentProfileName, new SlicerPreference().get(), currentHeadType.get());
+			roboxProfileSettingsContainer.deleteCustomProfile(currentProfileName, slicerPreference.getValue(), currentHeadType.get());
 		}
 		repopulateCmbPrintProfile();
 		selectDefaultPrintProfile();
@@ -524,7 +552,7 @@ public class ProfileLibraryPanelController implements Initializable, MenuInnerPa
 	@Override
 	public void panelSelected() {
 		if (regenerateSettings) {
-			regenerateSettings(new SlicerPreference().get(), true);
+			regenerateSettings(slicerPreference.getValue(), true);
 			regenerateSettings = false;
 		}
 	}

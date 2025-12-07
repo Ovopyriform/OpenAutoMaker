@@ -5,8 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.openautomaker.guice.GuiceContext;
+import org.openautomaker.ui.StageManager;
+import org.openautomaker.ui.component.choice_link_button.ChoiceLinkButton;
+
 import celtech.configuration.ApplicationConfiguration;
-import celtech.coreUI.DisplayManager;
+import jakarta.inject.Inject;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
@@ -20,13 +24,11 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
-/**
- *
- * @author Ian
- */
 public class ChoiceLinkDialogBox extends StackPane {
 
 	public class PrinterDisconnectedException extends Exception {
+
+		private static final long serialVersionUID = 3117443818531846473L;
 
 		public PrinterDisconnectedException(String message) {
 			super(message);
@@ -50,7 +52,8 @@ public class ChoiceLinkDialogBox extends StackPane {
 
 	private Optional<ChoiceLinkButton> chosenButton = Optional.empty();
 
-	private final boolean closeOnPrinterDisconnect;
+	// Look at moving these to final
+	private boolean closeOnPrinterDisconnect;
 
 	private boolean closeOnPrinterConnect = false;
 
@@ -84,20 +87,36 @@ public class ChoiceLinkDialogBox extends StackPane {
 		return closedDueToPrinterDisconnect;
 	}
 
+	@Inject
+	private FXMLLoader fxmlLoader;
+
+	@Inject
+	private StageManager stageManager;
+
+
 	public ChoiceLinkDialogBox() {
-		this.closeOnPrinterDisconnect = true;
+		this(true);
 	}
 
 	public ChoiceLinkDialogBox(boolean closeOnPrinterDisconnect) {
-
+		GuiceContext.get().injectMembers(this);
 		this.closeOnPrinterDisconnect = closeOnPrinterDisconnect;
+		init();
+	}
 
+	public ChoiceLinkDialogBox(boolean closeOnPrinterDisconnect, boolean closeOnPrinterConnect) {
+		GuiceContext.get().injectMembers(this);
+		this.closeOnPrinterDisconnect = closeOnPrinterDisconnect;
+		this.closeOnPrinterConnect = closeOnPrinterConnect;
+		init();
+	}
+
+	private void init() {
 		openDialogs.add(this);
 
 		dialogStage = new Stage(StageStyle.TRANSPARENT);
 
-		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource(
-				"/celtech/resources/fxml/components/ChoiceLinkDialogBox.fxml"));
+		fxmlLoader.setLocation(getClass().getResource("/celtech/resources/fxml/components/ChoiceLinkDialogBox.fxml"));
 		fxmlLoader.setRoot(this);
 		fxmlLoader.setController(this);
 
@@ -113,15 +132,8 @@ public class ChoiceLinkDialogBox extends StackPane {
 		Scene dialogScene = new Scene(this, Color.TRANSPARENT);
 		dialogScene.getStylesheets().add(ApplicationConfiguration.getMainCSSFile());
 		dialogStage.setScene(dialogScene);
-		dialogStage.initOwner(DisplayManager.getMainStage());
+		dialogStage.initOwner(stageManager.getMainStage());
 		dialogStage.initModality(Modality.APPLICATION_MODAL);
-
-		//getStyleClass().add("error-dialog");
-	}
-
-	public ChoiceLinkDialogBox(boolean closeOnPrinterDisconnect, boolean closeOnPrinterConnect) {
-		this(closeOnPrinterDisconnect);
-		this.closeOnPrinterConnect = closeOnPrinterConnect;
 	}
 
 	public void setTitle(final String i18nTitle) {

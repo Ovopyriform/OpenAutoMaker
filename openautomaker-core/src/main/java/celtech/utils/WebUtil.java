@@ -10,19 +10,30 @@ import org.apache.logging.log4j.Logger;
 import org.openautomaker.environment.MachineType;
 import org.openautomaker.environment.OpenAutomakerEnv;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+
 /**
  *
  * @author George Salter
  */
+@Singleton
 public class WebUtil {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	public static void launchURL(String url) {
+	private final OpenAutomakerEnv environment;
+
+	@Inject
+	protected WebUtil(OpenAutomakerEnv environment) {
+		this.environment = environment;
+	}
+
+	public void launchURL(String url) {
 		if (!Desktop.isDesktopSupported())
 			return;
 
-		MachineType machineType = OpenAutomakerEnv.get().getMachineType();
+		MachineType machineType = environment.getMachineType();
 
 		if (machineType == MachineType.LINUX) {
 			try {

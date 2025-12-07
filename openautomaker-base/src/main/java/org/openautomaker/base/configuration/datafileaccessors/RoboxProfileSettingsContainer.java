@@ -1,7 +1,5 @@
 package org.openautomaker.base.configuration.datafileaccessors;
 
-import static org.openautomaker.environment.OpenAutomakerEnv.PRINT_PROFILES;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -22,25 +20,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.RoboxProfile;
 import org.openautomaker.base.configuration.profilesettings.PrintProfileSetting;
-import org.openautomaker.environment.OpenAutomakerEnv;
 import org.openautomaker.environment.Slicer;
+import org.openautomaker.environment.preference.printer.PrintProfilesPathPreference;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 
-/**
- *
- * @author George Salter
- */
+@Singleton
 public class RoboxProfileSettingsContainer {
-
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	private static RoboxProfileSettingsContainer instance;
-
-	private static final String ROBOXPROFILE = ".roboxprofile";
+	private static final String DOT_ROBOXPROFILE = ".roboxprofile";
 
 	private static final String TITLE_BORDER = "//==============";
 	private static final String METADATA = "Metadata";
@@ -50,16 +44,17 @@ public class RoboxProfileSettingsContainer {
 	private Map<Slicer, Map<String, List<RoboxProfile>>> roboxProfiles = new HashMap<>();
 	private Map<Slicer, Map<String, ObservableList<RoboxProfile>>> customProfiles = new HashMap<>();
 
-	private RoboxProfileSettingsContainer() {
+	private final PrintProfilesPathPreference printProfilesPathPreference;
+
+	@Inject
+	protected RoboxProfileSettingsContainer(
+			PrintProfilesPathPreference printProfilesPathPreference) {
+
+		this.printProfilesPathPreference = printProfilesPathPreference;
+
 		for (Slicer slicerType : Slicer.values())
 			loadRoboxProfiles(slicerType);
-	}
 
-	public static RoboxProfileSettingsContainer getInstance() {
-		if (instance == null)
-			instance = new RoboxProfileSettingsContainer();
-
-		return instance;
 	}
 
 	public Map<String, List<RoboxProfile>> getRoboxProfilesForSlicer(Slicer slicerType) {
@@ -94,10 +89,8 @@ public class RoboxProfileSettingsContainer {
 
 	public RoboxProfile loadHeadProfileForSlicer(String headType, Slicer slicerType) {
 
-		Path headProfilePath = OpenAutomakerEnv.get()
-				.getApplicationPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier())
-				.resolve(headType);
+		// TODO: Could this use the default slicer and not require it to be passed in?
+		Path headProfilePath = printProfilesPathPreference.getAppPathForSlicer(slicerType).resolve(headType);
 
 		Map<String, String> settingsMap = loadHeadSettingsIntoMap(headProfilePath, slicerType);
 		RoboxProfile headProfile = new RoboxProfile(headType, headType, true, settingsMap);
@@ -141,28 +134,23 @@ public class RoboxProfileSettingsContainer {
 			LOGGER.error("File " + profileName + ", doesn't exist in profiles list for slicer: " + slicerType);
 		}
 
-		Path profilePath = OpenAutomakerEnv.get()
-				.getUserPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier())
-				.resolve(headType)
-				.resolve(profileName + ROBOXPROFILE);
+		File profileFile = printProfilesPathPreference.getUserPathForSlicer(slicerType).resolve(headType).resolve(profileName + DOT_ROBOXPROFILE).toFile();
+		if (!profileFile.exists())
+			return;
 
-		File profileFile = profilePath.toFile();
-		if (profileFile.exists())
-			profileFile.delete();
-		else
-			LOGGER.error("File could not be deleted as it doesn't exist. File path: " + profilePath.toString());
-
+		if (!profileFile.delete())
+			LOGGER.error("Could not delete file: " + profileFile.getAbsolutePath());
+		;
 	}
 
-	public void addProfileChangeListener(ListChangeListener listChangeListener) {
+	public void addProfileChangeListener(ListChangeListener<? super RoboxProfile> listChangeListener) {
 		for (Slicer slicerType : Slicer.values()) {
 			getCustomRoboxProfilesForSlicer(slicerType).values()
 					.forEach(observableList -> observableList.addListener(listChangeListener));
 		}
 	}
 
-	public void removeProfileChangeListener(ListChangeListener listChangeListener) {
+	public void removeProfileChangeListener(ListChangeListener<? super RoboxProfile> listChangeListener) {
 		for (Slicer slicerType : Slicer.values()) {
 			getCustomRoboxProfilesForSlicer(slicerType).values()
 					.forEach(observableList -> observableList.removeListener(listChangeListener));
@@ -170,15 +158,10 @@ public class RoboxProfileSettingsContainer {
 	}
 
 	private void loadRoboxProfiles(Slicer slicerType) {
-
-		loadRoboxProfilesIntoMap(OpenAutomakerEnv.get()
-				.getApplicationPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier()),
+		loadRoboxProfilesIntoMap(printProfilesPathPreference.getAppPathForSlicer(slicerType),
 				slicerType, true);
 
-		loadRoboxProfilesIntoMap(OpenAutomakerEnv.get()
-				.getUserPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier()),
+		loadRoboxProfilesIntoMap(printProfilesPathPreference.getUserPathForSlicer(slicerType),
 				slicerType, false);
 	}
 
@@ -204,7 +187,7 @@ public class RoboxProfileSettingsContainer {
 				ObservableList<RoboxProfile> customRoboxProfiles = FXCollections.observableArrayList();
 
 				for (File profile : headDir.listFiles((fileDir, fileName) -> {
-					return fileName.endsWith(ROBOXPROFILE);
+					return fileName.endsWith(DOT_ROBOXPROFILE);
 				})) {
 					String profileName = profile.getName().split("\\.")[0];
 					if (!profileName.equals(headType) && !usedNames.contains(profileName)) {
@@ -239,7 +222,7 @@ public class RoboxProfileSettingsContainer {
 
 	private static Map<String, String> loadHeadSettingsIntoMap(Path profilePath, Slicer slicerType) {
 
-		File headFile = profilePath.resolve(profilePath.getFileName() + ROBOXPROFILE).toFile();
+		File headFile = profilePath.resolve(profilePath.getFileName() + DOT_ROBOXPROFILE).toFile();
 
 		if (!headFile.exists()) {
 			LOGGER.warn("Head profile not found: " + headFile.toString());
@@ -272,7 +255,7 @@ public class RoboxProfileSettingsContainer {
 
 	private RoboxProfile saveUserProfile(String profileName, Slicer slicerType, Map<String, List<PrintProfileSetting>> settingsToWrite, String headType) {
 
-		Path profilePath = OpenAutomakerEnv.get().getUserPath(PRINT_PROFILES).resolve(slicerType.getPathModifier()).resolve(headType);
+		Path profilePath = printProfilesPathPreference.getUserPathForSlicer(slicerType).resolve(headType);
 		try {
 			Files.createDirectories(profilePath);
 		}
@@ -280,7 +263,7 @@ public class RoboxProfileSettingsContainer {
 			LOGGER.error("Could not create directory: " + profilePath.toString());
 		}
 
-		profilePath = profilePath.resolve(profileName + ROBOXPROFILE);
+		profilePath = profilePath.resolve(profileName + DOT_ROBOXPROFILE);
 
 		//String headDirPath = FileUtilities.findOrCreateFileInDir(BaseConfiguration.getUserPrintProfileDirectoryForSlicer(slicerType), headType);
 
@@ -296,10 +279,7 @@ public class RoboxProfileSettingsContainer {
 
 		writeRoboxProfile(profileFile, settingsToWrite, metaData);
 
-		Path headPath = OpenAutomakerEnv.get()
-				.getApplicationPath(PRINT_PROFILES)
-				.resolve(slicerType.getPathModifier())
-				.resolve(headType);
+		Path headPath = printProfilesPathPreference.getAppPathForSlicer(slicerType).resolve(headType);
 
 		Map<String, String> settingsMap = loadHeadSettingsIntoMap(headPath, slicerType);
 		addOrOverriteSettings(profileFile, settingsMap);

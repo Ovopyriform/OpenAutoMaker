@@ -3,9 +3,19 @@ package celtech.roboxbase.comms.remote;
 import java.nio.file.Path;
 
 import org.openautomaker.base.configuration.Filament;
+import org.openautomaker.base.configuration.datafileaccessors.PrinterContainer;
 import org.openautomaker.base.configuration.fileRepresentation.CameraSettings;
+import org.openautomaker.base.notification_manager.SystemNotificationManager;
 import org.openautomaker.base.postprocessor.PrintJobStatistics;
 import org.openautomaker.base.printerControl.model.Printer;
+import org.openautomaker.base.services.firmware.FirmwareLoadService;
+import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.preference.application.RequiredFirmwareVersionPreference;
+import org.openautomaker.environment.preference.printer.LastFirmwareVersionPreference;
+import org.openautomaker.environment.preference.printer.LastSerialNumberPreference;
+import org.openautomaker.environment.preference.root.FirmwarePathPreference;
+
+import com.google.inject.assistedinject.Assisted;
 
 import celtech.roboxbase.comms.CommandInterface;
 import celtech.roboxbase.comms.PrinterStatusConsumer;
@@ -16,167 +26,165 @@ import celtech.roboxbase.comms.rx.FirmwareError;
 import celtech.roboxbase.comms.rx.PrinterNotFound;
 import celtech.roboxbase.comms.rx.RoboxRxPacket;
 import celtech.roboxbase.comms.tx.RoboxTxPacket;
+import jakarta.inject.Inject;
 
 /**
  *
  * @author Ian Hudson @ Liberty Systems Limited
  */
-public class RoboxRemoteCommandInterface extends CommandInterface
-{
+public class RoboxRemoteCommandInterface extends CommandInterface {
 
-    private final RemoteClient remoteClient;
+	private final RemoteClient remoteClient;
 
-    public RoboxRemoteCommandInterface(PrinterStatusConsumer controlInterface,
-            RemoteDetectedPrinter printerHandle,
-            boolean suppressPrinterIDChecks, int sleepBetweenStatusChecks)
-    {
-        super(controlInterface, printerHandle, suppressPrinterIDChecks, sleepBetweenStatusChecks, false);
-        this.setName("RemoteCI:" + printerHandle.getConnectionHandle() + " " + this.getName());
-        remoteClient = new RemoteClient(printerHandle);
-    }
+	@Inject
+	public RoboxRemoteCommandInterface(
+			OpenAutomakerEnv environment,
+			SystemNotificationManager systemNotificationManager,
+			RequiredFirmwareVersionPreference requiredFirmwareVersionPreference,
+			FirmwarePathPreference firmwarePathPreference,
+			LastSerialNumberPreference lastSerialNumberPreference,
+			LastFirmwareVersionPreference lastFirmwareVersionPreference,
+			FirmwareLoadService firmwareLoadService,
+			PrinterContainer printerContainer,
+			@Assisted PrinterStatusConsumer controlInterface,
+			@Assisted RemoteDetectedPrinter printerHandle,
+			@Assisted boolean suppressPrinterIDChecks,
+			@Assisted int sleepBetweenStatusChecks) {
 
-    @Override
-    protected boolean connectToPrinterImpl()
-    {
-        boolean success = false;
-        try
-        {
-            remoteClient.connect(printerHandle.getConnectionHandle());
-            success = true;
-        } catch (RoboxCommsException ex)
-        {
+		super(environment,
+				systemNotificationManager,
+				requiredFirmwareVersionPreference,
+				firmwarePathPreference,
+				lastSerialNumberPreference,
+				lastFirmwareVersionPreference,
+				firmwareLoadService,
+				printerContainer,
+				controlInterface,
+				printerHandle,
+				suppressPrinterIDChecks,
+				sleepBetweenStatusChecks,
+				false);
+
+		this.setName("RemoteCI:" + printerHandle.getConnectionHandle() + " " + this.getName());
+		remoteClient = new RemoteClient(printerHandle);
+	}
+
+	@Override
+	protected boolean connectToPrinterImpl() {
+		boolean success = false;
+		try {
+			remoteClient.connect(printerHandle.getConnectionHandle());
+			success = true;
+		}
+		catch (RoboxCommsException ex) {
 			LOGGER.error("Failed to connect to printer");
-        }
-        return success;
-    }
+		}
+		return success;
+	}
 
-    @Override
-    protected void disconnectPrinterImpl()
-    {
-        try
-        {
-            remoteClient.disconnect(printerHandle.getConnectionHandle());
-        } catch (RoboxCommsException ex)
-        {
+	@Override
+	protected void disconnectPrinterImpl() {
+		try {
+			remoteClient.disconnect(printerHandle.getConnectionHandle());
+		}
+		catch (RoboxCommsException ex) {
 			LOGGER.error("Failed to disconnect from printer");
-        }
-    }
+		}
+	}
 
-    @Override
-    public synchronized RoboxRxPacket writeToPrinterImpl(RoboxTxPacket messageToWrite,
-            boolean dontPublishResult) throws RoboxCommsException
-    {
-        RoboxRxPacket rxPacket = remoteClient.writeToPrinter(printerHandle.getConnectionHandle(), messageToWrite);
+	@Override
+	public synchronized RoboxRxPacket writeToPrinterImpl(RoboxTxPacket messageToWrite,
+			boolean dontPublishResult) throws RoboxCommsException {
+		RoboxRxPacket rxPacket = remoteClient.writeToPrinter(printerHandle.getConnectionHandle(), messageToWrite);
 
-        if (rxPacket != null)
-        {
-            if (rxPacket instanceof PrinterNotFound)
-            {
-                actionOnCommsFailure();
-            } else if (!dontPublishResult)
-            {
-                printerToUse.processRoboxResponse(rxPacket);
-            }
-        }
+		if (rxPacket != null) {
+			if (rxPacket instanceof PrinterNotFound) {
+				actionOnCommsFailure();
+			}
+			else if (!dontPublishResult) {
+				printerToUse.processRoboxResponse(rxPacket);
+			}
+		}
 
-        return rxPacket;
-    }
+		return rxPacket;
+	}
 
-    private void actionOnCommsFailure() throws ConnectionLostException
-    {
-        //If we get an exception then abort and treat
+	private void actionOnCommsFailure() throws ConnectionLostException {
+		//If we get an exception then abort and treat
 		LOGGER.debug("Error during write to printer");
-        shutdown();
-        throw new ConnectionLostException();
-    }
+		shutdown();
+		throw new ConnectionLostException();
+	}
 
-    void setPrinterToUse(Printer newPrinter)
-    {
-        this.printerToUse = newPrinter;
-    }
+	void setPrinterToUse(Printer newPrinter) {
+		this.printerToUse = newPrinter;
+	}
 
-    /**
-     *
-     * @param sleepMillis
-     */
-    @Override
-    public void setSleepBetweenStatusChecks(int sleepMillis)
-    {
-        sleepBetweenStatusChecks = sleepMillis;
-    }
+	/**
+	 *
+	 * @param sleepMillis
+	 */
+	@Override
+	public void setSleepBetweenStatusChecks(int sleepMillis) {
+		sleepBetweenStatusChecks = sleepMillis;
+	}
 
-    @Override
-    public void clearAllErrors()
-    {
-        try
-        {
-            remoteClient.clearAllErrors(printerHandle.getConnectionHandle());
-        }
-        catch (RoboxCommsException ex)
-        {
-        }
-    }
+	@Override
+	public void clearAllErrors() {
+		try {
+			remoteClient.clearAllErrors(printerHandle.getConnectionHandle());
+		}
+		catch (RoboxCommsException ex) {
+		}
+	}
 
-    @Override
-    public void clearError(FirmwareError error)
-    {
-        try
-        {
-            remoteClient.clearError(printerHandle.getConnectionHandle(), error);
-        }
-        catch (RoboxCommsException ex)
-        {
-        }
-    }
-    
-    public boolean cancelPrint(boolean safetyOn)
-    {
-        boolean success = true;
-        try
-        {
-            remoteClient.cancelPrint(printerHandle.getConnectionHandle(), safetyOn);
-        }
-        catch (RoboxCommsException ex)
-        {
-            success = false;
-        }
-        
-        return success;
-    }
+	@Override
+	public void clearError(FirmwareError error) {
+		try {
+			remoteClient.clearError(printerHandle.getConnectionHandle(), error);
+		}
+		catch (RoboxCommsException ex) {
+		}
+	}
 
-    public void sendStatistics(PrintJobStatistics printJobStatistics) throws RoboxCommsException
-    {
-        remoteClient.sendStatistics(printerHandle.getConnectionHandle(), printJobStatistics);
-    }
+	public boolean cancelPrint(boolean safetyOn) {
+		boolean success = true;
+		try {
+			remoteClient.cancelPrint(printerHandle.getConnectionHandle(), safetyOn);
+		}
+		catch (RoboxCommsException ex) {
+			success = false;
+		}
 
-    public PrintJobStatistics retrieveStatistics() throws RoboxCommsException
-    {
-        return remoteClient.retrieveStatistics(printerHandle.getConnectionHandle());
-    }
+		return success;
+	}
 
-    public void sendCameraData(String printJobID, CameraSettings cameraData) throws RoboxCommsException
-    {
-        remoteClient.sendCameraData(printerHandle.getConnectionHandle(), printJobID, cameraData);
-    }
+	public void sendStatistics(PrintJobStatistics printJobStatistics) throws RoboxCommsException {
+		remoteClient.sendStatistics(printerHandle.getConnectionHandle(), printJobStatistics);
+	}
 
-    public CameraSettings retrieveCameraData(String printJobID) throws RoboxCommsException
-    {
-        return remoteClient.retrieveCameraData(printerHandle.getConnectionHandle(), printJobID);
-    }
+	public PrintJobStatistics retrieveStatistics() throws RoboxCommsException {
+		return remoteClient.retrieveStatistics(printerHandle.getConnectionHandle());
+	}
 
-    public void overrideFilament(int reelNumber, Filament filament) throws RoboxCommsException
-    {
-        remoteClient.overrideFilament(printerHandle.getConnectionHandle(), reelNumber, filament);
-    }
-    
-    public void startPrintJob(String printJobID) throws RoboxCommsException
-    {
-        remoteClient.startPrintJob(printerHandle.getConnectionHandle(), printJobID);
-    }
+	public void sendCameraData(String printJobID, CameraSettings cameraData) throws RoboxCommsException {
+		remoteClient.sendCameraData(printerHandle.getConnectionHandle(), printJobID, cameraData);
+	}
 
-	public void printGCodeFile(Path remoteFileName) throws RoboxCommsException
-    {
-        remoteClient.printGCodeFile(printerHandle.getConnectionHandle(), remoteFileName);
-    }
+	public CameraSettings retrieveCameraData(String printJobID) throws RoboxCommsException {
+		return remoteClient.retrieveCameraData(printerHandle.getConnectionHandle(), printJobID);
+	}
+
+	public void overrideFilament(int reelNumber, Filament filament) throws RoboxCommsException {
+		remoteClient.overrideFilament(printerHandle.getConnectionHandle(), reelNumber, filament);
+	}
+
+	public void startPrintJob(String printJobID) throws RoboxCommsException {
+		remoteClient.startPrintJob(printerHandle.getConnectionHandle(), printJobID);
+	}
+
+	public void printGCodeFile(Path remoteFileName) throws RoboxCommsException {
+		remoteClient.printGCodeFile(printerHandle.getConnectionHandle(), remoteFileName);
+	}
 
 }

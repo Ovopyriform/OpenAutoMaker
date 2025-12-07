@@ -7,7 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.openautomaker.base.utils.Math.MathUtils;
-import org.openautomaker.environment.preference.LocalePreference;
+import org.openautomaker.environment.preference.l10n.LocalePreference;
 
 import celtech.coreUI.DisplayManager;
 import javafx.beans.property.BooleanProperty;
@@ -228,6 +228,7 @@ public class RestrictedNumberField extends TextField {
 	/**
 	 *
 	 */
+	//TODO: This should have the display manager injected
 	public RestrictedNumberField() {
 		this.getStyleClass().add(this.getClass().getSimpleName());
 
@@ -337,7 +338,7 @@ public class RestrictedNumberField extends TextField {
 			return numberFormatter;
 
 		try {
-			numberFormatter = NumberFormat.getInstance(new LocalePreference().get());
+			numberFormatter = NumberFormat.getInstance(new LocalePreference().getValue());
 		}
 		catch (NoClassDefFoundError ex) {
 			//We should only be here if we're being loaded by Scene Builder
@@ -352,7 +353,7 @@ public class RestrictedNumberField extends TextField {
 	private String getDecimalSeparator() {
 		if (decimalSeparator == null) {
 			try {
-				decimalSeparator = Character.toString(new DecimalFormatSymbols(new LocalePreference().get()).getDecimalSeparator());
+				decimalSeparator = Character.toString(new DecimalFormatSymbols(new LocalePreference().getValue()).getDecimalSeparator());
 			}
 			catch (NoClassDefFoundError ex) {
 				//We should only be here if we're being loaded by Scene Builder

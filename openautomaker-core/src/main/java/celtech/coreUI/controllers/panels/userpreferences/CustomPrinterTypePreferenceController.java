@@ -5,6 +5,7 @@ import org.openautomaker.environment.PrinterType;
 import org.openautomaker.environment.preference.virtual_printer.VirtualPrinterTypePreference;
 
 import celtech.coreUI.controllers.panels.PreferencesInnerPanelController;
+import jakarta.inject.Inject;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.scene.control.ComboBox;
@@ -19,9 +20,7 @@ import javafx.util.Callback;
  */
 public class CustomPrinterTypePreferenceController implements PreferencesInnerPanelController.Preference {
 
-	private final ComboBox<PrinterType> fControl;
-
-	private final VirtualPrinterTypePreference fVirtualPrinterTypePreference;
+	private final ComboBox<PrinterType> control;
 
 	/**
 	 * Custom ListCell implementation to display the correct text
@@ -36,31 +35,36 @@ public class CustomPrinterTypePreferenceController implements PreferencesInnerPa
 
 	}
 
-	public CustomPrinterTypePreferenceController() {
+	private final I18N i18n;
 
-		fVirtualPrinterTypePreference = new VirtualPrinterTypePreference();
+	@Inject
+	public CustomPrinterTypePreferenceController(
+			I18N i18n,
+			VirtualPrinterTypePreference virtualPrinterTypePreference) {
 
-		fControl = new ComboBox<>();
-		fControl.getStyleClass().add("cmbCleanCombo");
-		fControl.setMinWidth(200);
-		fControl.autosize();
+		this.i18n = i18n;
 
-		fControl.setItems(FXCollections.observableList(fVirtualPrinterTypePreference.values()));
+		control = new ComboBox<>();
+		control.getStyleClass().add("cmbCleanCombo");
+		control.setMinWidth(200);
+		control.autosize();
+
+		control.setItems(FXCollections.observableList(virtualPrinterTypePreference.values()));
 
 		// Setup display
 		Callback<ListView<PrinterType>, ListCell<PrinterType>> cellFactory = (listView) -> new VirtualPrinterTypeListCell();
-		fControl.setButtonCell(cellFactory.call(null));
-		fControl.setCellFactory(cellFactory);
+		control.setButtonCell(cellFactory.call(null));
+		control.setCellFactory(cellFactory);
 
-		SelectionModel<PrinterType> selectionModel = fControl.getSelectionModel();
+		SelectionModel<PrinterType> selectionModel = control.getSelectionModel();
 
 		// Set initial value
-		selectionModel.select(fVirtualPrinterTypePreference.get());
+		selectionModel.select(virtualPrinterTypePreference.getValue());
 
 		// Listen for changes
 		selectionModel.selectedItemProperty()
 				.addListener((observable, oldValue, newValue) -> {
-					fVirtualPrinterTypePreference.set(newValue);
+					virtualPrinterTypePreference.setValue(newValue);
 				});
 	}
 
@@ -74,18 +78,18 @@ public class CustomPrinterTypePreferenceController implements PreferencesInnerPa
 
 	@Override
 	public Control getControl() {
-		return fControl;
+		return control;
 	}
 
 	@Override
 	public String getDescription() {
-		return new I18N().t("preferences.printerType");
+		return i18n.t("preferences.printerType");
 	}
 
 	@Override
 	public void disableProperty(ObservableValue<Boolean> disableProperty) {
-		fControl.disableProperty().unbind();
-		fControl.disableProperty().bind(disableProperty);
+		control.disableProperty().unbind();
+		control.disableProperty().bind(disableProperty);
 	}
 
 }

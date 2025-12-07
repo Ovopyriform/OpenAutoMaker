@@ -1,48 +1,38 @@
 package celtech.crypto;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import java.nio.file.Path;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openautomaker.base.crypto.CryptoFileStore;
+import org.openautomaker.environment.preference.application.HomePathPreference;
+import org.openautomaker.test_library.GuiceExtension;
 
-/**
- *
- * @author Ian
- */
+import jakarta.inject.Inject;
+
+@ExtendWith(GuiceExtension.class)
 public class CryptoStoreTest {
 
-	public CryptoStoreTest() {
-	}
+	private static final Logger LOGGER = LogManager.getLogger();
 
-	@BeforeClass
-	public static void setUpClass() {
-	}
-
-	@AfterClass
-	public static void tearDownClass() {
-	}
-
-	@Before
-	public void setUp() {
-	}
-
-	@After
-	public void tearDown() {
-	}
+	@Inject
+	HomePathPreference homePathPreference;
 
 	/**
 	 * Test of decrypt method, of class CryptoFileStore.
 	 */
 	@Test
 	public void testEncryptDecryptIntegrity() throws Exception {
-		System.out.println("Encrypt<->Decrypt integrity");
+		LOGGER.info("Encrypt<->Decrypt integrity");
 
-		CryptoFileStore instance = new CryptoFileStore("fred.dat", "abbabbdif");
+		Path cryptoStoreFilePath = homePathPreference.getUserValue().resolve("CryptoStoreTest.testEncryptDecryptIntegrity.dat");
+
+		CryptoFileStore instance = new CryptoFileStore(cryptoStoreFilePath, "crazy pass phrase");
 
 		String stringToEncrypt = "hello world!";
 
@@ -50,9 +40,7 @@ public class CryptoStoreTest {
 		String secondAttemptAtencryptedString = instance.encrypt(stringToEncrypt);
 		String decryptedString = instance.decrypt(encryptedString);
 
-		String expectedEncryptionResult = "YWRb+KFoLjU8rp86Nd5BAQ==";
 		assertEquals(encryptedString, secondAttemptAtencryptedString);
-		assertEquals(expectedEncryptionResult, encryptedString);
 		assertEquals(stringToEncrypt, decryptedString);
 	}
 
@@ -61,17 +49,22 @@ public class CryptoStoreTest {
 	 */
 	@Test
 	public void testEncryptDecryptUniqueness() throws Exception {
-		System.out.println("Encrypt uniqueness");
+		LOGGER.info("Encrypt uniqueness");
 
-		CryptoFileStore firstCryptoStore = new CryptoFileStore("fred.dat", "jjhjhfif");
-		CryptoFileStore secondCryptoStore = new CryptoFileStore("fred2.dat", "lkfligu");
+		Path homePath = homePathPreference.getUserValue();
+
+		CryptoFileStore firstCryptoStore = new CryptoFileStore(homePath.resolve("CryptoStoreTest.testEncryptDecryptUniqueness.0.dat"), "crazy pass phrase");
+		CryptoFileStore secondCryptoStore = new CryptoFileStore(homePath.resolve("CryptoStoreTest.testEncryptDecryptUniqueness.0.dat"), "another crazy pass phrase");
 
 		String stringToEncrypt = "hello world!";
 
 		String firstEncryption = firstCryptoStore.encrypt(stringToEncrypt);
 		String secondEncryption = secondCryptoStore.encrypt(stringToEncrypt);
 		String firstDecryptedString = firstCryptoStore.decrypt(firstEncryption);
-		String secondDecryptedString = secondCryptoStore.decrypt(firstEncryption);
+
+		LOGGER.info("Expect BadPaddingException");
+		String secondDecryptedString = "bad string";
+		secondDecryptedString = secondCryptoStore.decrypt(firstEncryption);
 
 		assertNotSame(firstEncryption, secondEncryption);
 		assertEquals(stringToEncrypt, firstDecryptedString);

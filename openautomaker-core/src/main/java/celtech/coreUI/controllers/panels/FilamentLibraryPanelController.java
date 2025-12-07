@@ -3,26 +3,24 @@ package celtech.coreUI.controllers.panels;
 import static org.openautomaker.base.utils.ColourStringConverter.colourToString;
 import static org.openautomaker.base.utils.ColourStringConverter.stringToColor;
 
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.base.BaseLookup;
 import org.openautomaker.base.MaterialType;
 import org.openautomaker.base.configuration.Filament;
 import org.openautomaker.base.configuration.datafileaccessors.FilamentContainer;
+import org.openautomaker.base.device.PrinterManager;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.PrinterListChangesAdapter;
 import org.openautomaker.base.printerControl.model.PrinterListChangesListener;
 import org.openautomaker.base.printerControl.model.Reel;
 import org.openautomaker.environment.preference.advanced.AdvancedModePreference;
-import org.openautomaker.ui.utils.FXProperty;
+import org.openautomaker.javafx.FXProperty;
+import org.openautomaker.ui.state.SelectedPrinter;
 
-import celtech.Lookup;
 import celtech.coreUI.components.RestrictedNumberField;
 import celtech.coreUI.components.RestrictedTextField;
 import celtech.coreUI.components.material.FilamentMenuButton;
@@ -30,6 +28,7 @@ import celtech.coreUI.components.material.FilamentSelectionListener;
 import celtech.coreUI.components.material.SpecialItemSelectionListener;
 import celtech.roboxbase.comms.exceptions.RoboxCommsException;
 import celtech.roboxbase.comms.remote.EEPROMState;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
@@ -43,7 +42,6 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
-import javafx.fxml.Initializable;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextArea;
@@ -51,10 +49,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.paint.Color;
 
-public class FilamentLibraryPanelController implements Initializable, MenuInnerPanel, FilamentSelectionListener, SpecialItemSelectionListener {
+public class FilamentLibraryPanelController implements MenuInnerPanel, FilamentSelectionListener, SpecialItemSelectionListener {
 
-	private static final Logger LOGGER = LogManager.getLogger(
-			FilamentLibraryPanelController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private final PseudoClass ERROR = PseudoClass.getPseudoClass("error");
 
@@ -92,7 +89,7 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 
 	private String currentFilamentID;
 	private final ObjectProperty<Printer> currentPrinter = new SimpleObjectProperty<>();
-	private final FilamentContainer filamentContainer = FilamentContainer.getInstance();
+
 	private PrinterListChangesListener listener;
 
 	private Filament currentFilament;
@@ -181,13 +178,31 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 		}
 	}
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
+	private final AdvancedModePreference advancedModePreference;
+	private final FilamentContainer filamentContainer;
+	private final PrinterManager printerManager;
+	private final SelectedPrinter selectedPrinter;
+
+	@Inject
+	protected FilamentLibraryPanelController(
+			AdvancedModePreference advancedModePreference,
+			FilamentContainer filamentContainer,
+			PrinterManager printerManager,
+			SelectedPrinter selectedPrinter) {
+
+		this.advancedModePreference = advancedModePreference;
+		this.filamentContainer = filamentContainer;
+		this.printerManager = printerManager;
+		this.selectedPrinter = selectedPrinter;
+
+	}
+
+	public void initialize() {
 		currentFilament = filamentMenuButton.initialiseButton(this, this, false);
 
 		updateSaveBindings();
 
-		BooleanProperty advancedModeProperty = FXProperty.bind(new AdvancedModePreference());
+		BooleanProperty advancedModeProperty = FXProperty.bind(advancedModePreference);
 
 		canSaveAs.bind(state.isNotEqualTo(State.NEW).and(advancedModeProperty));
 
@@ -197,13 +212,12 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 
 		isValid.bind(isNameValid.and(isNozzleTempValid));
 
-		currentPrinter.bind(Lookup.getSelectedPrinterProperty());
+		currentPrinter.bind(selectedPrinter);
 		updatePrinter(null, currentPrinter.get());
 
-		currentPrinter.addListener(
-				(ObservableValue<? extends Printer> observable, Printer oldValue, Printer newValue) -> {
-					updatePrinter(oldValue, newValue);
-				});
+		currentPrinter.addListener((observable, oldValue, newValue) -> {
+			updatePrinter(oldValue, newValue);
+		});
 
 		for (MaterialType materialType : MaterialType.values()) {
 			material.getItems().add(materialType);
@@ -248,7 +262,7 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 			}
 
 		};
-		BaseLookup.getPrinterListChangesNotifier().addListener(listener);
+		printerManager.getPrinterChangeNotifier().addListener(listener);
 	}
 
 	private void updateSaveBindings() {
@@ -280,17 +294,15 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 				filament1OfDifferentID = !loadedFilamentID1.get().equals(currentFilamentID);
 			}
 
-			AdvancedModePreference advancedModePreference = new AdvancedModePreference();
-
 			if ((currentPrinter.get().reelsProperty().containsKey(0)
-					&& (advancedModePreference.get() || state.get() == State.ROBOX)
+					&& (advancedModePreference.getValue() || state.get() == State.ROBOX)
 					&& (filament0OfDifferentID || !currentFilament.equals(currentFilamentAsEdited)
 							|| !remainingOnReelM.getText().equals(REMAINING_ON_REEL_UNCHANGED)))
 					|| currentPrinter.get().getReelEEPROMStateProperty().get(0) == EEPROMState.NOT_PROGRAMMED) {
 				canWriteToReel1.set(true);
 			}
 			if ((currentPrinter.get().reelsProperty().containsKey(1)
-					&& (advancedModePreference.get() || state.get() == State.ROBOX)
+					&& (advancedModePreference.getValue() || state.get() == State.ROBOX)
 					&& (filament1OfDifferentID || !currentFilament.equals(currentFilamentAsEdited)
 							|| !remainingOnReelM.getText().equals(REMAINING_ON_REEL_UNCHANGED)))
 					|| currentPrinter.get().getReelEEPROMStateProperty().get(1) == EEPROMState.NOT_PROGRAMMED) {
@@ -343,17 +355,16 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 
 	private void setupWidgetChangeListeners() {
 
-		name.textProperty().addListener(
-				(ObservableValue<? extends String> observable, String oldValue, String newValue) -> {
-					if (!validateMaterialName(newValue)) {
-						isNameValid.set(false);
-						name.pseudoClassStateChanged(ERROR, true);
-					}
-					else {
-						isNameValid.set(true);
-						name.pseudoClassStateChanged(ERROR, false);
-					}
-				});
+		name.textProperty().addListener((observable, oldValue, newValue) -> {
+			if (!validateMaterialName(newValue)) {
+				isNameValid.set(false);
+				name.pseudoClassStateChanged(ERROR, true);
+			}
+			else {
+				isNameValid.set(true);
+				name.pseudoClassStateChanged(ERROR, false);
+			}
+		});
 
 		name.textProperty().addListener(dirtyStringListener);
 		colour.valueProperty().addListener(
@@ -396,7 +407,7 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 		remainingOnReelM.disableProperty().bind(isEditable.not());
 	}
 
-	private final ChangeListener<String> dirtyStringListener = (ObservableValue<? extends String> ov, String t, String t1) -> {
+	private final ChangeListener<String> dirtyStringListener = (observable, oldValue, newValue) -> {
 		if (!suspendDirtyTriggers) {
 			isDirty.set(true);
 			currentFilamentAsEdited = currentFilament.clone();
@@ -406,7 +417,7 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 		}
 	};
 
-	private final ChangeListener<Boolean> dirtyBooleanListener = (ObservableValue<? extends Boolean> ov, Boolean t, Boolean t1) -> {
+	private final ChangeListener<Boolean> dirtyBooleanListener = (observable, oldValue, newValue) -> {
 		if (!suspendDirtyTriggers) {
 			isDirty.set(true);
 			currentFilamentAsEdited = currentFilament.clone();
@@ -416,7 +427,7 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 		}
 	};
 
-	private final ChangeListener<MaterialType> dirtyMaterialTypeListener = (ObservableValue<? extends MaterialType> ov, MaterialType t, MaterialType t1) -> {
+	private final ChangeListener<MaterialType> dirtyMaterialTypeListener = (observable, oldValue, newValue) -> {
 		if (!suspendDirtyTriggers) {
 			isDirty.set(true);
 			currentFilamentAsEdited = currentFilament.clone();
@@ -508,21 +519,23 @@ public class FilamentLibraryPanelController implements Initializable, MenuInnerP
 
 	private boolean validateMaterialName(String name) {
 
+		if (name.equals(""))
+			return false;
+
+		if (currentFilamentID != null && !currentFilamentID.startsWith("U"))
+			return false;
+
 		boolean valid = true;
 
-		if (name.equals("")) {
-			valid = false;
-		}
-		else if (currentFilamentID == null || currentFilamentID.startsWith("U")) {
-			ObservableList<Filament> existingMaterialList = filamentContainer.getCompleteFilamentList();
-			for (Filament existingMaterial : existingMaterialList) {
-				if ((!existingMaterial.getFilamentID().equals(currentFilamentID))
-						&& existingMaterial.getFriendlyFilamentName().equals(name)) {
-					valid = false;
-					break;
-				}
+		ObservableList<Filament> existingMaterialList = filamentContainer.getCompleteFilamentList();
+		for (Filament existingMaterial : existingMaterialList) {
+			if ((!existingMaterial.getFilamentID().equals(currentFilamentID))
+					&& existingMaterial.getFriendlyFilamentName().equals(name)) {
+				valid = false;
+				break;
 			}
 		}
+
 		return valid;
 	}
 

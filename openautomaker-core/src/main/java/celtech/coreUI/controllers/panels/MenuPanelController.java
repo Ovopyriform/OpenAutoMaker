@@ -1,28 +1,29 @@
 package celtech.coreUI.controllers.panels;
 
 import java.io.IOException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
+import org.openautomaker.guice.FXMLLoaderFactory;
 
 import celtech.appManager.ApplicationStatus;
 import celtech.coreUI.components.VerticalMenu;
+import jakarta.inject.Inject;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.fxml.Initializable;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
-public abstract class MenuPanelController implements Initializable {
+public abstract class MenuPanelController {
+
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	protected class InnerPanelDetails {
 
@@ -35,11 +36,23 @@ public abstract class MenuPanelController implements Initializable {
 		}
 	}
 
+	@Inject
+	private I18N i18n;
+
+	@Inject
+	private FXMLLoaderFactory fxmlLoaderFactory;
+
+	@Inject
+	private ApplicationStatus applicationStatus;
+
+	private ButtonBox buttonBox;
+
+
+	protected MenuPanelController() {
+
+	}
+
 	List<InnerPanelDetails> innerPanelDetails = new ArrayList<>();
-
-	private static final Logger LOGGER = LogManager.getLogger(MenuPanelController.class.getName());
-
-	private ResourceBundle resources;
 
 	@FXML
 	protected VerticalMenu panelMenu;
@@ -51,25 +64,21 @@ public abstract class MenuPanelController implements Initializable {
 	private HBox buttonBoxContainer;
 
 	InnerPanelDetails profileDetails;
-	ProfileLibraryPanelController profileDetailsController;
+	//ProfileLibraryPanelController profileDetailsController;
 
 	protected String paneli18Name = "";
 
 	private final ObjectProperty<MenuInnerPanel> innerPanelProperty = new SimpleObjectProperty<>(null);
 
-	@Override
-	public void initialize(URL location, ResourceBundle resources) {
-
-		this.resources = resources;
-
-		ButtonBox buttonBox = new ButtonBox(innerPanelProperty);
+	public void initialize() {
+		buttonBox = new ButtonBox(innerPanelProperty);
+		//buttonBox.setExtrasMenuInnerPanelProperty(innerPanelProperty);
 		buttonBoxContainer.getChildren().add(buttonBox);
 
 		setupInnerPanels();
-
 		buildExtras();
 
-		//        DisplayManager.getInstance().getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>()
+		//        fDisplayManager.getDisplayScalingModeProperty().addListener(new ChangeListener<DisplayManager.DisplayScalingMode>()
 		//        {
 		//
 		//            @Override
@@ -100,16 +109,17 @@ public abstract class MenuPanelController implements Initializable {
 	 * Load the given inner panel.
 	 *
 	 * @param fxmlLocation
-	 * @param extrasMenuInnerPanel
+	 * @param controller
 	 * @return
 	 */
-	protected InnerPanelDetails loadInnerPanel(String fxmlLocation, MenuInnerPanel extrasMenuInnerPanel) {
-		URL fxmlURL = getClass().getResource(fxmlLocation);
-		FXMLLoader loader = new FXMLLoader(fxmlURL, resources);
-		loader.setController(extrasMenuInnerPanel);
+	protected InnerPanelDetails loadInnerPanel(String fxmlLocation, MenuInnerPanel controllerClass) {
+		FXMLLoader fxmlLoader = fxmlLoaderFactory.create(getClass().getResource(fxmlLocation));
+		fxmlLoader.setController(controllerClass);
+
 		try {
-			Node node = loader.load();
-			InnerPanelDetails innerPanelDetails = new InnerPanelDetails(node, extrasMenuInnerPanel);
+			Node node = fxmlLoader.load();
+			//TODO: This probably needs to be injected.
+			InnerPanelDetails innerPanelDetails = new InnerPanelDetails(node, controllerClass);
 			this.innerPanelDetails.add(innerPanelDetails);
 			return innerPanelDetails;
 		}
@@ -123,10 +133,10 @@ public abstract class MenuPanelController implements Initializable {
 	 * For each InnerPanel, create a menu item that will open it.
 	 */
 	private void buildExtras() {
-		panelMenu.setTitle(OpenAutomakerEnv.getI18N().t(paneli18Name));
+		panelMenu.setTitle(i18n.t(paneli18Name));
 
 		for (InnerPanelDetails innerPanelDetails : innerPanelDetails) {
-			panelMenu.addItem(OpenAutomakerEnv.getI18N().t(innerPanelDetails.innerPanel.getMenuTitle()), () -> {
+			panelMenu.addItem(i18n.t(innerPanelDetails.innerPanel.getMenuTitle()), () -> {
 				openInnerPanel(innerPanelDetails);
 			}, null);
 		}
@@ -144,6 +154,6 @@ public abstract class MenuPanelController implements Initializable {
 
 	@FXML
 	private void okPressed(ActionEvent event) {
-		ApplicationStatus.getInstance().returnToLastMode();
+		applicationStatus.returnToLastMode();
 	}
 }

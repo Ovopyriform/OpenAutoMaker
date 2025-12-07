@@ -1,12 +1,9 @@
-/*
- * Copyright 2015 CEL UK
- */
 package celtech.utils.threed;
 
 import static celtech.utils.threed.TriangleCutterTest.makeNullConverter;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -15,15 +12,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.testfx.framework.junit5.ApplicationExtension;
+import org.testfx.framework.junit5.utils.FXUtils;
 
 import javafx.geometry.Point3D;
 import javafx.scene.shape.TriangleMesh;
 
-/**
- *
- * @author tony
- */
+@ExtendWith(ApplicationExtension.class)
 public class NonManifoldLoopDetectorTest {
 
 	public static TriangleMesh createSimpleCubeWithMissingFace() {
@@ -53,22 +50,24 @@ public class NonManifoldLoopDetectorTest {
 	}
 
 	@Test
-	public void testGetNonManifoldEdges() {
-		MeshCutter2.BedToLocalConverter nullBedToLocalConverter = makeNullConverter();
-		TriangleMesh mesh = createSimpleCubeWithMissingFace();
-		Set<ManifoldEdge> edges = NonManifoldLoopDetector.getNonManifoldEdges(mesh,
-				nullBedToLocalConverter);
+	public void testGetNonManifoldEdges() throws Exception {
+		FXUtils.runAndWait(() -> {
+			MeshCutter2.BedToLocalConverter nullBedToLocalConverter = makeNullConverter();
+			TriangleMesh mesh = createSimpleCubeWithMissingFace();
+			Set<ManifoldEdge> edges = NonManifoldLoopDetector.getNonManifoldEdges(mesh,
+					nullBedToLocalConverter);
 
-		Set<ManifoldEdge> expectedEdges = new HashSet<>();
-		Point3D point0InBed = MeshCutter2.makePoint3D(mesh, 0);
-		Point3D point1InBed = MeshCutter2.makePoint3D(mesh, 1);
-		Point3D point2InBed = MeshCutter2.makePoint3D(mesh, 2);
+			Set<ManifoldEdge> expectedEdges = new HashSet<>();
+			Point3D point0InBed = MeshCutter2.makePoint3D(mesh, 0);
+			Point3D point1InBed = MeshCutter2.makePoint3D(mesh, 1);
+			Point3D point2InBed = MeshCutter2.makePoint3D(mesh, 2);
 
-		expectedEdges.add(new ManifoldEdge(0, 1, point0InBed, point1InBed, 1));
-		expectedEdges.add(new ManifoldEdge(1, 2, point1InBed, point2InBed, 4));
-		expectedEdges.add(new ManifoldEdge(0, 2, point0InBed, point2InBed, 0));
+			expectedEdges.add(new ManifoldEdge(0, 1, point0InBed, point1InBed, 1));
+			expectedEdges.add(new ManifoldEdge(1, 2, point1InBed, point2InBed, 4));
+			expectedEdges.add(new ManifoldEdge(0, 2, point0InBed, point2InBed, 0));
 
-		assertEquals(expectedEdges, edges);
+			assertEquals(expectedEdges, edges);
+		});
 	}
 
 	@Test

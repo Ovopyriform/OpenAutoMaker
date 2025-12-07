@@ -2,114 +2,73 @@ package org.openautomaker.base.importers.twod.svg;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.openautomaker.base.importers.twod.svg.DragKnifeCompensator;
+
+import org.junit.jupiter.api.Test;
 import org.openautomaker.base.postprocessor.nouveau.nodes.GCodeEventNode;
 import org.openautomaker.base.postprocessor.nouveau.nodes.StylusScribeNode;
 import org.openautomaker.base.postprocessor.nouveau.nodes.TravelNode;
-import org.openautomaker.base.postprocessor.nouveau.nodes.providers.Movement;
-import org.openautomaker.base.postprocessor.nouveau.nodes.providers.MovementProvider;
 import org.openautomaker.base.postprocessor.nouveau.nodes.providers.Renderable;
 
-import static org.junit.Assert.*;
+//TODO: This test calculates stuff but never asserts it.
+public class DragKnifeCompensatorTest {
 
-/**
- *
- * @author Ian
- */
-public class DragKnifeCompensatorTest
-{
+	/**
+	 * Test of doCompensation method, of class DragKnifeCompensator.
+	 */
+	@Test
+	public void testDoCompensation() {
+		System.out.println("doCompensation");
+		List<GCodeEventNode> uncompensatedParts = new ArrayList<>();
 
-    public DragKnifeCompensatorTest()
-    {
-    }
+		TravelNode travelToStart = new TravelNode();
+		travelToStart.getMovement().setX(100);
+		travelToStart.getMovement().setY(100);
+		uncompensatedParts.add(travelToStart);
 
-    @BeforeClass
-    public static void setUpClass()
-    {
-    }
+		StylusScribeNode firstCut = new StylusScribeNode();
+		firstCut.getMovement().setX(100);
+		firstCut.getMovement().setY(110);
+		uncompensatedParts.add(firstCut);
 
-    @AfterClass
-    public static void tearDownClass()
-    {
-    }
+		StylusScribeNode secondCut = new StylusScribeNode();
+		secondCut.getMovement().setX(110);
+		secondCut.getMovement().setY(110);
+		uncompensatedParts.add(secondCut);
 
-    @Before
-    public void setUp()
-    {
-    }
+		StylusScribeNode thirdCut = new StylusScribeNode();
+		thirdCut.getMovement().setX(110);
+		thirdCut.getMovement().setY(100);
+		uncompensatedParts.add(thirdCut);
 
-    @After
-    public void tearDown()
-    {
-    }
+		StylusScribeNode fourthCut = new StylusScribeNode();
+		fourthCut.getMovement().setX(100);
+		fourthCut.getMovement().setY(100);
+		uncompensatedParts.add(fourthCut);
 
-    /**
-     * Test of doCompensation method, of class DragKnifeCompensator.
-     */
-    @Test
-    public void testDoCompensation()
-    {
-        System.out.println("doCompensation");
-        List<GCodeEventNode> uncompensatedParts = new ArrayList<>();
+		double forwards_value = 2.0;
+		List<GCodeEventNode> expResult = null;
+		DragKnifeCompensator dnc = new DragKnifeCompensator();
+		List<GCodeEventNode> result = dnc.doCompensation(uncompensatedParts, forwards_value);
 
-        TravelNode travelToStart = new TravelNode();
-        travelToStart.getMovement().setX(100);
-        travelToStart.getMovement().setY(100);
-        uncompensatedParts.add(travelToStart);
+		result.forEach(node -> {
+			if (node instanceof Renderable) {
+				System.out.println(((Renderable) node).renderForOutput());
+			}
 
-        StylusScribeNode firstCut = new StylusScribeNode();
-        firstCut.getMovement().setX(100);
-        firstCut.getMovement().setY(110);
-        uncompensatedParts.add(firstCut);
+			if (node instanceof TravelNode) {
+				TravelNode travelNode = (TravelNode) node;
 
-        StylusScribeNode secondCut = new StylusScribeNode();
-        secondCut.getMovement().setX(110);
-        secondCut.getMovement().setY(110);
-        uncompensatedParts.add(secondCut);
-
-        StylusScribeNode thirdCut = new StylusScribeNode();
-        thirdCut.getMovement().setX(110);
-        thirdCut.getMovement().setY(100);
-        uncompensatedParts.add(thirdCut);
-
-        StylusScribeNode fourthCut = new StylusScribeNode();
-        fourthCut.getMovement().setX(100);
-        fourthCut.getMovement().setY(100);
-        uncompensatedParts.add(fourthCut);
-
-        double forwards_value = 2.0;
-        List<GCodeEventNode> expResult = null;
-        DragKnifeCompensator dnc = new DragKnifeCompensator();
-        List<GCodeEventNode> result = dnc.doCompensation(uncompensatedParts, forwards_value);
-
-        result.forEach(node ->
-        {
-            if (node instanceof Renderable)
-            {
-                System.out.println(((Renderable) node).renderForOutput());
-            }
-
-            if (node instanceof TravelNode)
-            {
-                TravelNode travelNode = (TravelNode) node;
-
-                if (travelNode.getMovement().isZSet())
-                {
-                    System.out.println(" To X" + travelNode.getMovement().getX() + " Y" + travelNode.getMovement().getY() + " Z" + travelNode.getMovement().getZ());
-                } else
-                {
-                    System.out.println(" To X" + travelNode.getMovement().getX() + " Y" + travelNode.getMovement().getY());
-                }
-            }
-        });
-//        assertEquals(expResult, result);
-//        // TODO review the generated test code and remove the default call to fail.
-//        fail("The test case is a prototype.");
-    }
+				if (travelNode.getMovement().isZSet()) {
+					System.out.println(" To X" + travelNode.getMovement().getX() + " Y" + travelNode.getMovement().getY() + " Z" + travelNode.getMovement().getZ());
+				}
+				else {
+					System.out.println(" To X" + travelNode.getMovement().getX() + " Y" + travelNode.getMovement().getY());
+				}
+			}
+		});
+		//        assertEquals(expResult, result);
+		//        // TODO review the generated test code and remove the default call to fail.
+		//        fail("The test case is a prototype.");
+	}
 
 }

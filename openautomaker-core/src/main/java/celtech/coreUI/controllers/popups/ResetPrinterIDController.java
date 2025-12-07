@@ -25,12 +25,13 @@ import org.openautomaker.base.configuration.fileRepresentation.PrinterEdition;
 import org.openautomaker.base.printerControl.model.Printer;
 import org.openautomaker.base.printerControl.model.PrinterException;
 import org.openautomaker.base.printerControl.model.PrinterIdentity;
-import org.openautomaker.environment.OpenAutomakerEnv;
+import org.openautomaker.environment.I18N;
 
 import celtech.coreUI.components.HyperlinkedLabel;
 import celtech.coreUI.components.RestrictedTextField;
 import celtech.roboxbase.comms.RoboxResetIDResult;
 import celtech.roboxbase.comms.rx.PrinterIDResponse;
+import jakarta.inject.Inject;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ObservableValue;
@@ -56,7 +57,7 @@ public class ResetPrinterIDController implements Initializable {
 
 	private RoboxResetIDResult resetResult = RoboxResetIDResult.RESET_NOT_DONE;
 
-	private static final Logger LOGGER = LogManager.getLogger(ResetPrinterIDController.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private Printer printerToUse = null;
 
@@ -132,7 +133,7 @@ public class ResetPrinterIDController implements Initializable {
 			else if (permSetRadioButton.isSelected()) {
 				PrinterIdentity newIdentity = decryptIDCode(printerIDCodeField.getText().trim());
 				if (newIdentity != null) {
-					PrinterDefinitionFile printerConfigFile = PrinterContainer.getPrinterByID(newIdentity.printermodelProperty().get());
+					PrinterDefinitionFile printerConfigFile = printerContainer.getPrinterByID(newIdentity.printermodelProperty().get());
 					if (printerConfigFile != null) {
 						printerToUse.setPrinterConfiguration(printerConfigFile);
 						printerConfigFile.getEditions().stream()
@@ -182,9 +183,22 @@ public class ResetPrinterIDController implements Initializable {
 		this.printerToUse = printerToUse;
 	}
 
+	private final PrinterContainer printerContainer;
+	private final I18N i18n;
+
+	@Inject
+	protected ResetPrinterIDController(
+			I18N i18n,
+			PrinterContainer printerContainer) {
+
+		this.i18n = i18n;
+		this.printerContainer = printerContainer;
+
+	}
+
 	@Override
 	public void initialize(URL url, ResourceBundle rb) {
-		resetInstructionLabel.replaceText(OpenAutomakerEnv.getI18N().t("resetPIDD.resetInstructions"));
+		resetInstructionLabel.replaceText(i18n.t("resetPIDD.resetInstructions"));
 		resetInstructionLabel.setTextAlignment(TextAlignment.LEFT); // Ignores this in the FXML for some reason.
 		printerIDLabel.disableProperty().bind(tempSetRadioButton.selectedProperty());
 		printerResetCodeLabel.disableProperty().bind(tempSetRadioButton.selectedProperty());
@@ -250,7 +264,7 @@ public class ResetPrinterIDController implements Initializable {
 		printerSerialNumberField.clear();
 		printerChecksumField.clear();
 
-		printerTypeChoice.setItems(FXCollections.observableList(PrinterContainer.getCompletePrinterList()));
+		printerTypeChoice.setItems(FXCollections.observableList(printerContainer.getCompletePrinterList()));
 		printerTypeChoice.setValue(printerTypeChoice.getItems().get(0));
 		updateEditionChoice(printerTypeChoice.getItems().get(0));
 	}

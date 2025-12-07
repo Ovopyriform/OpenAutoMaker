@@ -10,9 +10,7 @@ import java.util.List;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.openautomaker.base.configuration.BaseConfiguration;
-import org.openautomaker.environment.MachineType;
-import org.openautomaker.environment.OpenAutomakerEnv;
-import org.openautomaker.environment.preference.LocalePreference;
+import org.openautomaker.environment.preference.l10n.LocalePreference;
 
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -161,14 +159,17 @@ public class GCodePreviewTask extends Task<Boolean> {
 
 		String jvmLocation = System.getProperties().getProperty("java.home") + File.separator + "bin" + File.separator + "java";
 		commands.add(jvmLocation);
-		if (OpenAutomakerEnv.get().getMachineType() == MachineType.MAC)
+
+		//TODO: Native VM commands.  But it's all Java, just run the java?!
+		if (System.getProperty("os.name").matches("^Mac.*"))
 			commands.add("-XstartOnFirstThread");
+
 		commands.add("-DlibertySystems.configFile=" + BaseConfiguration.getGCodeViewerDirectory() + "GCodeViewer.configFile.xml");
 		commands.add("-jar");
 		commands.add(BaseConfiguration.getGCodeViewerDirectory() + "GCodeViewer.jar");
 		//commands.add("-wt");
 
-		String languageTag = new LocalePreference().get().toLanguageTag();
+		String languageTag = new LocalePreference().getValue().toLanguageTag();
 		if (languageTag != null) {
 			commands.add("-l");
 			commands.add(languageTag);
